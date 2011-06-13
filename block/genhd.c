@@ -605,7 +605,7 @@ void add_disk(struct gendisk *disk)
 
 	disk_alloc_events(disk);
 
-	/* Register BDI before referencing it from bdev */ 
+	/* Register BDI before referencing it from bdev */
 	bdi = &disk->queue->backing_dev_info;
 	bdi_register_dev(bdi, disk_devt(disk));
 
@@ -1182,7 +1182,7 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 				"wsect wuse running use aveq"
 				"\n\n");
 	*/
- 
+
 	disk_part_iter_init(&piter, gp, DISK_PITER_INCL_EMPTY_PART0);
 	while ((hd = disk_part_iter_next(&piter))) {
 		cpu = part_stat_lock();
@@ -1206,7 +1206,7 @@ static int diskstats_show(struct seq_file *seqf, void *v)
 			);
 	}
 	disk_part_iter_exit(&piter);
- 
+
 	return 0;
 }
 

@@ -8,6 +8,7 @@
 
 struct mnt_namespace {
 	atomic_t		count;
+	unsigned int		proc_inum;
 	struct vfsmount *	root;
 	struct list_head	list;
 	struct user_namespace	*user_ns;

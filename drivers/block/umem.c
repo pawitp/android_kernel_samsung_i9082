@@ -551,7 +551,7 @@ static int mm_check_plugged(struct cardinfo *card)
 	return 1;
 }
 
-static int mm_make_request(struct request_queue *q, struct bio *bio)
+static void mm_make_request(struct request_queue *q, struct bio *bio)
 {
 	struct cardinfo *card = q->queuedata;
 	pr_debug("mm_make_request %llu %u\n",
@@ -565,7 +565,7 @@ static int mm_make_request(struct request_queue *q, struct bio *bio)
 		activate(card);
 	spin_unlock_irq(&card->lock);
 
-	return 0;
+	return;
 }
 
 static irqreturn_t mm_interrupt(int irq, void *__card)

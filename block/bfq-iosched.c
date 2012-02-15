@@ -3575,13 +3575,8 @@ static int bfq_set_request(struct request_queue *q, struct request *rq,
 	bool split = false;
 
 	/* handle changed prio notifications; cgroup change is handled separately */
-	if (unlikely(bic->icq.changed))
-		if (test_and_clear_bit(ICQ_IOPRIO_CHANGED, &bic->icq.changed))
-			bfq_check_ioprio_change(bic->icq.ioc, bic);
-/*
 	if (unlikely(icq_get_changed(&bic->icq) & ICQ_IOPRIO_CHANGED))
 		bfq_check_ioprio_change(bic->icq.ioc, bic);
-*/
 
 	might_sleep_if(gfp_mask & __GFP_WAIT);
 

@@ -477,7 +477,7 @@ static void avc_audit_post_callback(struct audit_buffer *ab, void *a)
  * be performed under a lock, to allow the lock to be released
  * before calling the auditing code.
  */
-int avc_audit(u32 ssid, u32 tsid,
+inline int avc_audit(u32 ssid, u32 tsid,
 	       u16 tclass, u32 requested,
 	       struct av_decision *avd, int result, struct common_audit_data *a,
 	       unsigned flags)
@@ -784,7 +784,7 @@ static noinline int avc_denied(u32 ssid, u32 tsid,
  * auditing, e.g. in cases where a lock must be held for the check but
  * should be released for the auditing.
  */
-int avc_has_perm_noaudit(u32 ssid, u32 tsid,
+inline int avc_has_perm_noaudit(u32 ssid, u32 tsid,
 			 u16 tclass, u32 requested,
 			 unsigned flags,
 			 struct av_decision *avd)

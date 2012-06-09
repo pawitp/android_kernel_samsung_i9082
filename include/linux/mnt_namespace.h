@@ -15,7 +15,7 @@ struct mnt_namespace {
 };
 
 struct proc_mounts {
-	struct seq_file m; /* must be the first element */
+	struct seq_file m;
 	struct mnt_namespace *ns;
 	struct path root;
 	int event;
@@ -31,6 +31,8 @@ static inline void get_mnt_ns(struct mnt_namespace *ns)
 {
 	atomic_inc(&ns->count);
 }
+
+#define proc_mounts(p) (container_of((p), struct proc_mounts, m))
 
 extern const struct seq_operations mounts_op;
 extern const struct seq_operations mountinfo_op;

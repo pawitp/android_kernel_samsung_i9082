@@ -900,7 +900,7 @@ EXPORT_SYMBOL(replace_mount_options);
 /* iterator */
 static void *m_start(struct seq_file *m, loff_t *pos)
 {
-	struct proc_mounts *p = m->private;
+	struct proc_mounts *p = proc_mounts(m);
 
 	down_read(&namespace_sem);
 	return seq_list_start(&p->ns->list, *pos);
@@ -908,7 +908,7 @@ static void *m_start(struct seq_file *m, loff_t *pos)
 
 static void *m_next(struct seq_file *m, void *v, loff_t *pos)
 {
-	struct proc_mounts *p = m->private;
+	struct proc_mounts *p = proc_mounts(m);
 
 	return seq_list_next(v, &p->ns->list, pos);
 }
@@ -1022,7 +1022,7 @@ const struct seq_operations mounts_op = {
 
 static int show_mountinfo(struct seq_file *m, void *v)
 {
-	struct proc_mounts *p = m->private;
+	struct proc_mounts *p = proc_mounts(m);
 	struct vfsmount *mnt = list_entry(v, struct vfsmount, mnt_list);
 	struct super_block *sb = mnt->mnt_sb;
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };

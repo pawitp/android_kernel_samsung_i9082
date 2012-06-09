@@ -609,21 +609,6 @@ static void attach_mnt(struct vfsmount *mnt, struct path *path)
 	list_add_tail(&mnt->mnt_child, &path->mnt->mnt_mounts);
 }
 
-static inline void __mnt_make_longterm(struct vfsmount *mnt)
-{
-#ifdef CONFIG_SMP
-	atomic_inc(&mnt->mnt_longterm);
-#endif
-}
-
-/* needs vfsmount lock for write */
-static inline void __mnt_make_shortterm(struct vfsmount *mnt)
-{
-#ifdef CONFIG_SMP
-	atomic_dec(&mnt->mnt_longterm);
-#endif
-}
-
 /*
  * vfsmount lock must be held for write
  */
@@ -637,10 +622,8 @@ static void commit_tree(struct vfsmount *mnt)
 	BUG_ON(parent == mnt);
 
 	list_add_tail(&head, &mnt->mnt_list);
-	list_for_each_entry(m, &head, mnt_list) {
+	list_for_each_entry(m, &head, mnt_list)
 		m->mnt_ns = n;
-		__mnt_make_longterm(m);
-	}
 
 	list_splice(&head, n->list.prev);
 
@@ -785,7 +768,8 @@ static void mntput_no_expire(struct vfsmount *mnt)
 put_again:
 #ifdef CONFIG_SMP
 	br_read_lock(&vfsmount_lock);
-	if (likely(atomic_read(&mnt->mnt_longterm))) {
+	if (likely(mnt->mnt_ns)) {
+		/* shouldn't be the last one */
 		mnt_dec_count(mnt);
 		br_read_unlock(&vfsmount_lock);
 		return;
@@ -1250,8 +1234,6 @@ void umount_tree(struct vfsmount *mnt, int propagate, struct list_head *kill)
 		list_del_init(&p->mnt_expire);
 		list_del_init(&p->mnt_list);
 		__touch_mnt_namespace(p->mnt_ns);
-		if (p->mnt_ns)
-			__mnt_make_shortterm(p);
 		p->mnt_ns = NULL;
 		list_del_init(&p->mnt_child);
 		if (p->mnt_parent != p) {
@@ -2375,22 +2357,6 @@ static struct mnt_namespace *alloc_mnt_ns(void)
 	return new_ns;
 }
 
-void mnt_make_longterm(struct vfsmount *mnt)
-{
-	__mnt_make_longterm(mnt);
-}
-
-void mnt_make_shortterm(struct vfsmount *mnt)
-{
-#ifdef CONFIG_SMP
-	if (atomic_add_unless(&mnt->mnt_longterm, -1, 1))
-		return;
-	br_write_lock(&vfsmount_lock);
-	atomic_dec(&mnt->mnt_longterm);
-	br_write_unlock(&vfsmount_lock);
-#endif
-}
-
 /*
  * Allocate a new namespace structure and populate it with contents
  * copied from the namespace of the passed in task structure.
@@ -2428,18 +2394,13 @@ static struct mnt_namespace *dup_mnt_ns(struct mnt_namespace *mnt_ns,
 	q = new_ns->root;
 	while (p) {
 		q->mnt_ns = new_ns;
-		__mnt_make_longterm(q);
 		if (fs) {
 			if (p == fs->root.mnt) {
 				fs->root.mnt = mntget(q);
-				__mnt_make_longterm(q);
-				mnt_make_shortterm(p);
 				rootmnt = p;
 			}
 			if (p == fs->pwd.mnt) {
 				fs->pwd.mnt = mntget(q);
-				__mnt_make_longterm(q);
-				mnt_make_shortterm(p);
 				pwdmnt = p;
 			}
 		}
@@ -2484,7 +2445,6 @@ struct mnt_namespace *create_mnt_ns(struct vfsmount *mnt)
 	new_ns = alloc_mnt_ns();
 	if (!IS_ERR(new_ns)) {
 		mnt->mnt_ns = new_ns;
-		__mnt_make_longterm(mnt);
 		new_ns->root = mnt;
 		list_add(&new_ns->list, &new_ns->root->mnt_list);
 	}

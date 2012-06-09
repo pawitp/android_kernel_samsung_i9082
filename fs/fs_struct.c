@@ -6,18 +6,6 @@
 #include <linux/fs_struct.h>
 #include "internal.h"
 
-static inline void path_get_longterm(struct path *path)
-{
-	path_get(path);
-	mnt_make_longterm(path->mnt);
-}
-
-static inline void path_put_longterm(struct path *path)
-{
-	mnt_make_shortterm(path->mnt);
-	path_put(path);
-}
-
 /*
  * Replace the fs->{rootmnt,root} with {mnt,dentry}. Put the old values.
  * It can block.
@@ -30,11 +18,11 @@ void set_fs_root(struct fs_struct *fs, struct path *path)
 	write_seqcount_begin(&fs->seq);
 	old_root = fs->root;
 	fs->root = *path;
-	path_get_longterm(path);
+	path_get(path);
 	write_seqcount_end(&fs->seq);
 	spin_unlock(&fs->lock);
 	if (old_root.dentry)
-		path_put_longterm(&old_root);
+		path_put(&old_root);
 }
 
 /*
@@ -49,12 +37,12 @@ void set_fs_pwd(struct fs_struct *fs, struct path *path)
 	write_seqcount_begin(&fs->seq);
 	old_pwd = fs->pwd;
 	fs->pwd = *path;
-	path_get_longterm(path);
+	path_get(path);
 	write_seqcount_end(&fs->seq);
 	spin_unlock(&fs->lock);
 
 	if (old_pwd.dentry)
-		path_put_longterm(&old_pwd);
+		path_put(&old_pwd);
 }
 
 void chroot_fs_refs(struct path *old_root, struct path *new_root)
@@ -72,13 +60,13 @@ void chroot_fs_refs(struct path *old_root, struct path *new_root)
 			write_seqcount_begin(&fs->seq);
 			if (fs->root.dentry == old_root->dentry
 			    && fs->root.mnt == old_root->mnt) {
-				path_get_longterm(new_root);
+				path_get(new_root);
 				fs->root = *new_root;
 				count++;
 			}
 			if (fs->pwd.dentry == old_root->dentry
 			    && fs->pwd.mnt == old_root->mnt) {
-				path_get_longterm(new_root);
+				path_get(new_root);
 				fs->pwd = *new_root;
 				count++;
 			}
@@ -89,13 +77,13 @@ void chroot_fs_refs(struct path *old_root, struct path *new_root)
 	} while_each_thread(g, p);
 	read_unlock(&tasklist_lock);
 	while (count--)
-		path_put_longterm(old_root);
+		path_put(old_root);
 }
 
 void free_fs_struct(struct fs_struct *fs)
 {
-	path_put_longterm(&fs->root);
-	path_put_longterm(&fs->pwd);
+	path_put(&fs->root);
+	path_put(&fs->pwd);
 	kmem_cache_free(fs_cachep, fs);
 }
 
@@ -131,9 +119,9 @@ struct fs_struct *copy_fs_struct(struct fs_struct *old)
 
 		spin_lock(&old->lock);
 		fs->root = old->root;
-		path_get_longterm(&fs->root);
+		path_get(&fs->root);
 		fs->pwd = old->pwd;
-		path_get_longterm(&fs->pwd);
+		path_get(&fs->pwd);
 		spin_unlock(&old->lock);
 	}
 	return fs;

@@ -60,7 +60,6 @@ struct vfsmount {
 	struct super_block *mnt_sb;	/* pointer to superblock */
 #ifdef CONFIG_SMP
 	struct mnt_pcp __percpu *mnt_pcp;
-	atomic_t mnt_longterm;		/* how many of the refs are longterm */
 #else
 	int mnt_count;
 	int mnt_writers;

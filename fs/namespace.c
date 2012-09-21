@@ -1996,8 +1996,14 @@ static int do_add_mount(struct vfsmount *newmnt, struct path *path, int mnt_flag
 		return err;
 
 	err = -EINVAL;
-	if (!(mnt_flags & MNT_SHRINKABLE) && !check_mnt(path->mnt))
-		goto unlock;
+	if (unlikely(!check_mnt(path->mnt))) {
+		/* that's acceptable only for automounts done in private ns */
+		if (!(mnt_flags & MNT_SHRINKABLE))
+			goto unlock;
+		/* ... and for those we'd better have mountpoint still alive */
+		if (!path->mnt->mnt_ns)
+			goto unlock;
+	}
 
 	/* Refuse the same filesystem on the same mount point */
 	err = -EBUSY;

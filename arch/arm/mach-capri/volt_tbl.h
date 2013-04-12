@@ -1,0 +1,660 @@
+/*****************************************************************************
+*
+* Voltage tables for Rhea platform
+*
+* Copyright 2010 Broadcom Corporation.  All rights reserved.
+*
+* Unless you and Broadcom execute a separate written software license
+* agreement governing use of this software, this software is licensed to you
+* under the terms of the GNU General Public License version 2, available at
+* http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
+*
+* Notwithstanding the above, under no circumstances may you combine this
+* software in any way with any other Broadcom software provided under a
+* license other than the GPL, without Broadcom's express prior written
+* consent.
+*****************************************************************************/
+#ifndef __VLT_TBL_H__
+#define __VLT_TBL_H__
+
+#define ARRAY_LIST(...) {__VA_ARGS__}
+#define VLT_ID_OFF		0
+#define VLT_ID_RETN	1
+#define VLT_ID_WAKEUP	2
+#define VLT_ID_ECO		0x5
+#define VLT_ID_NORMAL	0x8
+#define VLT_ID_TURBO	0xB
+#define PROC_VLT_ID_ECO		0x3
+#ifdef CONFIG_CAPRI_PM_A1
+#define PROC_VLT_ID_ECO1	0x4
+#define PROC_VLT_ID_NORMAL	0x7
+#define PROC_VLT_ID_TURBO1	0xA
+#else
+#define PROC_VLT_ID_ECO1	0x5
+#define PROC_VLT_ID_NORMAL	0x8
+#define PROC_VLT_ID_TURBO1	0xB
+#endif
+#define PROC_VLT_ID_TURBO	0xF
+
+#define PROC_156M_AXI_DIV	(1-1)
+#define PROC_312M_AXI_DIV	(2-1)
+#define PROC_600M_AXI_DIV	(3-1)
+#define PROC_800M_AXI_DIV   (3-1)
+#define PROC_1200M_AXI_DIV	(4-1)
+
+#define PROC_1200M_L2_DIV		2
+#define PROC_NOT_1200M_L2_DIV	1
+#if 0
+#define PROC_CCU_FREQ_ID_ECO		4	/*3 */
+#define PROC_CCU_FREQ_ID_NRML		6
+#define PROC_CCU_FREQ_ID_TURBO		7
+#endif
+#ifdef CONFIG_CAPRI_156M
+#define PROC_CCU_FREQ_ID_ECO		3	/*3 */
+#else
+#define PROC_CCU_FREQ_ID_ECO		4
+#endif
+#ifdef CONFIG_BCM_HWCAPRI_1766
+#define PROC_CCU_FREQ_ID_ECO1		4	/*3 */
+#define PROC_CCU_FREQ_ID_NRML		7
+#define PROC_CCU_FREQ_ID_TURBO1		7
+#define PROC_CCU_FREQ_ID_TURBO		7
+#else
+#define PROC_CCU_FREQ_ID_ECO1		4	/*3 */
+#define PROC_CCU_FREQ_ID_NRML		6
+#define PROC_CCU_FREQ_ID_TURBO1		6
+#define PROC_CCU_FREQ_ID_TURBO		7
+#endif
+
+#define ESUB_CCU_FREQ_ID_ECO		1
+#define ESUB_CCU_FREQ_ID_NRML		4
+#define ESUB_CCU_FREQ_ID_TURBO		5
+
+#define HUB_CCU_FREQ_ID_ECO		2
+#define HUB_CCU_FREQ_ID_NRML		2
+
+#define AON_CCU_FREQ_ID_ECO		1
+#define AON_CCU_FREQ_ID_NRML		2
+
+#define KPM_CCU_FREQ_ID_ECO		2
+#define KPM_CCU_FREQ_ID_NRML		3
+
+#define KPS_CCU_FREQ_ID_ECO		1
+#define KPS_CCU_FREQ_ID_NRML		3
+
+/*CSR voltage register values for BCM59055 PMU*/
+#define CSR_REG_VAL_RETN_SS		0x4
+#define CSR_REG_VAL_ECO_SS		0x7
+#define CSR_REG_VAL_NRML_SS		0xF
+#define CSR_REG_VAL_TURBO_SS		0x14
+
+#define CSR_REG_VAL_RETN_TT		0x4
+#define CSR_REG_VAL_ECO_TT		0x7
+#define CSR_REG_VAL_NRML_TT		0xC
+#define CSR_REG_VAL_TURBO_TT		0x11
+
+#define CSR_REG_VAL_RETN_FF		0x4
+#define CSR_REG_VAL_ECO_FF		0x7
+#define CSR_REG_VAL_NRML_FF		0xA
+#define CSR_REG_VAL_TURBO_FF		0xE
+
+#define VLT_NORMAL_PERI	VLT_ID_ECO
+#define VLT_HIGH_PERI	VLT_ID_NORMAL
+
+#define PROC_CCU_AXI_DIV_TBL		ARRAY_LIST(PROC_156M_AXI_DIV, PROC_312M_AXI_DIV, PROC_600M_AXI_DIV, PROC_800M_AXI_DIV,\
+						PROC_1200M_AXI_DIV)
+#define PROC_CCU_AXI_DIV_TBL_SZ 5
+
+#define PROC_CCU_FREQ_VOLT_TBL		ARRAY_LIST(PROC_VLT_ID_ECO, PROC_VLT_ID_ECO, PROC_VLT_ID_ECO, PROC_VLT_ID_ECO,\
+						PROC_VLT_ID_ECO1, PROC_VLT_ID_NORMAL, PROC_VLT_ID_TURBO1, PROC_VLT_ID_TURBO)
+#define PROC_CCU_FREQ_VOLT_TBL_SZ 	8
+
+#define ESUB_CCU_FREQ_VOLT_TBL		ARRAY_LIST( \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_NORMAL, \
+					VLT_ID_NORMAL, \
+					VLT_ID_NORMAL, \
+					VLT_ID_TURBO, \
+					VLT_ID_TURBO, \
+					VLT_ID_TURBO)
+#define ESUB_CCU_FREQ_VOLT_TBL_SZ 	8
+
+#define HUB_CCU_FREQ_VOLT_TBL		ARRAY_LIST( \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO)
+#define HUB_CCU_FREQ_VOLT_TBL_SZ 	7
+
+#define AON_CCU_FREQ_VOLT_TBL		ARRAY_LIST( \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_NORMAL, \
+					VLT_ID_ECO)
+#define AON_CCU_FREQ_VOLT_TBL_SZ 	5
+
+#define KPS_CCU_FREQ_VOLT_TBL		ARRAY_LIST( \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_NORMAL, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO)
+#define KPS_CCU_FREQ_VOLT_TBL_SZ 	6
+
+#define KPM_CCU_FREQ_VOLT_TBL		ARRAY_LIST( \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_NORMAL, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO, \
+					VLT_ID_ECO)
+#define KPM_CCU_FREQ_VOLT_TBL_SZ	8
+
+#define BMDM_CCU_FREQ_VOLT_TBL ARRAY_LIST( \
+				VLT_ID_ECO, \
+				VLT_ID_ECO, \
+				VLT_ID_ECO, \
+				VLT_ID_ECO, \
+				VLT_ID_NORMAL, \
+				VLT_ID_NORMAL, \
+				VLT_ID_TURBO, \
+				VLT_ID_TURBO)
+#define BMDM_CCU_FREQ_VOLT_TBL_SZ 8	/* As per RDB there are only 6
+					   valid freq_ids for bmdm.
+					   this count is used only to initialize voltage table from AP */
+#define DSP_CCU_FREQ_VOLT_TBL ARRAY_LIST( \
+				VLT_ID_ECO, \
+				VLT_ID_ECO, \
+				VLT_ID_ECO, \
+				VLT_ID_NORMAL, \
+				VLT_ID_TURBO, \
+				VLT_ID_TURBO, \
+				VLT_ID_TURBO, \
+				VLT_ID_TURBO)
+#define DSP_CCU_FREQ_VOLT_TBL_SZ 8	/* As per RDB there are
+					   only 5 valid freq_ids for dsp.
+					   this count is used only to initialize voltage table from AP */
+
+#ifdef CONFIG_KONA_CPU_FREQ_DRV
+#define PROC_CCU_FREQ_POLICY_TBL	PROC_CCU_FREQ_ID_ECO,PROC_CCU_FREQ_ID_ECO, \
+						PROC_CCU_FREQ_ID_ECO,PROC_CCU_FREQ_ID_TURBO
+#else
+#define PROC_CCU_FREQ_POLICY_TBL	PROC_CCU_FREQ_ID_TURBO,PROC_CCU_FREQ_ID_TURBO, \
+						PROC_CCU_FREQ_ID_TURBO,PROC_CCU_FREQ_ID_TURBO
+#endif
+
+#define ESUB_CCU_FREQ_POLICY_TBL		ESUB_CCU_FREQ_ID_ECO,ESUB_CCU_FREQ_ID_ECO, \
+						ESUB_CCU_FREQ_ID_NRML, ESUB_CCU_FREQ_ID_TURBO
+
+#define HUB_CCU_FREQ_POLICY_TBL		HUB_CCU_FREQ_ID_ECO,HUB_CCU_FREQ_ID_ECO, \
+						HUB_CCU_FREQ_ID_ECO, HUB_CCU_FREQ_ID_NRML
+
+#define AON_CCU_FREQ_POLICY_TBL		AON_CCU_FREQ_ID_ECO,AON_CCU_FREQ_ID_ECO, \
+						AON_CCU_FREQ_ID_ECO, AON_CCU_FREQ_ID_NRML
+
+#define KPM_CCU_FREQ_POLICY_TBL		KPM_CCU_FREQ_ID_ECO,KPM_CCU_FREQ_ID_ECO, \
+						KPM_CCU_FREQ_ID_ECO, KPM_CCU_FREQ_ID_NRML
+
+#define KPS_CCU_FREQ_POLICY_TBL		KPS_CCU_FREQ_ID_ECO,KPS_CCU_FREQ_ID_ECO, \
+						KPS_CCU_FREQ_ID_ECO, KPS_CCU_FREQ_ID_NRML
+
+/*1000 Mhz CSR voltage definitions....*/
+#define ALL_VAL_OFF			0x80	/* 0V for VSR */
+
+#define ALL_VAL_RETN			0x04	/* 0.88V */
+
+#define ALL_VAL_WAKEUP			0x24	/* 1.2V From 0.9V(0x06) */
+
+#define ALL_VAL_UNUSED_ROW6		0x12	/* 1.02V */
+
+#define ALL_VAL_UNUSED_ROW9		0x1C	/* 1.12V */
+
+#define ALL_VAL_UNUSED_ROW12		0x26	/* 1.22V */
+
+#define ALL_VAL_UNUSED_ROW13		0x28	/* 1.24V */
+
+#define CSR_VAL_ECO1_SS_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TS_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TT_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TF_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_FF_1000M		0x0F	/* 0.99V */
+
+#define CSR_VAL_ECO2_SS_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TS_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TT_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TF_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_FF_1000M		0x0F	/* 0.99V */
+
+#define MSR_VAL_ECO_SS_1000M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TS_1000M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TT_1000M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TF_1000M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_FF_1000M		0x10	/* 1.00V */
+
+#define CSR_VAL_NRML_SS_1000M		0x13	/* 1.03V */
+#define CSR_VAL_NRML_TS_1000M		0x13	/* 1.03V */
+#define CSR_VAL_NRML_TT_1000M		0x11	/* 1.01V */
+#define CSR_VAL_NRML_TF_1000M		0x0F	/* 0.99V */
+#define CSR_VAL_NRML_FF_1000M		0x0F	/* 0.99V */
+
+#define MSR_VAL_NRML_SS_1000M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TS_1000M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TT_1000M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TF_1000M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_FF_1000M		0x1A	/* 1.10V */
+
+#define CSR_VAL_TURBO1_SS_1000M		0x1D	/* 1.13V */
+#define CSR_VAL_TURBO1_TS_1000M		0x1C	/* 1.12V */
+#define CSR_VAL_TURBO1_TT_1000M		0x1A	/* 1.10V */
+#define CSR_VAL_TURBO1_TF_1000M		0x19	/* 1.09V */
+#define CSR_VAL_TURBO1_FF_1000M		0x17	/* 1.07V */
+
+#define MSR_VAL_TURBO_SS_1000M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TS_1000M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TT_1000M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TF_1000M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_FF_1000M		0x24	/* 1.20V */
+
+#define VSR_VAL_NRML_SS_1000M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TS_1000M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TT_1000M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TF_1000M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_FF_1000M		0x24	/* 1.20V */
+
+#define CSR_VAL_TURBO2_SS_1000M		0x30	/* 1.32V */
+#define CSR_VAL_TURBO2_TS_1000M		0x2E	/* 1.30V */
+#define CSR_VAL_TURBO2_TT_1000M		0x2C	/* 1.28V */
+#define CSR_VAL_TURBO2_TF_1000M		0x2A	/* 1.26V */
+#define CSR_VAL_TURBO2_FF_1000M		0x27	/* 1.23V */
+
+#define CSR_VAL_ECO1_SS_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TS_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TT_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TF_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_FF_1200M		0x0F	/* 0.99V */
+
+#define CSR_VAL_ECO2_SS_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TS_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TT_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TF_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_FF_1200M		0x0F	/* 0.99V */
+
+#define MSR_VAL_ECO_SS_1200M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TS_1200M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TT_1200M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TF_1200M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_FF_1200M		0x10	/* 1.00V */
+
+#define CSR_VAL_NRML_SS_1200M		0x11	/* 1.01V */
+#define CSR_VAL_NRML_TS_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_NRML_TT_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_NRML_TF_1200M		0x0F	/* 0.99V */
+#define CSR_VAL_NRML_FF_1200M		0x0F	/* 0.99V */
+
+#define MSR_VAL_NRML_SS_1200M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TS_1200M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TT_1200M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TF_1200M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_FF_1200M		0x1A	/* 1.10V */
+
+#define CSR_VAL_TURBO1_SS_1200M		0x1C	/* 1.12V */
+#define CSR_VAL_TURBO1_TS_1200M		0x1A	/* 1.10V */
+#define CSR_VAL_TURBO1_TT_1200M		0x19	/* 1.09V */
+#define CSR_VAL_TURBO1_TF_1200M		0x16	/* 1.06V */
+#define CSR_VAL_TURBO1_FF_1200M		0x14	/* 1.04V */
+
+#define MSR_VAL_TURBO_SS_1200M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TS_1200M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TT_1200M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TF_1200M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_FF_1200M		0x24	/* 1.20V */
+
+#define VSR_VAL_NRML_SS_1200M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TS_1200M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TT_1200M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TF_1200M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_FF_1200M		0x24	/* 1.20V */
+
+#define CSR_VAL_TURBO2_SS_1200M		0x33	/* 1.36V */
+#define CSR_VAL_TURBO2_TS_1200M		0x31	/* 1.33V */
+#define CSR_VAL_TURBO2_TT_1200M		0x2F	/* 1.31V */
+#define CSR_VAL_TURBO2_TF_1200M		0x2B	/* 1.27V */
+#define CSR_VAL_TURBO2_FF_1200M		0x27	/* 1.23V */
+
+#define CSR_VAL_ECO1_SS_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TS_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TT_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_TF_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO1_FF_1500M		0x0F	/* 0.99V */
+
+#define CSR_VAL_ECO2_SS_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TS_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TT_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_TF_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_ECO2_FF_1500M		0x0F	/* 0.99V */
+
+#define MSR_VAL_ECO_SS_1500M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TS_1500M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TT_1500M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_TF_1500M		0x10	/* 1.00V */
+#define MSR_VAL_ECO_FF_1500M		0x10	/* 1.00V */
+
+#define CSR_VAL_NRML_SS_1500M		0x13	/* 1.03V */
+#define CSR_VAL_NRML_TS_1500M		0x13	/* 1.03V */
+#define CSR_VAL_NRML_TT_1500M		0x11	/* 1.01V */
+#define CSR_VAL_NRML_TF_1500M		0x0F	/* 0.99V */
+#define CSR_VAL_NRML_FF_1500M		0x0F	/* 0.99V */
+
+#define MSR_VAL_NRML_SS_1500M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TS_1500M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TT_1500M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_TF_1500M		0x1A	/* 1.10V */
+#define MSR_VAL_NRML_FF_1500M		0x1A	/* 1.10V */
+
+#define CSR_VAL_TURBO1_SS_1500M		0x30	/* 1.32V */
+#define CSR_VAL_TURBO1_TS_1500M		0x2E	/* 1.30V */
+#define CSR_VAL_TURBO1_TT_1500M		0x2C	/* 1.28V */
+#define CSR_VAL_TURBO1_TF_1500M		0x2A	/* 1.26V */
+#define CSR_VAL_TURBO1_FF_1500M		0x27	/* 1.23V */
+
+#define MSR_VAL_TURBO_SS_1500M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TS_1500M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TT_1500M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_TF_1500M		0x24	/* 1.20V */
+#define MSR_VAL_TURBO_FF_1500M		0x24	/* 1.20V */
+
+#define VSR_VAL_NRML_SS_1500M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TS_1500M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TT_1500M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_TF_1500M		0x24	/* 1.20V */
+#define VSR_VAL_NRML_FF_1500M		0x24	/* 1.20V */
+
+#define CSR_VAL_TURBO2_SS_1500M		0x33	/* 1.36V */
+#define CSR_VAL_TURBO2_TS_1500M		0x33	/* 1.36V */
+#define CSR_VAL_TURBO2_TT_1500M		0x33	/* 1.36V */
+#define CSR_VAL_TURBO2_TF_1500M		0x33	/* 1.36V */
+#define CSR_VAL_TURBO2_FF_1500M		0x33	/* 1.36V */
+
+#define PMU_CSR_VLT_TBL_SS_1000M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_SS_1000M,\
+					CSR_VAL_ECO2_SS_1000M,\
+					MSR_VAL_ECO_SS_1000M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_SS_1000M,\
+					MSR_VAL_NRML_SS_1000M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_SS_1000M,\
+					MSR_VAL_TURBO_SS_1000M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_SS_1000M,\
+					CSR_VAL_TURBO2_SS_1000M)
+
+#define PMU_CSR_VLT_TBL_TS_1000M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TS_1000M,\
+					CSR_VAL_ECO2_TS_1000M,\
+					MSR_VAL_ECO_TS_1000M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TS_1000M,\
+					MSR_VAL_NRML_TS_1000M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TS_1000M,\
+					MSR_VAL_TURBO_TS_1000M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TS_1000M,\
+					CSR_VAL_TURBO2_TS_1000M)
+
+#define PMU_CSR_VLT_TBL_TT_1000M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TT_1000M,\
+					CSR_VAL_ECO2_TT_1000M,\
+					MSR_VAL_ECO_TT_1000M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TT_1000M,\
+					MSR_VAL_NRML_TT_1000M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TT_1000M,\
+					MSR_VAL_TURBO_TT_1000M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TT_1000M,\
+					CSR_VAL_TURBO2_TT_1000M)
+
+#define PMU_CSR_VLT_TBL_TF_1000M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TF_1000M,\
+					CSR_VAL_ECO2_TF_1000M,\
+					MSR_VAL_ECO_TF_1000M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TF_1000M,\
+					MSR_VAL_NRML_TF_1000M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TF_1000M,\
+					MSR_VAL_TURBO_TF_1000M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TF_1000M,\
+					CSR_VAL_TURBO2_TF_1000M)
+
+#define PMU_CSR_VLT_TBL_FF_1000M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_FF_1000M,\
+					CSR_VAL_ECO2_FF_1000M,\
+					MSR_VAL_ECO_FF_1000M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_FF_1000M,\
+					MSR_VAL_NRML_FF_1000M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_FF_1000M,\
+					MSR_VAL_TURBO_FF_1000M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_FF_1000M,\
+					CSR_VAL_TURBO2_FF_1000M)
+
+/*1200 Mhz CSR voltage definitions....*/
+
+#define PMU_CSR_VLT_TBL_SS_1200M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_SS_1200M,\
+					CSR_VAL_ECO2_SS_1200M,\
+					MSR_VAL_ECO_SS_1200M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_SS_1200M,\
+					MSR_VAL_NRML_SS_1200M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_SS_1200M,\
+					MSR_VAL_TURBO_SS_1200M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_SS_1200M,\
+					CSR_VAL_TURBO2_SS_1200M)
+
+#define PMU_CSR_VLT_TBL_TS_1200M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TS_1200M,\
+					CSR_VAL_ECO2_TS_1200M,\
+					MSR_VAL_ECO_TS_1200M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TS_1200M,\
+					MSR_VAL_NRML_TS_1200M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TS_1200M,\
+					MSR_VAL_TURBO_TS_1200M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TS_1200M,\
+					CSR_VAL_TURBO2_TS_1200M)
+
+#define PMU_CSR_VLT_TBL_TT_1200M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TT_1200M,\
+					CSR_VAL_ECO2_TT_1200M,\
+					MSR_VAL_ECO_TT_1200M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TT_1200M,\
+					MSR_VAL_NRML_TT_1200M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TT_1200M,\
+					MSR_VAL_TURBO_TT_1200M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TT_1200M,\
+					CSR_VAL_TURBO2_TT_1200M)
+
+#define PMU_CSR_VLT_TBL_TF_1200M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TF_1200M,\
+					CSR_VAL_ECO2_TF_1200M,\
+					MSR_VAL_ECO_TF_1200M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TF_1200M,\
+					MSR_VAL_NRML_TF_1200M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TF_1200M,\
+					MSR_VAL_TURBO_TF_1200M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TF_1200M,\
+					CSR_VAL_TURBO2_TF_1200M)
+
+#define PMU_CSR_VLT_TBL_FF_1200M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_FF_1200M,\
+					CSR_VAL_ECO2_FF_1200M,\
+					MSR_VAL_ECO_FF_1200M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_FF_1200M,\
+					MSR_VAL_NRML_FF_1200M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_FF_1200M,\
+					MSR_VAL_TURBO_FF_1200M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_FF_1200M,\
+					CSR_VAL_TURBO2_FF_1200M)
+
+/*1500 MHz CSR voltage definitions....*/
+
+#define PMU_CSR_VLT_TBL_SS_1500M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_SS_1500M,\
+					CSR_VAL_ECO2_SS_1500M,\
+					MSR_VAL_ECO_SS_1500M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_SS_1500M,\
+					MSR_VAL_NRML_SS_1500M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_SS_1500M,\
+					MSR_VAL_TURBO_SS_1500M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_SS_1500M,\
+					CSR_VAL_TURBO2_SS_1500M)
+
+#define PMU_CSR_VLT_TBL_TS_1500M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TS_1500M,\
+					CSR_VAL_ECO2_TS_1500M,\
+					MSR_VAL_ECO_TS_1500M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TS_1500M,\
+					MSR_VAL_NRML_TS_1500M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TS_1500M,\
+					MSR_VAL_TURBO_TS_1500M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TS_1500M,\
+					CSR_VAL_TURBO2_TS_1500M)
+
+#define PMU_CSR_VLT_TBL_TT_1500M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TT_1500M,\
+					CSR_VAL_ECO2_TT_1500M,\
+					MSR_VAL_ECO_TT_1500M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TT_1500M,\
+					MSR_VAL_NRML_TT_1500M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TT_1500M,\
+					MSR_VAL_TURBO_TT_1500M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TT_1500M,\
+					CSR_VAL_TURBO2_TT_1500M)
+
+#define PMU_CSR_VLT_TBL_TF_1500M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_TF_1500M,\
+					CSR_VAL_ECO2_TF_1500M,\
+					MSR_VAL_ECO_TF_1500M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_TF_1500M,\
+					MSR_VAL_NRML_TF_1500M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_TF_1500M,\
+					MSR_VAL_TURBO_TF_1500M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_TF_1500M,\
+					CSR_VAL_TURBO2_TF_1500M)
+
+#define PMU_CSR_VLT_TBL_FF_1500M	ARRAY_LIST(\
+					ALL_VAL_OFF,\
+					ALL_VAL_RETN,\
+					ALL_VAL_WAKEUP,\
+					CSR_VAL_ECO1_FF_1500M,\
+					CSR_VAL_ECO2_FF_1500M,\
+					MSR_VAL_ECO_FF_1500M,\
+					ALL_VAL_UNUSED_ROW6,\
+					CSR_VAL_NRML_FF_1500M,\
+					MSR_VAL_NRML_FF_1500M,\
+					ALL_VAL_UNUSED_ROW9,\
+					CSR_VAL_TURBO1_FF_1500M,\
+					MSR_VAL_TURBO_FF_1500M,\
+					ALL_VAL_UNUSED_ROW12,\
+					ALL_VAL_UNUSED_ROW13,\
+					VSR_VAL_NRML_FF_1500M,\
+					CSR_VAL_TURBO2_FF_1500M)
+
+#endif /*__VLT_TBL_H__*/

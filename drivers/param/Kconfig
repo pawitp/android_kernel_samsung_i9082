@@ -1,0 +1,9 @@
+menu "Samsung Param support"
+config SAMSUNG_PARAM
+	tristate "Samsung Paramter Block system"
+	default	m
+	help
+	  Samsung Android Phone - Parameter control driver
+	  param.o
+endmenu
+

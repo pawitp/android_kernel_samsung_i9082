@@ -1,0 +1,37 @@
+config BCM2708_VCHIQ
+	tristate "Videocore VCHIQ"
+	depends on MACH_BCM2708
+	default CONFIG_BCM_VC_SERVICES
+	help
+		Kernel to VideoCore communication interface for the
+		BCM2708 family of products.
+		Defaults to Y when the Broadcom Videocore services
+		are included in the build, N otherwise.
+
+config KONA_VCHIQ
+	tristate "Videocore VCHIQ for 'KONA' architecture"
+	depends on ARCH_KONA
+	default CONFIG_BCM_VC_SERVICES
+	help
+		Kernel to VideoCore communication interface for the
+		KONA family of products.
+		Defaults to Y when the Broadcom Videocore services
+		are included in the build, N otherwise.
+
+config KONA_VCHIQ_MEMDRV
+	tristate "VCHIQ Internal Videocore (KONA)"
+	depends on KONA_VCHIQ
+	default CONFIG_BCM_VC_SERVICES
+	help
+		VideoCore communication interface (memory driver for internal
+		VideoCore) for the KONA family.
+		Defaults to Y when the Broadcom Videocore services
+		are included in the build, N otherwise.
+
+config VCHIQ_PLATFORM_CFG_NAME
+	string "VCHIQ platform configuration name"
+	help
+	  Determines which vchiq platform configuration will be used.
+	  The actual configuration file will come from interface/vchiq_arm/<platform-cfg>.mk
+	  where <platform-cfg> is the string stored in this configuration variable.
+

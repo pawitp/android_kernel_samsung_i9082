@@ -1,0 +1,4 @@
+config RTC_CHN_ALARM_BOOT
+	bool "Alarm Boot"
+	default n
+	select SEC_RTC_ALARM_BOOT

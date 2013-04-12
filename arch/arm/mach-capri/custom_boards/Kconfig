@@ -1,0 +1,115 @@
+menu	"Custom Capri SS S2VE based Machine types"
+	depends on MACH_CAPRI_SS_S2VE
+
+choice
+        prompt "Capri SS S2VE based custom board type"
+
+config MACH_CAPRI_SS_S2VE_REV03
+        bool "Enable CAPRI SS S2VE Rev03 board"
+        help
+          Support for the Broadcom Capri SS S2VE(big) Rev03 board.
+
+config MACH_CAPRI_SS_S2VE_REV05
+        bool "Enable CAPRI SS S2VE Rev05 board"
+        help
+          Support for the Broadcom Capri SS S2VE(big) Rev05 board.
+
+config MACH_CAPRI_SS_S2VEP_REV05
+        bool "Enable CAPRI SS S2VEP Rev05 board"
+        default n
+        help
+          Support for the Broadcom Capri SS S2VEP(big) Rev05 board.
+
+config MACH_CAPRI_SS_S2VE_REV05_4330
+        bool "Enable CAPRI SS S2VE Rev05 4330 board"
+        default n
+        help
+          Support for the Broadcom Capri SS S2VE(big) Rev05 4330 board.
+
+config MACH_CAPRI_SS_S2VE_REV06
+        bool "Enable CAPRI SS S2VE Rev06 board"
+        default n
+        help
+          Support for the Broadcom Capri SS S2VE(big) Rev06 board.
+
+config MACH_CAPRI_SS_S2VE_REV07
+        bool "Enable CAPRI SS S2VE Rev07 board"
+        default n
+        help
+          Support for the Broadcom Capri SS S2VE(big) Rev07 board.
+
+endchoice
+
+endmenu
+
+menu    "Custom Capri SS BAFFIN based Machine types"
+        depends on MACH_CAPRI_SS_BAFFIN
+
+choice
+        prompt "Capri SS BAFFIN based custom board type"
+
+config MACH_CAPRI_SS_BAFFIN_REV00
+        bool "Enable CAPRI SS BAFFIN Rev00 board"
+        help
+          Support for the Broadcom Capri SS BAFFIN(big) Rev00 board.
+
+config MACH_CAPRI_SS_BAFFIN_REV01
+        bool "Enable CAPRI SS BAFFIN Rev01 board"
+        help
+          Support for the Broadcom Capri SS BAFFIN(big) Rev01 board.
+
+config MACH_CAPRI_SS_BAFFIN_REV02
+        bool "Enable CAPRI SS BAFFIN Rev02 board"
+        help
+          Support for the Broadcom Capri SS BAFFIN(big) Rev02 board.
+
+config MACH_CAPRI_SS_BAFFIN_REV03
+        bool "Enable CAPRI SS BAFFIN Rev03 board"
+        help
+          Support for the Broadcom Capri SS BAFFIN(big) Rev03 board.
+
+endchoice
+
+endmenu
+
+menu    "Custom Capri SS CRATER based Machine types"
+        depends on MACH_CAPRI_SS_CRATER
+
+choice
+        prompt "Capri SS CRATER based custom board type"
+
+config MACH_CAPRI_SS_CRATER_REV00
+        bool "Enable CAPRI SS CRATER Rev00 board"
+        default n
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev00 board.
+
+config MACH_CAPRI_SS_CRATER_REV01
+        bool "Enable CAPRI SS CRATER Rev01 board"
+        default n
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev01 board.
+endchoice
+
+endmenu
+
+menu    "Custom Capri SS ARUBA(little capri) based Machine types"
+        depends on MACH_CAPRI_SS_ARUBA
+
+choice
+        prompt "Capri SS ARUBA based custom board type"
+
+config MACH_CAPRI_SS_ARUBA_REV00
+        bool "Enable CAPRI SS ARUBA Rev00 board"
+        help
+          Support for the Broadcom Capri SS ARUBA(little) Rev00 board.
+
+config MACH_CAPRI_SS_ARUBA_REV01
+        bool "Enable CAPRI SS ARUBA Rev01 board"
+        help
+          Support for the Broadcom Capri SS ARUBA(little) Rev01 board.
+
+endchoice
+
+endmenu
+

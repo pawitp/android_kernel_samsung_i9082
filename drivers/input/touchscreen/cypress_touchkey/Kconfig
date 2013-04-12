@@ -1,0 +1,15 @@
+#
+# Cypress touchkey configuration
+#
+
+config KEYBOARD_CYPRESS_TOUCH
+	tristate "Cypress I2C Touchkey"
+	depends on I2C
+	help
+	  Say Y here if you have Cypress I2C Touchkey.
+
+config S2VE_TOUCHKEY_REV05
+	bool "Using touchkey power supply for REV05"
+	default n
+	help
+	  Say Y here if you have S2VE Rev05 board.

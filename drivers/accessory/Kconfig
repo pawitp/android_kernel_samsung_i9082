@@ -1,0 +1,38 @@
+#
+# mhl drivers configuration
+#
+
+menu "Mhl(sii9244) device support"
+
+
+config SAMSUNG_MHL
+        bool "Enable Sii9244 MHL Chip Driver"
+        default n
+        ---help---
+          support Sii9244 MHL Chip Driver
+
+
+config SAMSUNG_USE_11PIN_CONNECTOR
+	bool "11pin micro-usb connector support"
+	default n
+	---help---
+	  use 11pin micro usb connector instead of 5pin
+
+config SAMSUNG_SMARTDOCK
+	bool "smartdock support"
+	default n
+
+config MHL_CAPRI_REV03
+	bool "S2 PLUS REV03"
+	default n
+	
+config MHL_NEW_CBUS_MSC_CMD
+	bool "Read DCAP for distinguish TA and USB"
+	default n
+
+config VIDEO_MHL_V2
+	bool "Enable MHL_V2"
+	default n
+
+
+endmenu

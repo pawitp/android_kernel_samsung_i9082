@@ -1,0 +1,2125 @@
+/*
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License along
+ * with this program; if not, write to the Free Software Foundation, Inc.,
+ * 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
+ */
+#include <linux/kernel.h>
+#include <linux/types.h>
+#include <linux/ld9040.h>
+
+#if defined(CONFIG_SPI_SSPI_KONA)
+#include <linux/spi/spi.h>
+#endif
+
+#include <linux/lcd.h>
+#include <linux/delay.h>
+
+
+#if defined(CONFIG_LCD_POWER_CAMLDO2)
+#include <linux/regulator/consumer.h>
+static struct regulator *lcd_regulator = NULL;
+#endif
+
+#define SLEEPMSEC		0x1000
+#define ENDDEF			0x2000
+#define	DEFMASK			0xFF00
+#define COMMAND_ONLY		0xFE
+#define DATA_ONLY		0xFF
+
+
+static const unsigned short SEQ_USER_SETTING[] = {
+	0xF0, 0x5A,
+
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_SOURCE_CTRL_SETTING[] = {
+	0xF6, 0x30,
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_ACL_ON[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x08,	DATA_ONLY, 0x0F,	DATA_ONLY, 0x16,	DATA_ONLY, 0x1D,
+	DATA_ONLY, 0x24,	DATA_ONLY, 0x2A,	DATA_ONLY, 0x31,	DATA_ONLY, 0x38,
+	DATA_ONLY, 0x3F,	DATA_ONLY, 0x46,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ACL_OFF[] = {
+	0xC0, 0x00,
+
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_ACL_40P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x06,	DATA_ONLY, 0x11,	DATA_ONLY, 0x1A,	DATA_ONLY, 0x20,
+	DATA_ONLY, 0x25,	DATA_ONLY, 0x29,	DATA_ONLY, 0x2D,	DATA_ONLY, 0x30,
+	DATA_ONLY, 0x33,	DATA_ONLY, 0x35,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_ACL_43P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x07,	DATA_ONLY, 0x12,	DATA_ONLY, 0x1C,	DATA_ONLY, 0x23,
+	DATA_ONLY, 0x29,	DATA_ONLY, 0x2D,	DATA_ONLY, 0x31,	DATA_ONLY, 0x34,
+	DATA_ONLY, 0x37,	DATA_ONLY, 0x3A,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+
+
+
+static const unsigned short SEQ_ACL_45P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x07,	DATA_ONLY, 0x13,	DATA_ONLY, 0x1E,	DATA_ONLY, 0x25,
+	DATA_ONLY, 0x2B,	DATA_ONLY, 0x30,	DATA_ONLY, 0x34,	DATA_ONLY, 0x37,
+	DATA_ONLY, 0x3A,	DATA_ONLY, 0x3D,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_ACL_47P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x07,	DATA_ONLY, 0x14,	DATA_ONLY, 0x20,	DATA_ONLY, 0x28,
+	DATA_ONLY, 0x2E,	DATA_ONLY, 0x33,	DATA_ONLY, 0x37,	DATA_ONLY, 0x3B,
+	DATA_ONLY, 0x3E,	DATA_ONLY, 0x41,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ACL_48P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x08,	DATA_ONLY, 0x15,	DATA_ONLY, 0x20,	DATA_ONLY, 0x29,
+	DATA_ONLY, 0x2F,	DATA_ONLY, 0x34,	DATA_ONLY, 0x39,	DATA_ONLY, 0x3D,
+	DATA_ONLY, 0x40,	DATA_ONLY, 0x43,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ACL_50P[] = {
+	0xC1, 0x4D,
+
+	DATA_ONLY, 0x96,	DATA_ONLY, 0x1D,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x01,	DATA_ONLY, 0xDF,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,	DATA_ONLY, 0x1F,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x00,	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x08,	DATA_ONLY, 0x16,	DATA_ONLY, 0x22,	DATA_ONLY, 0x2B,
+	DATA_ONLY, 0x31,	DATA_ONLY, 0x37,	DATA_ONLY, 0x3B,	DATA_ONLY, 0x3F,
+	DATA_ONLY, 0x43,	DATA_ONLY, 0x46,
+
+	0xC0, 0x01,
+
+	ENDDEF, 0x00
+};
+
+static const unsigned short *ACL_cutoff_set[] = {
+	SEQ_ACL_OFF,
+	SEQ_ACL_40P,
+	SEQ_ACL_43P,
+	SEQ_ACL_45P,
+	SEQ_ACL_47P,
+	SEQ_ACL_48P,
+	SEQ_ACL_50P,
+};
+
+static const unsigned short SEQ_ELVSS_ON[] = {
+	0xB1, 0x0D,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x16,
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_ELVSS_49[] = {
+	0xB2, 0x10,
+
+	DATA_ONLY, 0x10,
+	DATA_ONLY, 0x10,
+	DATA_ONLY, 0x10,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ELVSS_41[] = {
+	0xB2, 0x17,
+	DATA_ONLY, 0x17,
+	DATA_ONLY, 0x17,
+	DATA_ONLY, 0x17,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ELVSS_39[] = {
+	0xB2, 0x1A,
+	DATA_ONLY, 0x1A,
+	DATA_ONLY, 0x1A,
+	DATA_ONLY, 0x1A,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ELVSS_35[] = {
+	0xB2, 0x1E,
+	DATA_ONLY, 0x1E,
+	DATA_ONLY, 0x1E,
+	DATA_ONLY, 0x1E,
+	ENDDEF, 0x00
+};
+
+static const unsigned short *SEQ_ELVSS_set[] = {
+	SEQ_ELVSS_35,
+	SEQ_ELVSS_39,
+	SEQ_ELVSS_41,
+	SEQ_ELVSS_49,
+};
+
+static const unsigned short SEQ_GTCON[] = {
+	0xF7, 0x09,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_PANEL_CONDITION[] = {
+	0xF8, 0x05,
+#if 0
+	DATA_ONLY, 0x65,
+	DATA_ONLY, 0x96,
+	DATA_ONLY, 0x71,
+	DATA_ONLY, 0x7D,
+	DATA_ONLY, 0x19,
+	DATA_ONLY, 0x3B,
+	DATA_ONLY, 0x0D,
+	DATA_ONLY, 0x19,
+	DATA_ONLY, 0x7E,
+	DATA_ONLY, 0x0D,
+	DATA_ONLY, 0xE2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7E,
+	DATA_ONLY, 0x7D,
+	DATA_ONLY, 0x07,
+	DATA_ONLY, 0x07,
+	DATA_ONLY, 0x20,
+	DATA_ONLY, 0x20,
+	DATA_ONLY, 0x20,
+	DATA_ONLY, 0x02,
+	DATA_ONLY, 0x02,
+#else
+	DATA_ONLY, 0x5E,
+	DATA_ONLY, 0x96,
+	DATA_ONLY, 0x6B,
+	DATA_ONLY, 0x7D,
+	DATA_ONLY, 0x0D,
+	DATA_ONLY, 0x3F,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x32,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x07,
+	DATA_ONLY, 0x05,
+	DATA_ONLY, 0x1F,
+	DATA_ONLY, 0x1F,
+	DATA_ONLY, 0x1F,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+#endif	
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_GAMMA_SET1[] = {
+	0xF9, 0x00,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x91,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB3,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_GAMMA_CTRL[] = {
+	0xFB, 0x02,
+
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_GAMMA_START[] = {
+	0xF9, COMMAND_ONLY,
+
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_APON[] = {
+	0xF3, 0x00,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x0A,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_DISPCTL[] = {
+	0xF2, 0x02,
+
+#if 1
+	DATA_ONLY, 0x08,
+	DATA_ONLY, 0x08,
+	DATA_ONLY, 0x10,
+	DATA_ONLY, 0x10,
+#else
+	DATA_ONLY, 0x06,
+	DATA_ONLY, 0x0A,
+	DATA_ONLY, 0x10,
+	DATA_ONLY, 0x10,
+#endif	
+	ENDDEF, 0x00
+};
+
+
+static const unsigned short SEQ_MANPWR[] = {
+	0xB0, 0x04,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_PWR_CTRL[] = {
+	0xF4, 0x0A,
+
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0x25,
+	DATA_ONLY, 0x6A,
+	DATA_ONLY, 0x44,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_SLPOUT[] = {
+	0x11, COMMAND_ONLY,
+	SLEEPMSEC, 120,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_SLPIN[] = {
+	0x10, COMMAND_ONLY,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_DISPON[] = {
+	0x29, COMMAND_ONLY,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_DISPOFF[] = {
+	0x28, COMMAND_ONLY,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VCI1_1ST_EN[] = {
+	0xF3, 0x10,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VL1_EN[] = {
+	0xF3, 0x11,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VL2_EN[] = {
+	0xF3, 0x13,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VCI1_2ND_EN[] = {
+	0xF3, 0x33,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VL3_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VREG1_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0x01,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VGH_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0x11,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VGL_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0x31,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x02,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VMOS_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VINT_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xF1,
+	/* DATA_ONLY, 0x71,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VBH_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xF9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_VBL_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_GAM_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFF,
+	/* DATA_ONLY, 0x73,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_SD_AMP_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFF,
+	/* DATA_ONLY, 0x73,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x80,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_GLS_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFF,
+	/* DATA_ONLY, 0x73,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x81,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_ELS_EN[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFF,
+	/* DATA_ONLY, 0x73,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x83,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+static const unsigned short SEQ_EL_ON[] = {
+	0xF3, 0x37,
+
+	DATA_ONLY, 0xFF,
+	/* DATA_ONLY, 0x73,	VMOS/VBL/VBH not used */
+	DATA_ONLY, 0x87,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x03,
+	/* DATA_ONLY, 0x02,	VMOS/VBL/VBH not used */
+	ENDDEF, 0x00
+};
+
+#define MAX_GAMMA_LEVEL		25
+#define GAMMA_TABLE_COUNT		21
+
+
+/* LD9042, 4.27", SM2 A2 Panel Gamma Data */
+static unsigned short ld9042_a2_22_300[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xCC,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_290[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xCA,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_280[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC7,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_270[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA3,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC4,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_260[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA1,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC1,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_250[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9E,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBE,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_240[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9C,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBB,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_230[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x99,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB7,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_220[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x96,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB4,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_210[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x94,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB1,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_200[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x91,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAE,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_190[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8E,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAB,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_180[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA4,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA7,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_170[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x89,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA3,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA1,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA4,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_160[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x85,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA2,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9D,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9F,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_150[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x82,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA1,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x99,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9B,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_140[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA0,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x95,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x97,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_130[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7C,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x9F,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x91,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x93,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_120[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA4,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x77,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x9D,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8C,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8E,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_110[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA4,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x73,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x9C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x88,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x89,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_100[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA4,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x70,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x9B,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x85,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x86,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_90[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA3,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xCC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x6B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x97,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x80,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_70[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xA2,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xCC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x62,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x94,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x74,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xCF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x75,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_40[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0x9D,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xCF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x50,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x88,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xD1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x60,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0xD3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x60,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_22_30[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0x91,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xD1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x48,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x7A,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0xD4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x57,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0xD5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x56,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_300[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xC3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xCC,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_290[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA5,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xCA,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_280[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA2,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC8,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_270[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA0,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA6,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC5,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_260[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9D,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xC1,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_250[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9A,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBD,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_240[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x97,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA8,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xBA,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_230[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x95,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC4,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB7,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_220[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x91,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xA9,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xB3,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_210[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8E,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC6,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC5,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAF,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_200[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA7,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xAB,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_190[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x88,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA3,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA8,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_180[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x85,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC7,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA4,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_170[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x82,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAA,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC8,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0xA0,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_160[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x97,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x9C,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_150[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAB,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x93,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xC9,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x97,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_140[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x77,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCA,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x92,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_130[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x73,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xCB,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x8D,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_120[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x6F,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAC,
+	DATA_ONLY, 0xCC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x86,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x89,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_110[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x6B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB6,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x81,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCC,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x84,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_100[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB8,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x66,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB4,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAD,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7C,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xCD,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x7E,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_90[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x61,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xAE,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x77,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x78,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_70[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x56,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xBB,
+	DATA_ONLY, 0xAF,
+	DATA_ONLY, 0xCF,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x6B,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xBF,
+	DATA_ONLY, 0xB3,
+	DATA_ONLY, 0xCE,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x6C,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_40[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xBA,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xD0,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x42,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xA4,
+	DATA_ONLY, 0xBD,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xD2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x53,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xC1,
+	DATA_ONLY, 0xB5,
+	DATA_ONLY, 0xD1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x53,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+static unsigned short ld9042_a2_19_30[] = {
+	0xF9, 0x0C,
+	DATA_ONLY, 0xB0,
+	DATA_ONLY, 0xB9,
+	DATA_ONLY, 0xB1,
+	DATA_ONLY, 0xD1,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x38,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0x97,
+	DATA_ONLY, 0xBE,
+	DATA_ONLY, 0xB2,
+	DATA_ONLY, 0xD3,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x49,
+	DATA_ONLY, 0x0C,
+	DATA_ONLY, 0xBC,
+	DATA_ONLY, 0xC2,
+	DATA_ONLY, 0xB7,
+	DATA_ONLY, 0xD2,
+	DATA_ONLY, 0x00,
+	DATA_ONLY, 0x48,
+	0xFB, 0x02,
+	DATA_ONLY, 0x5A,
+	ENDDEF, 0x00
+};
+
+/* LD9042, 4.27", SM2 A2 Panel Gamma Table */
+static unsigned short *ld9042_22gamma_table[] = {
+	ld9042_a2_22_30,
+	ld9042_a2_22_40,
+	ld9042_a2_22_70,
+	ld9042_a2_22_90,
+	ld9042_a2_22_100,
+	ld9042_a2_22_110,
+	ld9042_a2_22_120,
+	ld9042_a2_22_130,
+	ld9042_a2_22_140,
+	ld9042_a2_22_150,
+	ld9042_a2_22_160,
+	ld9042_a2_22_170,
+	ld9042_a2_22_180,
+	ld9042_a2_22_190,
+	ld9042_a2_22_200,
+	ld9042_a2_22_210,
+	ld9042_a2_22_220,
+	ld9042_a2_22_230,
+	ld9042_a2_22_240,
+	ld9042_a2_22_250,
+	ld9042_a2_22_300,
+};
+
+static unsigned short *ld9042_19gamma_table[] = {
+	ld9042_a2_19_30,
+	ld9042_a2_19_40,
+	ld9042_a2_19_70,
+	ld9042_a2_19_90,
+	ld9042_a2_19_100,
+	ld9042_a2_19_110,
+	ld9042_a2_19_120,
+	ld9042_a2_19_130,
+	ld9042_a2_19_140,
+	ld9042_a2_19_150,
+	ld9042_a2_19_160,
+	ld9042_a2_19_170,
+	ld9042_a2_19_180,
+	ld9042_a2_19_190,
+	ld9042_a2_19_200,
+	ld9042_a2_19_210,
+	ld9042_a2_19_220,
+	ld9042_a2_19_230,
+	ld9042_a2_19_240,
+	ld9042_a2_19_250,
+	ld9042_a2_19_300,
+};
+
+
+struct ld9040_panel_data s2plus_panel_data = {
+	.seq_user_set = SEQ_USER_SETTING,
+	.seq_sourcectrl_set = SEQ_SOURCE_CTRL_SETTING,	
+	.seq_displayctl_set = SEQ_DISPCTL,
+	.seq_gtcon_set = SEQ_GTCON,	
+	.seq_panelcondition_set = SEQ_PANEL_CONDITION,
+	.seq_manpwr_set = SEQ_MANPWR,
+	.seq_pwrctl_set = SEQ_PWR_CTRL,
+	.seq_gamma_set1 = SEQ_GAMMA_SET1,
+	.display_on = SEQ_DISPON,
+	.display_off = SEQ_DISPOFF,
+	.sleep_in = SEQ_SLPIN,
+	.sleep_out = SEQ_SLPOUT,
+	.gamma_start = SEQ_GAMMA_START,
+	.gamma_ctrl = SEQ_GAMMA_CTRL,
+	.gamma19_table = ld9042_19gamma_table,
+	.gamma22_table = ld9042_22gamma_table,
+	.acl_table = ACL_cutoff_set,
+	.elvss_table = SEQ_ELVSS_set,
+	.acl_on = SEQ_ACL_ON,
+	.elvss_on = SEQ_ELVSS_ON,
+};
+
+
+#define AMOLED_RESET    (18)
+
+int ld9040_reset(struct lcd_device *ld)
+{
+	printk(KERN_INFO "%s:+\n", __func__);
+
+	if (gpio_request(AMOLED_RESET, "AmoledRst")) {
+		printk(KERN_ERR "%s: failed to get (AmoledRst) gpio\n",
+		       __func__);
+		return -1;
+	}
+	gpio_direction_output(AMOLED_RESET, 1);
+	gpio_set_value(AMOLED_RESET, 1);
+	msleep(1);
+	gpio_set_value(AMOLED_RESET, 0);
+	msleep(1);
+	gpio_set_value(AMOLED_RESET, 1);
+	msleep(10);
+	gpio_free(AMOLED_RESET);
+	
+	return 0;
+}
+
+int ld9040_power_on(struct lcd_device *ld, int enable)
+{
+#if defined (CONFIG_LCD_POWER_CAMLDO2)
+	int ret =-1;
+#endif
+
+	printk(KERN_INFO "%s: enable[%d]\n", __func__, enable);
+
+#if defined(CONFIG_LCD_POWER_CAMLDO2)
+	if(lcd_regulator == 0) {
+		lcd_regulator = regulator_get(NULL, "camldo2_uc");
+		if (IS_ERR(lcd_regulator)) {
+			printk(KERN_ERR"Unable to get camldo2_uc regulator, err: %ld\n",
+				PTR_ERR(lcd_regulator));
+			lcd_regulator = NULL;
+			return -1;
+		}
+	}
+	
+#endif	
+	
+	if(0 == enable) {
+		/* keep lcd in reset */
+		if (gpio_request(AMOLED_RESET, "AmoledRst")) {
+			printk(KERN_ERR "%s: failed to get (AmoledRst) gpio\n",
+			       __func__);
+			return -1;
+		}
+		gpio_direction_output(AMOLED_RESET, 0);
+		gpio_set_value(AMOLED_RESET, 0);
+		gpio_free(AMOLED_RESET);
+		
+		msleep(5);
+		
+#if defined (CONFIG_LCD_POWER_CAMLDO2)
+		ret = regulator_disable(lcd_regulator);
+		if (ret < 0) {
+			printk(KERN_ERR "Unable to disable lcd regulator\n");
+		}
+#endif
+	}
+	else {
+#if defined (CONFIG_LCD_POWER_CAMLDO2)
+		ret = regulator_enable(lcd_regulator);
+		if (ret < 0) {
+			printk(KERN_ERR "Unable to enable lcd regulator\n");
+		}
+#endif
+	}
+	return 0;
+}
+
+
+static struct lcd_platform_data ld9040_platform_data = {
+	.reset			= ld9040_reset,
+	.power_on		= ld9040_power_on,
+	.lcd_enabled		= 1,
+	.reset_delay		= 20,
+	.power_on_delay		= 20,
+	.power_off_delay	= 120,
+	.pdata			= &s2plus_panel_data,
+};
+
+#if defined(USE_SPI_CONTROLLER)
+static struct spi_board_info ld9040_spi_device[] __initdata = {
+	{
+		.modalias	= "ld9040",
+		.max_speed_hz	= 7000000,
+		.chip_select	= 0,
+		.mode           = SPI_MODE_3 | SPI_3WIRE,
+		.platform_data	= &ld9040_platform_data,
+	},
+};
+#else
+static struct platform_device ld9040_spi_device = {
+	.name = "ld9040",
+	.id = -1,	
+	.dev = {
+		.platform_data = &ld9040_platform_data,
+		},
+};
+#endif
+
+static void __init oled_lcd_init(void)
+{
+#if defined(USE_SPI_CONTROLLER)
+	spi_register_board_info(ld9040_spi_device,
+		ARRAY_SIZE(ld9040_spi_device));
+#else
+	platform_device_register(&ld9040_spi_device);
+#endif
+
+}
+
+
+

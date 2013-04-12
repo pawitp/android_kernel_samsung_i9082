@@ -1,0 +1,894 @@
+/************************************************************************************************/
+/*                                                                                              */
+/*  Copyright 2010  Broadcom Corporation                                                        */
+/*                                                                                              */
+/*     Unless you and Broadcom execute a separate written software license agreement governing  */
+/*     use of this software, this software is licensed to you under the terms of the GNU        */
+/*     General Public License version 2 (the GPL), available at                                 */
+/*                                                                                              */
+/*          http://www.broadcom.com/licenses/GPLv2.php                                          */
+/*                                                                                              */
+/*     with the following added to such license:                                                */
+/*                                                                                              */
+/*     As a special exception, the copyright holders of this software give you permission to    */
+/*     link this software with independent modules, and to copy and distribute the resulting    */
+/*     executable under terms of your choice, provided that you also meet, for each linked      */
+/*     independent module, the terms and conditions of the license of that module.              */
+/*     An independent module is a module which is not derived from this software.  The special  */
+/*     exception does not apply to any modifications of the software.                           */
+/*                                                                                              */
+/*     Notwithstanding the above, under no circumstances may you combine this software in any   */
+/*     way with any other Broadcom software provided under a license other than the GPL,        */
+/*     without Broadcom's express prior written consent.                                        */
+/*                                                                                              */
+/************************************************************************************************/
+#include <linux/version.h>
+#include <linux/init.h>
+#include <linux/device.h>
+#include <linux/platform_device.h>
+#include <linux/sysdev.h>
+#include <linux/interrupt.h>
+#include <linux/serial_8250.h>
+#include <linux/irq.h>
+#include <linux/dma-contiguous.h>
+#include <linux/dma-mapping.h>
+#include <linux/android_pmem.h>
+#include <linux/kernel_stat.h>
+#include <asm/mach/arch.h>
+#include <asm/mach-types.h>
+#include <asm/gpio.h>
+#include <mach/hardware.h>
+#include <linux/i2c.h>
+#include <linux/i2c-kona.h>
+#include <mach/kona.h>
+#include <mach/rhea.h>
+#include <mach/rdb/brcm_rdb_uartb.h>
+#include <asm/mach/map.h>
+#include <linux/broadcom/ipcinterface.h>
+#include <asm/pmu.h>
+#include <linux/spi/spi.h>
+#include <plat/spi_kona.h>
+#include <plat/chal/chal_trace.h>
+#include <trace/stm.h>
+#ifdef CONFIG_KONA_AVS
+#include <plat/kona_avs.h>
+#include "pm_params.h"
+#endif
+
+#if defined (CONFIG_KONA_CPU_FREQ_DRV)
+#include <plat/kona_cpufreq_drv.h>
+#include <linux/cpufreq.h>
+#include <mach/clock.h>
+#include <linux/clk.h>
+#include <mach/pi_mgr.h>
+#endif
+
+#ifdef CONFIG_UNICAM
+#include <plat/kona_unicam.h>
+#endif
+
+#ifdef CONFIG_KONA_POWER_MGR
+#include <plat/pwr_mgr.h>
+
+#define VLT_LUT_SIZE 16
+#endif
+
+/*
+ * todo: 8250 driver has problem autodetecting the UART type -> have to
+ * use FIXED type
+ * confuses it as an XSCALE UART.  Problem seems to be that it reads
+ * bit6 in IER as non-zero sometimes when it's supposed to be 0.
+ */
+#define KONA_UART0_PA	UARTB_BASE_ADDR
+#define KONA_UART1_PA	UARTB2_BASE_ADDR
+#define KONA_UART2_PA	UARTB3_BASE_ADDR
+
+
+#define KONA_8250PORT(name,clk)				\
+{								\
+	.membase    = (void __iomem *)(KONA_##name##_VA), 	\
+	.mapbase    = (resource_size_t)(KONA_##name##_PA),    	\
+	.irq	    = BCM_INT_ID_##name,               		\
+	.uartclk    = 26000000,					\
+	.regshift   = 2,					\
+	.iotype	    = UPIO_DWAPB,					\
+	.type	    = PORT_16550A,          			\
+	.flags	    = UPF_BOOT_AUTOCONF | UPF_FIXED_TYPE | UPF_SKIP_TEST,	\
+	.private_data = (void __iomem *)((KONA_##name##_VA) + UARTB_USR_OFFSET), \
+	.clk_name = clk,	\
+}
+
+static struct plat_serial8250_port uart_data[] = {
+	KONA_8250PORT(UART0,"uartb_clk"),
+	KONA_8250PORT(UART1,"uartb2_clk"),
+	KONA_8250PORT(UART2,"uartb3_clk"),
+	{
+		.flags		= 0,
+	},
+};
+
+static struct platform_device board_serial_device = {
+	.name		= "serial8250",
+	.id		= PLAT8250_DEV_PLATFORM,
+	.dev		= {
+		.platform_data = uart_data,
+	},
+};
+
+static struct resource board_i2c0_resource[] = {
+	[0] =
+	{
+		.start = BSC1_BASE_ADDR,
+		.end = BSC1_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] =
+	{
+		.start = BCM_INT_ID_I2C0,
+		.end = BCM_INT_ID_I2C0,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct resource board_i2c1_resource[] = {
+	[0] =
+	{
+		.start = BSC2_BASE_ADDR,
+		.end = BSC2_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] =
+	{
+		.start = BCM_INT_ID_I2C1,
+		.end = BCM_INT_ID_I2C1,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct resource board_pmu_bsc_resource[] = {
+	[0] =
+	{
+		.start = PMU_BSC_BASE_ADDR,
+		.end = PMU_BSC_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] =
+	{
+		.start = BCM_INT_ID_PM_I2C,
+		.end = BCM_INT_ID_PM_I2C,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct bsc_adap_cfg bsc_i2c_cfg[] = {
+	{ /* for BSC0 */
+		.speed = BSC_BUS_SPEED_50K,
+		.dynamic_speed = 1,
+		.bsc_clk = "bsc1_clk",
+		.bsc_apb_clk = "bsc1_apb_clk",
+		.retries = 1,
+		.is_pmu_i2c=false,
+	},
+	{ /* for BSC1*/
+		.speed = BSC_BUS_SPEED_50K,
+		.dynamic_speed = 1,
+		.bsc_clk = "bsc2_clk",
+		.bsc_apb_clk = "bsc2_apb_clk",
+		.retries = 3,
+		.is_pmu_i2c=false,
+	},
+	{ /* for PMU */
+#ifdef CONFIG_KONA_PMU_BSC_HS_MODE
+        .speed = BSC_BUS_SPEED_HS,
+        /* No dynamic speed in HS mode */
+        .dynamic_speed = 0,
+		/*
+		 * PMU can NAK certain I2C read commands, while write is in progress;
+		 * and it takes a while to synchronise writes between HS clock domain(3.25MHz) and
+		 * and internal clock domains (32k). In such cases, we retry PMU reads until the writes
+		 * are through. PMU need more retry counts in HS mode to handle this.
+		 */
+		.retries = 5,
+#else
+        .speed = BSC_BUS_SPEED_50K,
+        .dynamic_speed = 1,
+		.retries = 3,
+#endif
+		.bsc_clk = "pmu_bsc_clk",
+		.bsc_apb_clk = "pmu_bsc_apb",
+		.is_pmu_i2c=true,
+	},
+};
+
+static struct platform_device board_i2c_adap_devices[] =
+{
+	{  /* for BSC0 */
+		.name = "bsc-i2c",
+		.id = 0,
+		.resource = board_i2c0_resource,
+		.num_resources	= ARRAY_SIZE(board_i2c0_resource),
+		.dev      = {
+			.platform_data = &bsc_i2c_cfg[0],
+		},
+	},
+	{  /* for BSC1 */
+		.name = "bsc-i2c",
+		.id = 1,
+		.resource = board_i2c1_resource,
+		.num_resources	= ARRAY_SIZE(board_i2c1_resource),
+		.dev	  = {
+			.platform_data = &bsc_i2c_cfg[1],
+		},
+
+	},
+	{  /* for PMU BSC */
+		.name = "bsc-i2c",
+		.id = 2,
+		.resource = board_pmu_bsc_resource,
+		.num_resources	= ARRAY_SIZE(board_pmu_bsc_resource),
+		.dev      = {
+			.platform_data = &bsc_i2c_cfg[2],
+		},
+	},
+};
+
+/* ARM performance monitor unit */
+static struct resource pmu_resource = {
+       .start = BCM_INT_ID_PMU_IRQ0,
+       .end = BCM_INT_ID_PMU_IRQ0,
+       .flags = IORESOURCE_IRQ,
+};
+
+static struct platform_device pmu_device = {
+       .name = "arm-pmu",
+       .id   = ARM_PMU_DEVICE_CPU,
+       .resource = &pmu_resource,
+       .num_resources = 1,
+};
+
+// PWM configuration.
+static struct resource kona_pwm_resource = {
+                .start = PWM_BASE_ADDR,
+                .end = PWM_BASE_ADDR + SZ_4K - 1,
+                .flags = IORESOURCE_MEM,
+};
+
+static struct platform_device kona_pwm_device = {
+                .name = "kona_pwmc",
+                .id = -1,
+                .resource = &kona_pwm_resource,
+                .num_resources  = 1,
+};
+
+/* SPI configuration */
+static struct resource kona_sspi_spi0_resource[] = {
+	[0] = {
+                .start = SSP0_BASE_ADDR,
+                .end = SSP0_BASE_ADDR + SZ_4K - 1,
+                .flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = BCM_INT_ID_SSP0,
+		.end = BCM_INT_ID_SSP0,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct spi_kona_platform_data sspi_spi0_info = {
+#ifdef CONFIG_DMAC_PL330
+	.enable_dma = 1,
+#else
+	.enable_dma = 0,
+#endif
+	.cs_line = 1,
+	.mode = SPI_LOOP | SPI_MODE_3,
+};
+
+static struct platform_device kona_sspi_spi0_device = {
+	.dev = {
+		.platform_data = &sspi_spi0_info,
+	},
+	.name = "kona_sspi_spi",
+	.id = 0,
+	.resource = kona_sspi_spi0_resource,
+	.num_resources  = ARRAY_SIZE(kona_sspi_spi0_resource),
+};
+
+#ifdef CONFIG_RHEA_PANDA
+static struct resource kona_sspi_spi2_resource[] = {
+	[0] = {
+	       .start = SSP3_BASE_ADDR,
+	       .end = SSP3_BASE_ADDR + SZ_4K - 1,
+	       .flags = IORESOURCE_MEM,
+	       },
+	[1] = {
+	       .start = BCM_INT_ID_SSP3,
+	       .end = BCM_INT_ID_SSP3,
+	       .flags = IORESOURCE_IRQ,
+	       },
+};
+
+static struct spi_kona_platform_data sspi_spi2_info = {
+	.enable_dma = 1,
+	.cs_line = 1,
+	.mode = SPI_LOOP | SPI_MODE_3,
+};
+
+static struct platform_device kona_sspi_spi2_device = {
+	.dev = {
+		.platform_data = &sspi_spi2_info,
+		},
+	.name = "kona_sspi_spi",
+	.id = 2,
+	.resource = kona_sspi_spi2_resource,
+	.num_resources = ARRAY_SIZE(kona_sspi_spi2_resource),
+};
+#endif
+
+#ifdef CONFIG_SENSORS_KONA
+static struct resource board_tmon_resource[] = {
+	{	/* For Current Temperature */
+		.start = TMON_BASE_ADDR,
+		.end = TMON_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	{	/* For Temperature IRQ */
+		.start = BCM_INT_ID_TEMP_MON,
+		.end = BCM_INT_ID_TEMP_MON,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+struct platform_device tmon_device = {
+	.name = "kona-tmon",
+	.id = -1,
+	.resource = board_tmon_resource,
+	.num_resources = ARRAY_SIZE(board_tmon_resource),
+};
+
+static struct resource board_thermal_resource[] = {
+	{	/* For Current Temperature */
+		.start = TMON_BASE_ADDR,
+		.end = TMON_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	{	/* For Temperature IRQ */
+		.start = BCM_INT_ID_TEMP_MON,
+		.end = BCM_INT_ID_TEMP_MON,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct thermal_sensor_config sensor_data[] = {
+	{   /*TMON sensor*/
+		.thermal_id             = 1,
+		.thermal_name           = "tmon",
+		.thermal_type           = SENSOR_BB_TMON,
+		.thermal_mc             = 0,
+		.thermal_read           = SENSOR_READ_DIRECT,
+		.thermal_location       = 1,
+		.thermal_warning_lvl_1  = 100000,
+		.thermal_warning_lvl_2  = 110000,
+		.thermal_fatal_lvl      = 120000,
+		.thermal_warning_action = THERM_ACTION_NOTIFY,
+		.thermal_fatal_action   = THERM_ACTION_NOTIFY_SHUTDOWN,
+		.thermal_sensor_param   = 0,
+		.thermal_control        = SENSOR_INTERRUPT,
+		.convert_callback       = NULL,
+	},
+	{   /*NTC (battery) sensor*/
+		.thermal_id             = 2,
+		.thermal_name           = "battery",
+		.thermal_type           = SENSOR_BATTERY,
+		.thermal_mc             = 0,
+		.thermal_read           = SENSOR_READ_PMU_I2C,
+		.thermal_location       = 2,
+		.thermal_warning_lvl_1  = 105000,
+		.thermal_warning_lvl_2  = 115000,
+		.thermal_fatal_lvl      = 125000,
+		.thermal_warning_action = THERM_ACTION_NOTIFY,
+		.thermal_fatal_action   = THERM_ACTION_NOTIFY_SHUTDOWN,
+		.thermal_sensor_param   = ADC_NTC_CHANNEL,
+		.thermal_control        = SENSOR_PERIODIC_READ,
+		.convert_callback       = NULL,
+	},
+	{   /*32kHz crystal sensor*/
+		.thermal_id             = 3,
+		.thermal_name           = "32k",
+		.thermal_type           = SENSOR_CRYSTAL,
+		.thermal_mc             = 0,
+		.thermal_read           = SENSOR_READ_PMU_I2C,
+		.thermal_location       = 3,
+		.thermal_warning_lvl_1  = 106000,
+		.thermal_warning_lvl_2  = 116000,
+		.thermal_fatal_lvl      = 126000,
+		.thermal_warning_action = THERM_ACTION_NOTIFY,
+		.thermal_fatal_action   = THERM_ACTION_NOTIFY_SHUTDOWN,
+		.thermal_sensor_param   = ADC_32KTEMP_CHANNEL,
+		.thermal_control        = SENSOR_PERIODIC_READ,
+		.convert_callback       = NULL,
+	},
+	{   /*PA sensor*/
+		.thermal_id             = 4,
+		.thermal_name           = "PA",
+		.thermal_type           = SENSOR_PA,
+		.thermal_mc             = 0,
+		.thermal_read           = SENSOR_READ_PMU_I2C,
+		.thermal_location       = 4,
+		.thermal_warning_lvl_1  = 107000,
+		.thermal_warning_lvl_2  = 117000,
+		.thermal_fatal_lvl      = 127000,
+		.thermal_warning_action = THERM_ACTION_NOTIFY,
+		.thermal_fatal_action   = THERM_ACTION_NOTIFY_SHUTDOWN,
+		.thermal_sensor_param   = ADC_PATEMP_CHANNEL,
+		.thermal_control        = SENSOR_PERIODIC_READ,
+		.convert_callback       = NULL,
+	}
+};
+
+
+static struct therm_data thermal_pdata = {
+	.flags = 0,
+	.thermal_update_interval = 0,
+	.num_sensors = 4,
+	.sensors = sensor_data,
+};
+
+struct platform_device thermal_device = {
+	.name = "kona-thermal",
+	.id = -1,
+	.resource = board_thermal_resource,
+	.num_resources = ARRAY_SIZE(board_thermal_resource),
+	.dev = {
+		.platform_data = &thermal_pdata,
+	},
+};
+
+#endif
+
+#ifdef CONFIG_STM_TRACE
+static struct stm_platform_data stm_pdata = {
+	.regs_phys_base       = STM_BASE_ADDR,
+	.channels_phys_base   = SWSTM_BASE_ADDR,
+	.id_mask              = 0x0,   /* Skip ID check/match */
+	.final_funnel	      = CHAL_TRACE_FIN_FUNNEL,
+};
+
+struct platform_device kona_stm_device = {
+	.name = "stm",
+	.id = -1,
+	.dev = {
+	        .platform_data = &stm_pdata,
+	},
+};
+#endif
+
+#if defined(CONFIG_HW_RANDOM_KONA)
+static struct resource rng_device_resource[] = {
+	[0] = {
+		.start = SEC_RNG_BASE_ADDR,
+		.end   = SEC_RNG_BASE_ADDR + 0x14,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = BCM_INT_ID_SECURE_TRAP1,
+		.end   = BCM_INT_ID_SECURE_TRAP1,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device rng_device =
+{
+	.name			= "kona_rng",
+	.id				= -1,
+	.resource	  = rng_device_resource,
+	.num_resources = ARRAY_SIZE(rng_device_resource),
+};
+#endif
+
+#ifdef CONFIG_USB_DWC_OTG
+static struct resource kona_hsotgctrl_platform_resource[] = {
+	[0] = {
+		.start = HSOTG_CTRL_BASE_ADDR,
+		.end = HSOTG_CTRL_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = CHIPREGS_BASE_ADDR,
+		.end = CHIPREGS_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[2] = {
+		.start = HUB_CLK_BASE_ADDR,
+		.end = HUB_CLK_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device board_kona_hsotgctrl_platform_device =
+{
+	.name = "bcm_hsotgctrl",
+	.id = -1,
+	.resource = kona_hsotgctrl_platform_resource,
+	.num_resources = ARRAY_SIZE(kona_hsotgctrl_platform_resource),
+};
+
+static struct resource kona_otg_platform_resource[] = {
+	[0] = { /* Keep HSOTG_BASE_ADDR as first IORESOURCE_MEM to be compatible with legacy code */
+		.start = HSOTG_BASE_ADDR,
+		.end = HSOTG_BASE_ADDR + SZ_64K - 1,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = BCM_INT_ID_USB_HSOTG,
+		.end = BCM_INT_ID_USB_HSOTG,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+static struct platform_device board_kona_otg_platform_device =
+{
+	.name = "dwc_otg",
+	.id = -1,
+	.resource = kona_otg_platform_resource,
+	.num_resources = ARRAY_SIZE(kona_otg_platform_resource),
+};
+#endif
+
+#ifdef CONFIG_KONA_CPU_FREQ_DRV
+struct kona_freq_tbl kona_freq_tbl[] =
+{
+/*JIRA HWRHEA-1199 : Enable Economy mode(156MHz) for B0 */
+#ifdef CONFIG_RHEA_B0_PM_ASIC_WORKAROUND
+//    FTBL_INIT(156000, PI_OPP_ECONOMY),
+#endif
+    FTBL_INIT(467000, PI_OPP_NORMAL),
+
+#ifdef CONFIG_RHEALC_2093
+    FTBL_INIT(600000, PI_OPP_TURBO),
+#else
+    FTBL_INIT(700000, PI_OPP_TURBO),
+#endif
+};
+
+void rhea_cpufreq_init(void)
+{
+	struct clk *a9_pll_chnl0;
+	struct clk *a9_pll_chnl1;
+	a9_pll_chnl0 = clk_get(NULL, A9_PLL_CHNL0_CLK_NAME_STR);
+	a9_pll_chnl1 = clk_get(NULL, A9_PLL_CHNL1_CLK_NAME_STR);
+
+	BUG_ON(IS_ERR_OR_NULL(a9_pll_chnl0) ||
+				IS_ERR_OR_NULL(a9_pll_chnl1));
+
+	/*Update DVFS freq table based on PLL settings done by the loader*/
+	kona_freq_tbl[1].cpu_freq = clk_get_rate(a9_pll_chnl0)/1000;
+	kona_freq_tbl[2].cpu_freq = clk_get_rate(a9_pll_chnl1)/1000;
+
+	pr_info("%s a9_pll_chnl0 freq = %dKhz a9_pll_chnl1 freq = %dKhz\n",
+		__func__, kona_freq_tbl[1].cpu_freq, kona_freq_tbl[2].cpu_freq);
+}
+
+struct kona_cpufreq_drv_pdata kona_cpufreq_drv_pdata = {
+
+    .freq_tbl = kona_freq_tbl,
+	.num_freqs = ARRAY_SIZE(kona_freq_tbl),
+	/*FIX ME: To be changed according to the cpu latency*/
+	.latency = 10*1000,
+	.pi_id = PI_MGR_PI_ID_ARM_CORE,
+	.cpufreq_init = rhea_cpufreq_init,
+};
+
+static struct platform_device kona_cpufreq_device = {
+	.name    = "kona-cpufreq-drv",
+	.id      = -1,
+	.dev = {
+		.platform_data		= &kona_cpufreq_drv_pdata,
+	},
+};
+#endif /*CONFIG_KONA_CPU_FREQ_DRV*/
+
+#ifdef CONFIG_KONA_AVS
+
+void avs_silicon_type_notify(u32 silicon_type)
+{
+#ifdef CONFIG_KONA_POWER_MGR
+	u8* volt_lut = kona_avs_get_volt_table();
+	BUG_ON(volt_lut == NULL);
+/*re-program volt lookup table based on silicon type*/
+	pwr_mgr_pm_i2c_var_data_write(volt_lut,VLT_LUT_SIZE);
+#endif
+	pr_info("%s:silicon_type = %d\n",__func__,silicon_type);
+}
+
+static u32 svt_pmos_bin[3+1] = {125,146,171,201};
+static u32 svt_nmos_bin[3+1] = {75,96,126,151};
+
+static u32 lvt_pmos_bin[3+1] = {150,181,216,251};
+static u32 lvt_nmos_bin[3+1] = {90,111,146,181};
+
+u32 svt_silicon_type_lut[3*3] =
+	{
+		SILICON_TYPE_SLOW,SILICON_TYPE_SLOW,SILICON_TYPE_TYPICAL,
+		SILICON_TYPE_SLOW,SILICON_TYPE_TYPICAL,SILICON_TYPE_TYPICAL,
+		SILICON_TYPE_TYPICAL,SILICON_TYPE_TYPICAL,SILICON_TYPE_FAST
+	};
+
+u32 lvt_silicon_type_lut[3*3] =
+	{
+		SILICON_TYPE_SLOW,SILICON_TYPE_SLOW,SILICON_TYPE_TYPICAL,
+		SILICON_TYPE_SLOW,SILICON_TYPE_TYPICAL,SILICON_TYPE_TYPICAL,
+		SILICON_TYPE_TYPICAL,SILICON_TYPE_TYPICAL,SILICON_TYPE_FAST
+	};
+
+u8 ss_vlt_tbl[] = {PMU_SCR_VLT_TBL_SS};
+
+u8 tt_vlt_tbl[] = {PMU_SCR_VLT_TBL_TT};
+
+u8 ff_vlt_tbl[] = {PMU_SCR_VLT_TBL_FF};
+static u8* volt_table[] = {ss_vlt_tbl, tt_vlt_tbl, ff_vlt_tbl};
+
+static struct kona_avs_pdata avs_pdata =
+{
+	.flags = AVS_TYPE_OPEN|AVS_READ_FROM_MEM,
+	.param = 0x3404BFA8, /*AVS_READ_FROM_MEM - Address location where monitor values are copied by ABI */
+	.nmos_bin_size = 3,
+	.pmos_bin_size = 3,
+
+	.svt_pmos_bin = svt_pmos_bin,
+	.svt_nmos_bin = svt_nmos_bin,
+
+	.lvt_pmos_bin = lvt_pmos_bin,
+	.lvt_nmos_bin = lvt_nmos_bin,
+
+	.svt_silicon_type_lut = svt_silicon_type_lut,
+	.lvt_silicon_type_lut = lvt_silicon_type_lut,
+
+	.volt_table = volt_table,
+
+	.silicon_type_notify = avs_silicon_type_notify,
+};
+
+struct platform_device kona_avs_device = {
+	.name = "kona-avs",
+	.id = -1,
+	.dev = {
+	        .platform_data = &avs_pdata,
+	},
+};
+
+#endif
+
+#if defined(CONFIG_CRYPTO_DEV_BRCM_SPUM_HASH)
+static struct resource board_spum_resource[] = {
+       [0] =
+       {
+               .start  =       SEC_SPUM_NS_APB_BASE_ADDR,
+               .end    =       SEC_SPUM_NS_APB_BASE_ADDR + SZ_64K - 1,
+               .flags  =       IORESOURCE_MEM,
+       },
+       [1] =
+       {
+               .start  =       SPUM_NS_BASE_ADDR,
+               .end    =       SPUM_NS_BASE_ADDR + SZ_64K - 1,
+               .flags  =       IORESOURCE_MEM,
+       }
+};
+
+static struct platform_device board_spum_device = {
+       .name           =       "brcm-spum",
+       .id             =       0,
+       .resource       =       board_spum_resource,
+       .num_resources  =       ARRAY_SIZE(board_spum_resource),
+};
+#endif
+
+#if defined(CONFIG_CRYPTO_DEV_BRCM_SPUM_AES)
+static struct resource board_spum_aes_resource[] = {
+	[0] =
+	{
+		.start  =       SEC_SPUM_NS_APB_BASE_ADDR,
+		.end    =       SEC_SPUM_NS_APB_BASE_ADDR + SZ_64K - 1,
+		.flags  =       IORESOURCE_MEM,
+	},
+	[1] =
+	{
+		.start  =       SPUM_NS_BASE_ADDR,
+		.end    =       SPUM_NS_BASE_ADDR + SZ_64K - 1,
+		.flags  =       IORESOURCE_MEM,
+	}
+};
+
+static struct platform_device board_spum_aes_device = {
+	.name           =       "brcm-spum-aes",
+	.id             =       0,
+	.resource       =       board_spum_aes_resource,
+	.num_resources  =       ARRAY_SIZE(board_spum_aes_resource),
+};
+#endif
+
+#ifdef CONFIG_UNICAM
+static struct kona_unicam_platform_data unicam_pdata =
+{
+	.csi0_gpio = 12,
+	.csi1_gpio = 13,
+};
+
+static struct platform_device board_unicam_device = {
+	.name = "kona-unicam",
+	.id = 1,
+	.dev      = {
+		.platform_data = &unicam_pdata,
+	},
+};
+#endif
+
+static u64 bralloc_dma_mask = DMA_BIT_MASK(32);
+static struct platform_device bralloc_device = {
+	.name 	= "bralloc",
+	.id	= 0,
+	.dev	= {
+		.dma_mask		= &bralloc_dma_mask,
+		.coherent_dma_mask	= DMA_BIT_MASK(32),
+	},
+};
+
+/* Allocate the top 16M of the DRAM for the pmem. */
+static struct android_pmem_platform_data android_pmem_data = {
+	.name = "pmem",
+	.start = 0x0,
+	.size = SZ_16M,
+	.no_allocator = 0,
+	.cached = 1,
+	.buffered = 1,
+};
+
+
+static struct platform_device android_pmem[] = {
+	{
+		.name 	= "android_pmem",
+		.id	= 0,
+		.dev	= {
+			.platform_data = &android_pmem_data,
+		},
+	},
+	{
+		.name 	= "android_pmem",
+		.id	= 1,
+		.dev	= {
+			.platform_data = &android_pmem_cma_data,
+		},
+	},
+};
+
+#ifdef CONFIG_VIDEO_UNICAM_CAMERA
+static u64 unicam_camera_dma_mask = DMA_BIT_MASK(32);
+
+static struct resource board_unicam_resource[] = {
+	[0] =
+	{
+		.start	=	BCM_INT_ID_RESERVED156,
+		.end	=	BCM_INT_ID_RESERVED156,
+		.flags	=	IORESOURCE_IRQ,
+	},
+};
+
+#endif
+
+#ifdef CONFIG_SND_BCM_SOC
+static struct platform_device caph_i2s_device = {
+	.name		=	"caph-i2s",
+};
+
+static struct platform_device caph_pcm_device = {
+	.name		=	"caph-pcm-audio",
+};
+#endif
+
+/* Common devices among all the Rhea boards (Rhea Ray, Rhea Berri, etc.) */
+static struct platform_device *board_common_plat_devices[] __initdata = {
+	&board_serial_device,
+	&board_i2c_adap_devices[0],
+	&board_i2c_adap_devices[1],
+	&board_i2c_adap_devices[2],
+	&pmu_device,
+	&kona_pwm_device,
+	&kona_sspi_spi0_device,
+#ifdef CONFIG_RHEA_PANDA
+	&kona_sspi_spi2_device,
+#endif
+#ifdef CONFIG_SENSORS_KONA
+	&tmon_device,
+#endif
+#ifdef CONFIG_STM_TRACE
+	&kona_stm_device,
+#endif
+#if defined(CONFIG_HW_RANDOM_KONA)
+	&rng_device,
+#endif
+
+#ifdef CONFIG_USB_DWC_OTG
+	&board_kona_hsotgctrl_platform_device,
+	&board_kona_otg_platform_device,
+#endif
+
+#ifdef CONFIG_KONA_AVS
+	&kona_avs_device,
+#endif
+
+#ifdef CONFIG_KONA_CPU_FREQ_DRV
+	&kona_cpufreq_device,
+#endif
+
+#ifdef CONFIG_CRYPTO_DEV_BRCM_SPUM_HASH
+	&board_spum_device,
+#endif
+
+#ifdef CONFIG_CRYPTO_DEV_BRCM_SPUM_AES
+       &board_spum_aes_device,
+#endif
+
+#ifdef CONFIG_UNICAM
+	&board_unicam_device,
+#endif
+
+#ifdef CONFIG_SND_BCM_SOC
+	&caph_i2s_device,
+	&caph_pcm_device,
+#endif
+};
+
+static unsigned long bralloc_mem_size = 0;
+static int __init early_bralloc_mem(char *p)
+{
+	bralloc_mem_size = memparse(p, &p);
+	return 0;
+}
+early_param("bralloc_mem", early_bralloc_mem);
+
+static unsigned long pmem_base = 0;
+static unsigned int pmem_size = SZ_16M;
+static int __init setup_pmem_pages(char *str)
+{
+	char * endp = NULL;
+	if(str)	{
+		pmem_size = memparse((const char *)str, &endp);
+		printk(KERN_INFO "PMEM size is   0x%08x Bytes\n", pmem_size);
+		if (*endp == '@')
+			pmem_base =  memparse(endp + 1, NULL);
+			printk(KERN_INFO "PMEM starts at 0x%08x\n", (unsigned int)pmem_base);
+		} else	{
+			printk("\"pmem=\" option is not set!!!\n");
+			printk("Unable to determine the memory region for pmem!!!\n");
+		}
+	return 0;
+}
+early_param("pmem", setup_pmem_pages);
+
+void __init board_common_reserve(void)
+{
+	/* if bralloc_mem_size is set, then declare bralloc CMA area of the same
+	 * size from the end of memory
+	 */
+	if (bralloc_mem_size)
+		dma_declare_contiguous(&bralloc_device.dev, bralloc_mem_size, 0, 0);
+}
+
+void __init board_add_common_devices(void)
+{
+	platform_add_devices(board_common_plat_devices, ARRAY_SIZE(board_common_plat_devices));
+
+	if (pmem_base && pmem_size) {
+		android_pmem_data.start = (unsigned long)pmem_base;
+		android_pmem_data.size  = pmem_size;
+		platform_device_register(&android_pmem);
+	}
+
+	/*
+	 * add the bralloc device only iff we were given memory for
+	 * it's cma region
+	 */
+	if (bralloc_mem_size)
+		platform_device_register(&bralloc_device);
+
+}

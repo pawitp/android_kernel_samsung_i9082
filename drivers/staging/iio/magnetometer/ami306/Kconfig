@@ -1,0 +1,13 @@
+#
+# Invensense Aichi AMI306 compass IIO driver (inv-ami306-iio)
+#
+
+config INV_AMI306_IIO
+    tristate "Invensense Aichi AMI306 compass IIO driver"
+    depends on I2C && SYSFS && IIO && IIO_SW_RING && IIO_TRIGGER
+    default n
+    help
+      This driver supports the Aichi AMI306 compass. It is the Invensense 
+      IIO implementation for the AMI306 compass device. 
+      This driver can be built as a module. The module will be called
+      inv-ami306-iio.

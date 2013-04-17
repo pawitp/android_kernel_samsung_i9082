@@ -33,6 +33,12 @@ struct bcm_bt_lpm_data {
 #endif
 	int bt_wake_installed;
 	int host_wake_installed;
+	int state;
+};
+
+enum {
+	ENABLE_LPM_TYPE_OOB_USER,
+	DISABLE_LPM,
 };
 
 //extern struct bcm_bt_lpm_platform_data brcm_bt_lpm_data;
@@ -51,18 +57,17 @@ extern int brcm_init_hostwake(struct bcm_bt_lpm_platform_data *gpio_data);
 #define GPIO_UARTB_SEL (-1)
 #define GPIO_BT_CLK32K_EN (-1)
 
-/* this define electrical level of GPIO for assert/de-asserted stated. sleep logic has by default negative
-   logic */
+/* this define electrical level of GPIO for assert/de-asserted stated. */
 
 #ifndef BT_WAKE_ASSERT
-#define BT_WAKE_ASSERT 0
+#define BT_WAKE_ASSERT 1
 #endif
 #ifndef BT_WAKE_DEASSERT
 #define BT_WAKE_DEASSERT (!(BT_WAKE_ASSERT))
 #endif
 
 #ifndef HOST_WAKE_ASSERT
-#define HOST_WAKE_ASSERT 0
+#define HOST_WAKE_ASSERT 1
 #endif
 #ifndef HOST_WAKE_DEASSERT
 #define HOST_WAKE_DEASSERT (!(HOST_WAKE_ASSERT))

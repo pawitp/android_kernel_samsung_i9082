@@ -167,9 +167,11 @@ static int bcmbt_tty_ioctl(struct tty_struct *tty, struct file *file,
 		rc = bcm_get_bt_wake_state(arg);
 		break;
 
+#if 0
 	case TIO_SET_LPM_MODE:
 		pr_warn("bcmbt_tty_ioctl(TIO_SET_LPM_MODE):not implemented\n");
 		break;
+#endif
 
 #ifdef CONFIG_BCM_BT_GPS_SELFTEST
 	case TIO_GPS_SETLFTEST_CMD: {
@@ -408,9 +410,7 @@ static int bcmbt_lpm_probe(struct platform_device *pdev)
 	int rc;
 
 	pdata = pdev->dev.platform_data;
-	bcm_bt_lpm_data.polarity = HOST_WAKE_ASSERT;
 	bcm_bt_lpm_data.state = ENABLE_LPM_TYPE_OOB_USER;
-	bcm_bt_lpm_data.timeout = DEFAULT_TO;
 #ifdef BTLPM_LDISC_FREE_RESOURCES
 	/* store platform gpio assignement for ldisc use at open */
 	bcm_bt_lpm_data.gpio_bt_wake = pdata->gpio_bt_wake;

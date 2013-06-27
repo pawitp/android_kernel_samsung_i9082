@@ -116,6 +116,7 @@ enum pageflags {
 #ifdef CONFIG_CLEANCACHE
 	PG_was_active,
 #endif
+	PG_readahead,		/* page in a readahead window */
 	__NR_PAGEFLAGS,
 
 	/* Filesystems */

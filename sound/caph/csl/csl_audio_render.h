@@ -35,14 +35,19 @@
 #define _CSL_AUDIO_RENDER_
 
 #include <linux/spinlock.h>
+#include <linux/completion.h>
 
 enum _DYNDMA_STATE {
+	DYNDMA_DUMMY,
 	DYNDMA_NORMAL,
 	DYNDMA_TRIGGER,
 	DYNDMA_LOW_DONE,
 	DYNDMA_LOW_RDY,
 };
 #define DYNDMA_STATE enum __DYNDMA_STATE
+#define DYNDMA_COPY_SIZE 0x2000 /*in bytes*/
+#define DYNDMA_NUM_BLOCKS 8
+extern struct completion completeDynDma[CSL_CAPH_STREAM_TOTAL];
 
 typedef void (*CSL_AUDRENDER_CB)(UInt32 streamID,
 			UInt32 buffer_status);
@@ -61,17 +66,14 @@ struct _CSL_CAPH_Render_Drv_t {
 	spinlock_t readyStatusLock;
 	spinlock_t configLock;
 	UInt32 blockIndex;
-	int maxBlkBytes;
-	int periodMs;
-	int periodMsDiv;
 	int numBlocks2;
 	int readyBlockIndex;
 	atomic_t dmaState;
 	atomic_t availBytes;
-	/*CSL_CAPH_DMA_CHNL_e dmaCH2;
-	AUDIO_NUM_OF_CHANNEL_t numChannels;
-	AUDIO_BITS_PER_SAMPLE_t bitsPerSample;
-	AUDIO_SAMPLING_RATE_t sampleRate;*/
+	int first;
+	atomic_t renderNumBlocks;
+	atomic_t numDMABlocks;
+	int dynDmaSize;
 };
 #define CSL_CAPH_Render_Drv_t struct _CSL_CAPH_Render_Drv_t
 /**
@@ -167,7 +169,7 @@ Result_t csl_audio_render_resume(UInt32 streamID);
 *  Description: set the SW_READY to aadmac when a new buffer is ready
 *
 ****************************************************************************/
-Result_t csl_audio_render_buffer_ready(UInt32 streamID);
+Result_t csl_audio_render_buffer_ready(UInt32 streamID, int size, int offset);
 /**
 *
 *  @brief  get current position for this stream
@@ -189,6 +191,7 @@ UInt16 csl_audio_render_get_current_position(UInt32 streamID);
 UInt16 csl_audio_render_get_current_buffer(UInt32 streamID);
 
 CSL_CAPH_Render_Drv_t *GetRenderDriverByType(UInt32 streamID);
-void csl_audio_render_set_dma_size(int rate);
-
+void csl_audio_render_set_dma_size(int num_blocks, int stream);
+int csl_audio_render_get_num_blocks(int stream);
+int csl_audio_render_get_dma_size(int stream);
 #endif /* _CSL_AUDIO_RENDER_ */

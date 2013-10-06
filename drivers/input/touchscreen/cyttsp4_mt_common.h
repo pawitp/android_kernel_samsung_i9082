@@ -66,6 +66,7 @@ struct cyttsp4_mt_data {
 	struct cyttsp4_sysinfo *si;
 	struct input_dev *input;
 	struct cyttsp4_mt_function mt_function;
+	struct mutex report_lock; /* Used to serialize reports */
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend es;
 	bool is_suspended;

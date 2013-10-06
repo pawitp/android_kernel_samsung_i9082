@@ -320,6 +320,7 @@ int pwr_mgr_ignore_dap_powerup_request(bool ignore);
 int pwr_mgr_register_event_handler(u32 event_id, void (*pwr_mgr_event_cb)(u32 event_id,void* param),
 											void* param);
 int pwr_mgr_unregister_event_handler(u32 event_id);
+int pwr_mgr_get_wakeup_events(u32 *eventBuff, int eventBuffSize);
 int pwr_mgr_process_events(u32 event_start, u32 event_end, int clear_event);
 int pwr_mgr_init(struct pwr_mgr_info* info);
 

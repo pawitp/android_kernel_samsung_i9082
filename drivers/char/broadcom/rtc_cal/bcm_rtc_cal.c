@@ -244,11 +244,11 @@ static void rtc_cal_pr_vars(void)
 {
 	pr_rtcdebug("\t%s:internal variables", __func__);
 	pr_rtcdebug
-	    ("hw_time:%lu,hz_acc:%lu,slip_acc:%llu,err_acc:%llu,flag_err_acc:%d",
+	("hw_time:%lu,hz_acc:%lu,slip_acc:%llu,err_acc:%llu,flag_err_acc:%d",
 	     pRTC_TC->time_hw_time, pRTC_TC->time_hz_acc, pRTC_TC->slippage_acc,
 	     pRTC_TC->time_err_acc, pRTC_TC->flag_err_acc);
 	pr_rtcdebug
-	    ("hz_curr:%lu,hz_prev:%lu,hz_intv:%lu,err_curr:%llu,flag_err_curr:%d",
+	("hz_curr:%lu,hz_prev:%lu,hz_intv:%lu,err_curr:%llu,flag_err_curr:%d",
 	     pRTC_TC->time_hz_curr, pRTC_TC->time_hz_prev,
 	     pRTC_TC->time_hz_interval, pRTC_TC->time_err_curr,
 	     pRTC_TC->flag_err_curr);
@@ -570,7 +570,7 @@ bool rtc_cal_msg(unsigned char id, unsigned long val1, unsigned long val2,
 	wake_up(&rtccal_q);
 
 	pr_info
-	    ("%s : msg.id = %u(%lu), val1=%lu, val2=%lu, val3=%lu, val4=%lu,len=%u",
+	("%s : msg.id = %u(%lu), val1=%lu, val2=%lu, val3=%lu, val4=%lu,len=%u",
 	     __func__, (unsigned int)msg.id, count, val1, val2, val3, val4,
 	     len);
 
@@ -1340,7 +1340,7 @@ u32 rtc_cal_conv_rtc_calib(u32 ratio)
 	u32 clk_val = 0;
 	u32 reg_val = 0;
 
-	if (RTCCAL_Ratio == ratio)
+	if ((RTCCAL_Ratio == ratio) || (ratio == RTCSC_INVALID_RATIO))
 		return 0;	/* no calib */
 
 	/* find direction */

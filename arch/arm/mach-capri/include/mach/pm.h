@@ -27,6 +27,9 @@ extern void request_suspend_state(suspend_state_t state);
 int __idle_allow_enter(struct as_one_cpu *sys);
 int __idle_allow_exit(struct as_one_cpu *sys);
 int idle_enter_exit(struct as_one_cpu *sys, int enable);
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
+extern void uas_jig_force_sleep(void);
+#endif
 
 #ifdef CONFIG_CAPRI_DELAYED_PM_INIT
 int capri_pm_init(void);

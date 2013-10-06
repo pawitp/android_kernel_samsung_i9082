@@ -63,7 +63,11 @@ static u8 reg_defaults[8] = {
 	0x00, /* ALS_LSB: read only register */
 	0x30, /* PS_CMD: interrupt disable */
 	0x00, /* PS_DATA: read only register */
-	0x08, /* PS_THD: 10 */
+#if defined (CONFIG_MACH_CAPRI_SS_COMMON_P_MODEL)
+	0x0A, /* PS_THD: 10 */
+#else
+	0x08, /* PS_THD: 8 */
+#endif
 };
 
 
@@ -525,11 +529,11 @@ static void cm3663_work_func_light(struct work_struct *work)
 					      work_light);
 
 	als = lightsensor_get_alsvalue(cm3663);
-	input_report_abs(cm3663->light_input_dev, ABS_MISC, als);
+        input_report_rel(cm3663->light_input_dev, REL_MISC, als+1);
 	input_sync(cm3663->light_input_dev);
 
 	if (lightval_logcount++ > 500) {
-        	printk(KERN_INFO "[CM3663] light value = %d \n", als);
+        	printk(KERN_INFO "[CM3663] light value = %d \n", als+1);
 		lightval_logcount = 0;
 	}          
 }
@@ -765,8 +769,7 @@ static int cm3663_i2c_probe(struct i2c_client *client,
 	}
 	input_set_drvdata(input_dev, cm3663);
 	input_dev->name = "light_sensor";
-	input_set_capability(input_dev, EV_ABS, ABS_MISC);
-	input_set_abs_params(input_dev, ABS_MISC, 0, 1, 0, 0);
+        input_set_capability(input_dev, EV_REL, REL_MISC);
 
 	ret = input_register_device(input_dev);
 	if (ret < 0) {
@@ -963,6 +966,21 @@ static struct i2c_driver cm3663_i2c_driver = {
 static int __init cm3663_init(void)
 {
         int ret=0;        
+        struct regulator *VCC_PDA_2_8_V;  //mmcldo2_uc
+      
+	VCC_PDA_2_8_V = regulator_get(NULL,"mmcldo2_uc");
+	if(IS_ERR(VCC_PDA_2_8_V)){
+		printk(KERN_ERR "[CM3663] can not get VCC_PDA_2.8V\n");
+	}	
+
+        ret = regulator_is_enabled(VCC_PDA_2_8_V);
+        printk(KERN_INFO "[CM3663] regulator_is_enabled : %d\n", ret);
+
+         ret = regulator_set_voltage(VCC_PDA_2_8_V,2800000,2800000);	
+        printk(KERN_INFO "[CM3663] regulator_set_voltage : %d\n", ret);
+
+        ret = regulator_enable(VCC_PDA_2_8_V);
+        printk(KERN_INFO "[CM3663] regulator_enable : %d\n", ret);
 
         /* regulator init */
         prox_regulator = regulator_get(NULL, "mmcldo1_uc");

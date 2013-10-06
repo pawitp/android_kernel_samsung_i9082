@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/xscript/xsapi_clk_def.h
+*	@file	include/linux/broadcom/xscript/xsapi_clk_def.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -87,8 +87,8 @@ typedef enum {
 
 /**********************************/
 /* Only available for 21553 */
-	XS_BCM_CLK_CAMERARX_STR_ID = 28,	/* /< BCM_CLK_CAMERARX_STR_ID */
-	XS_BCM_CLK_CAMERASYS_STR_ID = 29,	/* /< BCM_CLK_CAMERASYS_STR_ID */
+	XS_BCM_CLK_CAMERARX_STR_ID = 28,/* /< BCM_CLK_CAMERARX_STR_ID */
+	XS_BCM_CLK_CAMERASYS_STR_ID = 29,/* /< BCM_CLK_CAMERASYS_STR_ID */
 	XS_BCM_CLK_DPE_STR_ID = 30,	/* /< BCM_CLK_DPE_STR_ID */
 	XS_BCM_CLK_SDIO3_STR_ID = 31,	/* /< BCM_CLK_SDIO3_STR_ID */
 	XS_BCM_CLK_SDRAM_STR_ID = 32,	/* /< BCM_CLK_SDRAM_STR_ID */

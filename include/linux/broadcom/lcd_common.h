@@ -110,12 +110,12 @@ void lcd_write_param(uint32_t cmd);
 
 #define LCD_Reset_GPIO		GPIO_LCD_RESET
 #define LCD_Backlight_GPIO	GPIO_LCD_BACKLIGHT
-#define LCD_Write_Timing 	(LCD_WTR_HOLD | LCD_WTR_PULSE | LCD_WTR_SETUP)
+#define LCD_Write_Timing	(LCD_WTR_HOLD | LCD_WTR_PULSE | LCD_WTR_SETUP)
 
 #ifdef LCD_RTR_HOLD
-#define LCD_Read_Timing 	(LCD_RTR_HOLD | LCD_RTR_PULSE | LCD_RTR_SETUP)
+#define LCD_Read_Timing		(LCD_RTR_HOLD | LCD_RTR_PULSE | LCD_RTR_SETUP)
 #else
-#define LCD_Read_Timing 	LCD_Write_Timing
+#define LCD_Read_Timing		LCD_Write_Timing
 #endif
 
 #define FB_HEIGHT 320
@@ -129,7 +129,8 @@ void lcd_write_param(uint32_t cmd);
 #define GREEN_SHIFT 5
 #define BLUE_SHIFT  0
 
-#define RGB_VAL(r, g, b)  (((r) << RED_SHIFT) | ((g) << GREEN_SHIFT) | ((b) << BLUE_SHIFT))
+#define RGB_VAL(r, g, b)\
+	(((r) << RED_SHIFT) | ((g) << GREEN_SHIFT) | ((b) << BLUE_SHIFT))
 
 /* desired DMA channel: 1 is second highest priority */
 #define DESIRED_DMA_CHANNEL 1
@@ -185,11 +186,11 @@ typedef struct {
 } DMA_Restore_t;
 
 /* swap from big endian to little endian for 32 bits */
-#define DMA_SWAP(val) 	cpu_to_le32(val)
+#define DMA_SWAP(val)	cpu_to_le32(val)
 #define DMA_BYTES_PER_LLI   16	/* bytes per Linked List Item (LLI) */
 #define DMA_DIVIDE_WIDTH_32	4	/* 4 bytes for 32-bit-wide transfer */
 #define DMA_DIVIDE_WIDTH_16	2	/* 2 bytes for 16-bit-wide transfer */
-#define DMA_DIVIDE_WIDTH_8 	1	/* 1 byte  for 8-bit-wide transfer */
+#define DMA_DIVIDE_WIDTH_8	1	/* 1 byte  for 8-bit-wide transfer */
 #define NUM_DMA_LLI_BUFFERS	1
 #define NUM_DMA_BUFFERS		2
 

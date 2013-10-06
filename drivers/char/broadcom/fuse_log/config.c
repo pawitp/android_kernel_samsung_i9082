@@ -81,7 +81,7 @@ static void SetConfigDefaults(void)
 	g_config.runlog.dev = BCMLOG_OUTDEV_STM;
 	g_config.cp_crashlog.dev = BCMLOG_OUTDEV_STM;
 #else
-	g_config.runlog.dev = BCMLOG_OUTDEV_STM;
+	g_config.runlog.dev = BCMLOG_OUTDEV_NONE;
 	/* eventually set to BCMLOG_OUTDEV_PANIC
 	 * once its working */
 	g_config.cp_crashlog.dev = BCMLOG_OUTDEV_NONE;
@@ -557,6 +557,12 @@ static DEVICE_ATTR(acm_dev, S_IRUGO | S_IWUSR, bcmlog_acm_dev_show,
 		   bcmlog_acm_dev_store);
 
 
+char *BCMLOG_GetInternalFileBase(void)
+{
+	strncpy(g_config.file_base, BCMLOG_INTERNAL_FILE_BASE, MAX_STR_NAME);
+	return g_config.file_base;
+}
+
 char *BCMLOG_GetFileBase(void)
 {
 	return g_config.file_base;
@@ -617,39 +623,39 @@ void BCMLOG_InitConfig(void *h)
 	value = device_create_file(dev, &dev_attr_log_lock);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog log_lock attribute\n");
+	    ("BCMLOG Init failed to create bcmlog log_lock attribute\n");
 	value = device_create_file(dev, &dev_attr_cp_crash);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog cp crash log attribute\n");
+	    ("BCMLOG Init failed to create bcmlog cp crash log attribute\n");
 	value = device_create_file(dev, &dev_attr_cp_crash_lock);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog cp crash log lock attribute\n");
+	("BCMLOG Init failed to create bcmlog cp crash log lock attribute\n");
 	value = device_create_file(dev, &dev_attr_ap_crash);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog ap crash log attribute\n");
+	    ("BCMLOG Init failed to create bcmlog ap crash log attribute\n");
 	value = device_create_file(dev, &dev_attr_ap_crash_lock);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog ap crash log lock attribute\n");
+	("BCMLOG Init failed to create bcmlog ap crash log lock attribute\n");
 	value = device_create_file(dev, &dev_attr_file_base);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog file_base attribute\n");
+	    ("BCMLOG Init failed to create bcmlog file_base attribute\n");
 	value = device_create_file(dev, &dev_attr_file_max);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog file max attribute\n");
+	    ("BCMLOG Init failed to create bcmlog file max attribute\n");
 	value = device_create_file(dev, &dev_attr_uart_dev);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog uart_dev attribute\n");
+	    ("BCMLOG Init failed to create bcmlog uart_dev attribute\n");
 	value = device_create_file(dev, &dev_attr_acm_dev);
 	if (value < 0)
 		pr_err
-		    ("BCMLOG Init failed to create bcmlog acm_dev attribute\n");
+	    ("BCMLOG Init failed to create bcmlog acm_dev attribute\n");
 }
 
 int BCMLOG_GetRunlogDevice(void)

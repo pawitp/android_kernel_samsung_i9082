@@ -45,6 +45,10 @@
 #define KNODE_DEAD		1LU
 #define KNODE_KLIST_MASK	~KNODE_DEAD
 
+extern struct klist_node *CSP_knode_bcmdhd_wlan;
+extern struct klist_node *CSP_knode_bcm4329_wlan;
+extern struct klist_node *CSP_knode_bcmsdh_sdmmc;
+
 static struct klist *knode_klist(struct klist_node *knode)
 {
 	return (struct klist *)
@@ -89,6 +93,7 @@ void klist_init(struct klist *k, void (*get)(struct klist_node *),
 	spin_lock_init(&k->k_lock);
 	k->get = get;
 	k->put = put;
+//	printk("CSP klist_init \n");
 }
 EXPORT_SYMBOL_GPL(klist_init);
 
@@ -109,10 +114,16 @@ static void add_tail(struct klist *k, struct klist_node *n)
 static void klist_node_init(struct klist *k, struct klist_node *n)
 {
 	INIT_LIST_HEAD(&n->n_node);
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_node_init klistnode = %x \n",n);
 	kref_init(&n->n_ref);
 	knode_set_klist(n, k);
 	if (k->get)
 		k->get(n);
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_node_init refcount =1 and klist added to knode \n");
+
+	
 }
 
 /**
@@ -134,6 +145,8 @@ EXPORT_SYMBOL_GPL(klist_add_head);
  */
 void klist_add_tail(struct klist_node *n, struct klist *k)
 {
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_add_tail klistnode = %x \n",n);
 	klist_node_init(k, n);
 	add_tail(k, n);
 }
@@ -194,7 +207,11 @@ static void klist_release(struct kref *kref)
 		if (waiter->node != n)
 			continue;
 
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+			printk("CSP klist_release  setting woken == 1 waiter node %x waiter process %x node %x\n",waiter->node,waiter->process,n);
+
                 process = waiter->process;
+
 		list_del(&waiter->list); 
 		waiter->woken = 1;
 		mb();
@@ -213,7 +230,8 @@ static void klist_put(struct klist_node *n, bool kill)
 {
 	struct klist *k = knode_klist(n);
 	void (*put)(struct klist_node *) = k->put;
-
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_put\n");
 	spin_lock(&k->k_lock);
 	if (kill)
 		knode_kill(n);
@@ -230,6 +248,8 @@ static void klist_put(struct klist_node *n, bool kill)
  */
 void klist_del(struct klist_node *n)
 {
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_del\n");
 	klist_put(n, true);
 }
 EXPORT_SYMBOL_GPL(klist_del);
@@ -241,7 +261,8 @@ EXPORT_SYMBOL_GPL(klist_del);
 void klist_remove(struct klist_node *n)
 {
 	struct klist_waiter waiter;
-
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_remove node is %x \n",n);
 	waiter.node = n;
 	waiter.process = current;
 	waiter.woken = 0;
@@ -250,10 +271,12 @@ void klist_remove(struct klist_node *n)
 	spin_unlock(&klist_remove_lock);
 
 	klist_del(n);
+	if (n== CSP_knode_bcmdhd_wlan || n== CSP_knode_bcm4329_wlan || n== CSP_knode_bcmsdh_sdmmc)
+		printk("CSP klist_remove waiting waiter node %x waiter process %x\n",waiter.node,waiter.process);
 
 	for (;;) {
 		set_current_state(TASK_UNINTERRUPTIBLE);
-		if (waiter.woken)
+		if (waiter.woken == 1)
 			break;
 		schedule();
 	}

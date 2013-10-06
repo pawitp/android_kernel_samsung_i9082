@@ -83,8 +83,8 @@ asm_do_IRQ(unsigned int irq, struct pt_regs *regs)
 	struct irq_desc *desc = irq_desc + irq;
 #endif
 
-void dpm_log_irq(u32 irq);
-dpm_log_irq(irq);
+	void dpm_log_irq(u32 irq);
+	dpm_log_irq(irq);
 
 	irq_enter();
 

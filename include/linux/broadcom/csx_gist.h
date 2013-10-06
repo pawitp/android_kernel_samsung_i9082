@@ -20,14 +20,15 @@
 *
 *****************************************************************************/
 
-#if !defined( CSX_GIST_H )
+#if !defined(CSX_GIST_H)
 #define CSX_GIST_H
 
 /* ---- Constants and Types ---------------------------------------------- */
 
 typedef int CSX_GIST_HDL;
 
-#define CSX_GIST_IO_POINT_NUM_MAX      80	/* Maximum number of CSX I/O points supported */
+#define CSX_GIST_IO_POINT_NUM_MAX      80
+	/* Maximum number of CSX I/O points supported */
 
 typedef struct csx_gist_info {
 	GIST_WRITER_PARAMS capture;
@@ -45,9 +46,9 @@ typedef struct csx_gist_point {
 /* ---- Variable Externs ------------------------------------------------- */
 /* ---- Function Prototypes ---------------------------------------------- */
 
-#if !defined( SWIG ) && !defined( MAKEDEFS )
+#if !defined(SWIG) && !defined(MAKEDEFS)
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 int csx_gist_add_point(CSX_IO_POINT_INFO *csx_info,
 		       CSX_GIST_INFO *csx_gist_info, CSX_IO_HANDLE *csx_handle);
 

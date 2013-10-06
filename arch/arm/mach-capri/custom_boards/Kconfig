@@ -68,6 +68,11 @@ config MACH_CAPRI_SS_BAFFIN_REV03
         help
           Support for the Broadcom Capri SS BAFFIN(big) Rev03 board.
 
+config MACH_CAPRI_SS_BAFFIN_REV05
+        bool "Enable CAPRI SS BAFFIN Rev05 board"
+        help
+          Support for the Broadcom Capri SS BAFFIN(big) Rev05 board.
+
 endchoice
 
 endmenu
@@ -80,15 +85,44 @@ choice
 
 config MACH_CAPRI_SS_CRATER_REV00
         bool "Enable CAPRI SS CRATER Rev00 board"
-        default n
         help
           Support for the Broadcom Capri SS CRATER(big) Rev00 board.
 
 config MACH_CAPRI_SS_CRATER_REV01
         bool "Enable CAPRI SS CRATER Rev01 board"
-        default n
         help
           Support for the Broadcom Capri SS CRATER(big) Rev01 board.
+
+config MACH_CAPRI_SS_CRATER_REV02
+        bool "Enable CAPRI SS CRATER Rev02 board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev02 board.
+
+config MACH_CAPRI_SS_CRATER_REV02A
+        bool "Enable CAPRI SS CRATER Rev02a board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev02a board.
+
+config MACH_CAPRI_SS_CRATER_REV03
+        bool "Enable CAPRI SS CRATER Rev03 board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev03 board.
+
+config MACH_CAPRI_SS_CRATER_REV03A
+        bool "Enable CAPRI SS CRATER Rev03A board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev03A board.
+
+config MACH_CAPRI_SS_CRATER_REV04
+        bool "Enable CAPRI SS CRATER Rev04 board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev04 board.
+
+config MACH_CAPRI_SS_CRATER_REV06
+        bool "Enable CAPRI SS CRATER Rev06 board"
+        help
+          Support for the Broadcom Capri SS CRATER(big) Rev06 board.
+          
 endchoice
 
 endmenu

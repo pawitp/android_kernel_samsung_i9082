@@ -52,7 +52,11 @@ static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT;
 #define PM2_SHIFT		4
 #define PM3_SHIFT		6
 
+#ifdef CONFIG_MACH_CAPRI_STONE
 #define VIOPON1		0x40
+#else
+#define VIOPON1		0x00
+#endif
 
 static int      bcmpmuldo_get_voltage(struct regulator_dev *rdev);
 static int      bcmpmuldo_set_voltage(struct regulator_dev *rdev,
@@ -89,6 +93,42 @@ struct regulator_ops bcmpmuHDMI_ops = {
 	.is_enabled	= bcmpmureg_is_enabled,
 };
 
+#ifdef CONFIG_MFD_BCM59054
+static int  rgltr_PMCTRL_reg_check(u32 reg_addr_index)
+{
+	int ret = 0;
+
+	switch (reg_addr_index) {
+/*
+	case PMU_REG_CAMLDO1PMCTRL1:
+*/
+	case PMU_REG_CAMLDO2PMCTRL1:
+	case PMU_REG_SIMLDO1PMCTRL1:
+	case PMU_REG_SIMLDO2PMCTRL1:
+	case PMU_REG_SDLDOPMCTRL1:
+	case PMU_REG_SDXLDOPMCTRL1:
+	case PMU_REG_GPLDO1PMCTRL1:
+	case PMU_REG_GPLDO2PMCTRL1:
+	case PMU_REG_GPLDO3PMCTRL1:
+	case PMU_REG_TCXLDOPMCTRL1:
+	case PMU_REG_LVLDO1PMCTRL1:
+	case PMU_REG_LVLDO2PMCTRL1:
+	case PMU_REG_MMCLDO1PMCTRL1:
+	case PMU_REG_MMCLDO2PMCTRL1:
+	case PMU_REG_USBLDOPMCTRL1:
+	case PMU_REG_MICLDOPMCTRL1:
+	case PMU_REG_VIBLDOPMCTRL1:
+	case PMU_REG_AUDLDOPMCTRL1:
+		ret = 0;
+		break;
+	default:
+		ret = 1;
+		break;
+	}
+
+	return ret;
+}
+#else
 static int  rgltr_PMCTRL_reg_check(u32 reg_addr_index)
 {
 	int ret = 0;
@@ -110,8 +150,8 @@ static int  rgltr_PMCTRL_reg_check(u32 reg_addr_index)
 	case PMU_REG_MMCLDO2PMCTRL1:
 	case PMU_REG_USBLDOPMCTRL1:
 	case PMU_REG_MICLDOPMCTRL1:
-	case PMU_REG_AUDLDOPMCTRL1:
 	case PMU_REG_VIBLDOPMCTRL1:
+	case PMU_REG_AUDLDOPMCTRL1:
 		ret = 0;
 		break;
 	default:
@@ -121,6 +161,13 @@ static int  rgltr_PMCTRL_reg_check(u32 reg_addr_index)
 
 	return ret;
 }
+
+
+
+
+
+
+#endif
 
 #ifdef CONFIG_MFD_BCMPMU_DBG
 static ssize_t
@@ -173,14 +220,14 @@ static int bcmpmureg_is_enabled(struct regulator_dev *rdev)
 		rc = bcmpmu->read_dev(bcmpmu, info->reg_addr, \
 					&reg_val1, 0xff);
 		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error reading regulator addr index1 %d\n",
+			pr_err("%s: error reading regulator addr index1 %d\n",
 				__func__, info->reg_addr);
 			return rc;
 		}
 		rc = bcmpmu->read_dev(bcmpmu, info->reg_addr2, \
 					&reg_val2, 0xff);
 		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error reading regulator addr index2 %d\n",
+			pr_err("%s: error reading regulator addr index2 %d\n",
 				__func__, info->reg_addr2);
 			return rc;
 		}
@@ -192,21 +239,16 @@ static int bcmpmureg_is_enabled(struct regulator_dev *rdev)
 	}
 
 	if (info->ldo_or_sr == BCMPMU_HDMI)
-		if (bcmpmu->pmu_rev == BCMPMU_REV_A0
-			|| bcmpmu->pmu_rev == BCMPMU_REV_B0)
 			info->mode_mask = VIOPON1;
-
 	rc = bcmpmu->read_dev(bcmpmu, info->reg_addr, &val, info->mode_mask);
 	if (rc < 0) {
-		pr_info(KERN_ERR "%s:error reading regulator OPmode register\n",
+		pr_err("%s:error reading regulator OPmode register\n",
 		__func__);
 		return rc;
 	}
 	pr_rgltr(DATA, "%s: val=0x%x\n", __func__, val);
 
 	if (info->ldo_or_sr == BCMPMU_HDMI) {
-		if (bcmpmu->pmu_rev == BCMPMU_REV_A0
-			|| bcmpmu->pmu_rev == BCMPMU_REV_B0)
 			val = (val & VIOPON1) >> 6;
 		return val&1;
 	} else {
@@ -238,14 +280,14 @@ static int bcmpmureg_enable(struct regulator_dev *rdev)
 		ret = bcmpmu->write_dev(bcmpmu, info->reg_addr, \
 					info->reg_value, 0xff);
 		if (ret != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index1 %d\n",
+			pr_err("%s: error writing regulator addr index1 %d\n",
 				__func__, info->reg_addr);
 			return ret;
 		}
 		ret = bcmpmu->write_dev(bcmpmu, info->reg_addr2, \
 					info->reg_value2, 0xff);
 		if (ret != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index2 %d\n",
+			pr_err("%s: error writing regulator addr index2 %d\n",
 				__func__, info->reg_addr2);
 			return ret;
 		}
@@ -261,11 +303,8 @@ static int bcmpmureg_enable(struct regulator_dev *rdev)
 	if (err != 0)
 		return err;
 	if (info->ldo_or_sr == BCMPMU_HDMI) {
-		if (bcmpmu->pmu_rev == BCMPMU_REV_A0
-			|| bcmpmu->pmu_rev == BCMPMU_REV_B0){
 			val = VIOPON1;
 			info->mode_mask = VIOPON1;
-		}
 	} else {
 		val &= ~((LDO_MODE_MASK << PM1_SHIFT) |
 				(LDO_MODE_MASK << PM3_SHIFT));
@@ -315,6 +354,13 @@ static int bcmpmureg_enable(struct regulator_dev *rdev)
 	if (err != 0) {
 		pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
 				__func__, info->reg_addr);
+#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN
+		if((bcmpmu->rgltr_desc[rdev_get_id(rdev)].id == BCMPMU_REGULATOR_VIBLDO) 
+			&& (bcmpmureg_is_enabled(rdev) == 1)) {
+			pr_info(KERN_ERR "%s:error writing and regulator is enabled \n",__func__);
+			bcmpmureg_disable(rdev);
+		}
+#endif
 		return err;
 	}
 
@@ -325,6 +371,13 @@ static int bcmpmureg_enable(struct regulator_dev *rdev)
 			if (err != 0) {
 				pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
 						__func__, info->reg_addr);
+#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN
+				if((bcmpmu->rgltr_desc[rdev_get_id(rdev)].id == BCMPMU_REGULATOR_VIBLDO) 
+					&& (bcmpmureg_is_enabled(rdev) == 1)) {
+					pr_info(KERN_ERR "%s:error writing and regulator is enabled \n",__func__);
+					bcmpmureg_disable(rdev);
+				}
+#endif
 			}
 		}
 	}
@@ -360,14 +413,14 @@ static int bcmpmureg_disable(struct regulator_dev *rdev)
 		ret = bcmpmu->write_dev(bcmpmu, info->reg_addr, \
 					info->off_value, 0xff);
 		if (ret != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index1 %d\n",
+			pr_err("%s: error writing regulator addr index1 %d\n",
 				__func__, info->reg_addr);
 			return ret;
 		}
 		ret = bcmpmu->write_dev(bcmpmu, info->reg_addr2, \
 					info->off_value2, 0xff);
 		if (ret != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index2 %d\n",
+			pr_err("%s: error writing regulator addr index2 %d\n",
 				__func__, info->reg_addr2);
 			return ret;
 		}
@@ -381,8 +434,6 @@ static int bcmpmureg_disable(struct regulator_dev *rdev)
 
 	if (info->ldo_or_sr == BCMPMU_HDMI) {
 		val = 0;
-		if (bcmpmu->pmu_rev == BCMPMU_REV_A0
-			|| bcmpmu->pmu_rev == BCMPMU_REV_B0)
 			info->mode_mask = VIOPON1;
 	} else {
 		if (off_mode == 1) {
@@ -394,7 +445,7 @@ static int bcmpmureg_disable(struct regulator_dev *rdev)
 			val = LDO_LPM << PM0_SHIFT | LDO_LPM << PM1_SHIFT |
 			LDO_LPM << PM2_SHIFT | LDO_LPM << PM3_SHIFT;
 		} else {
-			pr_info(KERN_ERR "%s Invalid off_mode  %d !\n",
+			pr_err("%s Invalid off_mode  %d !\n",
 				__func__, off_mode);
 			return -EINVAL;
 		}
@@ -410,7 +461,7 @@ static int bcmpmureg_disable(struct regulator_dev *rdev)
 
 	err = bcmpmu->write_dev(bcmpmu, info->reg_addr, val, info->mode_mask);
 	if (err != 0) {
-		pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
+		pr_err("%s:error writing regulator addr index %d\n",
 				__func__, info->reg_addr);
 		return err;
 	}
@@ -420,7 +471,7 @@ static int bcmpmureg_disable(struct regulator_dev *rdev)
 			err = bcmpmu->write_dev(bcmpmu, info->reg_addr+1,
 						val, info->mode_mask);
 			if (err != 0) {
-				pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
+				pr_err("%s:error writing regulator addr index %d\n",
 						__func__, info->reg_addr);
 			}
 		}
@@ -443,7 +494,7 @@ static int bcmpmureg_get_status(struct regulator_dev *rdev)
 	bcmpmu->read_dev(bcmpmu, info->reg_addr, &val, info->mode_mask);
 
 	if (rc < 0) {
-		pr_info(KERN_ERR "%s: error reading regulator OPmode register.\n",
+		pr_err("%s: error reading regulator OPmode register.\n",
 		__func__);
 		return rc;
 	}
@@ -486,7 +537,7 @@ static unsigned int bcmpmureg_get_mode(struct regulator_dev *rdev)
 	bcmpmu->read_dev(bcmpmu, info->reg_addr, &val, info->mode_mask);
 
 	if (rc < 0) {
-		pr_info(KERN_ERR "%s: error reading regulator OPmode register.\n",
+		pr_err("%s: error reading regulator OPmode register.\n",
 			__func__);
 		return rc;
 	}
@@ -533,14 +584,14 @@ static int bcmpmureg_set_mode(struct regulator_dev *rdev, unsigned mode)
 		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr, \
 					info->reg_value, 0xff);
 		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index1 %d\n",
+			pr_err("%s: error writing regulator addr index1 %d\n",
 				__func__, info->reg_addr);
 			return rc;
 		}
 		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr2,
 					info->reg_value2, 0xff);
 		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index2 %d\n",
+			pr_err("%s: error writing regulator addr index2 %d\n",
 				__func__, info->reg_addr2);
 			return rc;
 		}
@@ -554,7 +605,7 @@ static int bcmpmureg_set_mode(struct regulator_dev *rdev, unsigned mode)
 
 	err = bcmpmu->read_dev(bcmpmu, info->reg_addr, &val, info->mode_mask);
 	if (err < 0) {
-		pr_info(KERN_ERR "%s: error reading regulator OPmode register.\n",
+		pr_err("%s: error reading regulator OPmode register.\n",
 				__func__);
 		return err;
 	}
@@ -591,7 +642,7 @@ static int bcmpmureg_set_mode(struct regulator_dev *rdev, unsigned mode)
 
 	err = bcmpmu->write_dev(bcmpmu, info->reg_addr, val, info->mode_mask);
 	if (err != 0) {
-		pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
+		pr_err("%s:error writing regulator addr index %d\n",
 				__func__, info->reg_addr);
 		return err;
 	}
@@ -601,7 +652,7 @@ static int bcmpmureg_set_mode(struct regulator_dev *rdev, unsigned mode)
 			err = bcmpmu->write_dev(bcmpmu, info->reg_addr+1,
 						val, info->mode_mask);
 			if (err != 0) {
-				pr_info(KERN_ERR "%s:error writing regulator addr index %d\n",
+				pr_err("%s:error writing regulator addr index %d\n",
 						__func__, info->reg_addr);
 			}
 		}
@@ -641,23 +692,6 @@ static int bcmpmuldo_set_voltage(struct regulator_dev *rdev, int min_uv,
 	pr_info("%s(%s-%d,%d)", __func__, \
 		bcmpmu->rgltr_desc[rdev_get_id(rdev)].name, min_uv, max_uv);
 
-	if (info->reg_addr && info->reg_addr2) {
-		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr, \
-					info->reg_value, 0xff);
-		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index1 %d\n",
-				__func__, info->reg_addr);
-			return rc;
-		}
-		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr2, \
-					info->reg_value2, 0xff);
-		if (rc != 0) {
-			pr_info(KERN_ERR "%s: error writing regulator addr index2 %d\n",
-				__func__, info->reg_addr2);
-			return rc;
-		}
-	}
-
 	/* do not control switcher through API */
 	if (info->ldo_or_sr == BCMPMU_SR)
 		return 0;
@@ -676,6 +710,24 @@ static int bcmpmuldo_set_voltage(struct regulator_dev *rdev, int min_uv,
 						 info->vout_mask);
 		}
 	}
+
+	if (info->reg_addr && info->reg_addr2) {
+		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr, \
+					info->reg_value, 0xff);
+		if (rc != 0) {
+			pr_err("%s: error writing regulator addr index1 %d\n",
+				__func__, info->reg_addr);
+			return rc;
+		}
+		rc = bcmpmu->write_dev(bcmpmu, info->reg_addr2, \
+					info->reg_value2, 0xff);
+		if (rc != 0) {
+			pr_err("%s: error writing regulator addr index2 %d\n",
+				__func__, info->reg_addr2);
+			return rc;
+		}
+	}
+
 	return -EDOM;
 }
 
@@ -689,7 +741,7 @@ static int bcmpmuldo_get_voltage(struct regulator_dev *rdev)
 	rc = bcmpmu->read_dev(bcmpmu, info->reg_addr_volt, &val,
 			info->vout_mask);
 	if (rc < 0) {
-		pr_info(KERN_ERR "%s: error reading regulator voltage register.\n",
+		pr_err("%s: error reading regulator voltage register.\n",
 			__func__);
 		return rc;
 	}
@@ -711,17 +763,20 @@ static int bcmpmu_regulator_probe(struct platform_device *pdev)
 	u8              opmode;
 	struct bcmpmu_reg_info *reg_info;
 
-	pr_info(KERN_INFO "%s: called\n", __func__);
+	printk("%s: called\n", __func__);
+	pr_info("%s: called\n", __func__);
 	/*
 	* register regulator
 	*/
 	bcmpmu->rgltr_desc = bcmpmu_rgltr_desc();
 	bcmpmu->rgltr_info = bcmpmu_rgltr_info();
 	if ((bcmpmu->rgltr_info == NULL) || (bcmpmu->rgltr_desc == NULL))
-		pr_info(KERN_ERR "%s: regulator info and desc not avail.\n",
+		pr_err("%s: regulator info and desc not avail.\n",
 			__func__);
+#ifdef CONFIG_MFD_BCM59056
 	if (bcmpmu->pmu_rev == BCMPMU_REV_A0)
 		num_of_regl = num_of_regl - 6;
+#endif
 	for (i = 0; i < num_of_regl; i++) {
 		regl_id = (bcmpmu_regulators + i)->regulator;
 		if (i != regl_id)
@@ -735,10 +790,6 @@ static int bcmpmu_regulator_probe(struct platform_device *pdev)
 			if (ret != 0)
 				goto register_fail;
 		}
-
-		/*pr_info("%s: REGULATOR name %s, ID %d def_opmode = %x initdata = %x\n ",
-			__func__, (bcmpmu->rgltr_desc + regl_id)->name, regl_id, opmode,
-			(u32) ((bcmpmu_regulators + i)->initdata));*/
 
 		if ((bcmpmu_regulators + i)->initdata) {
 			regl[i] = regulator_register(&bcmpmu->rgltr_desc[regl_id],

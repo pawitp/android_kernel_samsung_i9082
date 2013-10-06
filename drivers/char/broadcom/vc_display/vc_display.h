@@ -21,4 +21,7 @@ int vc_display_bus_write(int unsigned display,
 int vc_display_bus_read(int unsigned display,
 			uint8_t source, uint8_t *data, size_t count);
 
+int vc_display_get_name(int unsigned display,
+			uint8_t *data, size_t count);
+			
 #endif

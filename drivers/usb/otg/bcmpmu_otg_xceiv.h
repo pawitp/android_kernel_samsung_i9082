@@ -67,6 +67,8 @@ struct bcmpmu_otg_xceiv_data {
 	bool vbus_enabled;
 	bool otg_enabled;
 	bool regulator_enabled;
+	bool is_rid_c;
+	bool is_rid_b;
 };
 
 bool bcmpmu_otg_xceiv_check_id_gnd(struct bcmpmu_otg_xceiv_data

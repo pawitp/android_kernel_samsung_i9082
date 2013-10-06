@@ -4460,11 +4460,11 @@
 #define    GPIO_GPCTR0_GPIO_PULL_EN_SHIFT                                 1
 #define    GPIO_GPCTR0_GPIO_PULL_EN_MASK                                  0x00000002
 #define    GPIO_GPCTR0_IOTR_SHIFT                                         0
-#define    GPIO_GPCTR0_IOTR_MASK                                          0x00000003
+#define    GPIO_GPCTR0_IOTR_MASK			0x00000001
 #define       GPIO_GPCTR0_IOTR_CMD_0UTPUT                                 0x00000000
 #define       GPIO_GPCTR0_IOTR_CMD_INPUT                                  0x00000001
 #define GPIO_GPCTR0_IOTR_CMD_DRIVE_LOW                                    0x00000000
-#define GPIO_GPCTR0_IOTR_CMD_DRIVE_HIGH                                   0x00000001
+#define GPIO_GPCTR0_IOTR_CMD_DRIVE_HIGH			0x00000002
 
 #define GPIO_GPCTR1_OFFSET                                                0x00000104
 #define GPIO_GPCTR1_TYPE                                                  UInt32

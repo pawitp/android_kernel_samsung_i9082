@@ -31,6 +31,12 @@
 #define BCMPMU_PRINT_FLOW (1U << 2)
 #define BCMPMU_PRINT_DATA (1U << 3)
 
+#ifdef CONFIG_SMB358_CHARGER
+extern smb358_start_chg();
+extern smb358_stop_chg();
+extern void smb358_set_chg_current(int chg_current);
+extern void smb358_set_eoc(int eoc_value);
+#endif
 static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT;
 /* static int debug_mask = 0xFF; */
 
@@ -253,7 +259,11 @@ static int bcmpmu_set_icc_fc(struct bcmpmu *bcmpmu, int curr)
 	int ret;
 	struct bcmpmu_chrgr *pchrgr = bcmpmu->chrgrinfo;
 	pchrgr->chrgrcurr = curr;
+#ifdef CONFIG_SMB358_CHARGER
+	smb358_set_chg_current(450);
+#else
 	ret = set_icc_fc(bcmpmu, curr);
+#endif
 	return ret;
 }
 
@@ -311,7 +321,15 @@ static int bcmpmu_set_eoc(struct bcmpmu *bcmpmu, int curr)
 
 static int bcmpmu_chrgr_usb_en(struct bcmpmu *bcmpmu, int en)
 {
-	int ret;
+int ret;
+#if defined(CONFIG_SMB358_CHARGER)
+	if(en)
+		smb358_start_chg(0);
+	else
+		smb358_stop_chg();
+	pr_chrgr(FLOW, "%s, en=%d\n", __func__, en);
+#else
+	
 	struct bcmpmu_chrgr *pchrgr = bcmpmu->chrgrinfo;
 	if (pchrgr->disable_charge == 1)
 		return 0;
@@ -327,6 +345,7 @@ static int bcmpmu_chrgr_usb_en(struct bcmpmu *bcmpmu, int en)
 			bcmpmu->regmap[PMU_REG_CHRGR_USB_EN].mask,
 			bcmpmu->regmap[PMU_REG_CHRGR_USB_EN].mask);
 	pr_chrgr(FLOW, "%s, en=%d, ret=%d\n", __func__, en, ret);
+#endif
 	return ret;
 }
 
@@ -527,7 +546,6 @@ static void bcmpmu_chrgr_isr(enum bcmpmu_irq irq, void *data)
 	int ret;
 	struct bcmpmu_chrgr *pchrgr = (struct bcmpmu_chrgr *)data;
 	pr_chrgr(FLOW, "%s, interrupt %d\n", __func__, irq);
-
 	switch (irq) {
 	case PMU_IRQ_EOC:
 		if (pchrgr->support_hw_eoc)

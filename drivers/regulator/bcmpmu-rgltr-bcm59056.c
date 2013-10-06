@@ -449,11 +449,11 @@ struct bcmpmu_reg_info bcm59056_register_info[BCMPMU_REGULATOR_MAX] = {
 		.num_voltages = ARRAY_SIZE(bcm59056_ldo_v_table),
 		.mode_mask = 0xFF,
 		.ldo_or_sr = BCMPMU_LDO,
-                .reg_addr2 = PMU_REG_AUDLDOPMCTRL2,
+		.reg_addr2 = PMU_REG_AUDLDOPMCTRL2,
                 .reg_value = 0x1,
-                .reg_value2 = 0x11,
-                .off_value = 0x2,
-                .off_value2 = 0x22,
+		.reg_value2 = 0x11,
+                .off_value = 0x2, // roll back from 0xff
+                .off_value2 = 0x22, // roll back from 0xff
 
 	},
 	[BCMPMU_REGULATOR_MICLDO] = {
@@ -484,8 +484,8 @@ struct bcmpmu_reg_info bcm59056_register_info[BCMPMU_REGULATOR_MAX] = {
 		.mode_mask = 0xFF,
 		.ldo_or_sr = BCMPMU_LDO,
 		.reg_addr2 = PMU_REG_MMCLDO1PMCTRL2,
-		.reg_value = 0x01,
-		.reg_value2 = 0x01,
+		.reg_value = 0x02,
+		.reg_value2 = 0x02,
 		.off_value = 0xAA,
 		.off_value2 = 0xAA,
 	},
@@ -583,11 +583,19 @@ struct bcmpmu_reg_info bcm59056_register_info[BCMPMU_REGULATOR_MAX] = {
 		.mode_mask = 0xFF,
 		.ldo_or_sr = BCMPMU_SR,
 	},
+#ifndef CONFIG_MACH_CAPRI_TABLET
 	[BCMPMU_REGULATOR_HDMILDO] = {
 		.reg_addr = PMU_REG_HDMICTRL1,
 		.mode_mask = 0x01,
 		.ldo_or_sr = BCMPMU_HDMI,
 	},
+#else
+	[BCMPMU_REGULATOR_HDMILDO] = {
+		.reg_addr = PMU_REG_VIOPON1,
+		.mode_mask = 0x40,
+		.ldo_or_sr = BCMPMU_HDMI,
+	},
+#endif
 	[BCMPMU_REGULATOR_USBLDO] = {
 		.reg_addr = PMU_REG_USBLDOPMCTRL1,
 		.reg_addr_volt = PMU_REG_USBLDOCTRL,

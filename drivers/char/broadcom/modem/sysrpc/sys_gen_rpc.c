@@ -172,6 +172,41 @@ void SYS_AT_MTEST_Handler(UInt32 tid, UInt8 clientID, uchar_ptr_t p1,
 	RPC_SerializeReq(&msg);
 }
 
+void SYS_SimApi_ColdResetEvt(UInt32 tid, UInt8 clientID, UInt8 simId,
+	Boolean isMasterMode, UInt32 event)
+{
+	SYS_ReqRep_t req;
+	RPC_Msg_t msg;
+
+	memset(&req, 0, sizeof(SYS_ReqRep_t));
+
+	req.req_rep_u.SYS_SimApi_ColdResetEvt_Req.simId = simId;
+	req.req_rep_u.SYS_SimApi_ColdResetEvt_Req.isMasterMode = isMasterMode;
+	req.req_rep_u.SYS_SimApi_ColdResetEvt_Req.event = event;
+	req.respId = MSG_SYS_SIM_COLD_RESET_EVT_RSP;
+	msg.msgId = MSG_SYS_SIM_COLD_RESET_EVT_REQ;
+	msg.tid = tid;
+	msg.clientID = clientID;
+	msg.dataBuf = (void *)&req;
+	msg.dataLen = 0;
+	RPC_SerializeReq(&msg);
+}
+
+bool_t xdr_SYS_SimApi_ColdResetEvt_Req_t(void *xdrs,
+	struct SYS_SimApi_ColdResetEvt_Req_t *rsp)
+{
+	XDR_LOG(xdrs, "SYS_SimApi_ColdResetEvt_Req_t")
+
+	if (
+		_xdr_UInt8(xdrs, &rsp->simId, "simId") &&
+		_xdr_Boolean(xdrs, &rsp->isMasterMode, "isMasterMode") &&
+		xdr_UInt32(xdrs, &rsp->event) &&
+	1)
+		return TRUE;
+	else
+		return FALSE;
+}
+
 #if defined(FUSE_COMMS_PROCESSOR)
 
 void SYS_SimLockApi_GetStatus(UInt32 tid, UInt8 clientID, UInt8 simId,
@@ -397,6 +432,13 @@ Result_t SYS_GenCommsMsgHnd(RPC_Msg_t *pReqMsg, SYS_ReqRep_t *req)
 							  CAPI2_SYS_SoftResetSystem_Req.
 							  param);
 		break;
+
+	case MSG_SYS_SIM_COLD_RESET_EVT_REQ:
+		result = Handle_SYS_SimApi_ColdResetEvt(pReqMsg,
+			req->req_rep_u.SYS_SimApi_ColdResetEvt_Req.simId,
+			req->req_rep_u.SYS_SimApi_ColdResetEvt_Req.isMasterMode,
+			req->req_rep_u.SYS_SimApi_ColdResetEvt_Req.event);
+		break;
 #endif
 
 	default:
@@ -464,6 +506,10 @@ void SYS_GenGetPayloadInfo(void *dataBuf, MsgType_t msgType, void **ppBuf,
 			*ppBuf = (void *)&(pVal->val);
 			break;
 		}
+	case MSG_SYS_SIM_COLD_RESET_EVT_RSP:
+		*ppBuf = NULL;
+		break;
+
 	default:
 		xassert(0, msgType);
 		break;

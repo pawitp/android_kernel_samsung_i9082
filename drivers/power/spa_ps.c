@@ -276,7 +276,7 @@ static ssize_t ss_batt_ext_attrs_show(struct device *pdev, struct device_attribu
 {
 	ssize_t count=0;
 	int lp_charging=0;
-
+				
 	const ptrdiff_t off = attr-ss_batt_ext_attrs;
 
 	struct power_supply *ps;
@@ -287,7 +287,9 @@ static ssize_t ss_batt_ext_attrs_show(struct device *pdev, struct device_attribu
 	switch(off)
 	{
 		case SS_BATT_LP_CHARGING:
+
 			lp_charging = spa_ps_iter->state.lp_charging;
+
 			count+=scnprintf(buf+count, PAGE_SIZE-count, "%d\n", lp_charging);
 			break;
 

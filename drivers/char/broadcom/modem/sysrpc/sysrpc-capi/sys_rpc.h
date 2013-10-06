@@ -80,6 +80,8 @@ typedef struct tag_SYS_ReqRep_t {
 		SYS_SimApi_GetCurrLockedSimlockTypeEx_Rsp_t
 		    SYS_SimApi_GetCurrLockedSimlockTypeEx_Rsp;
 		CAPI2_SYS_SoftResetSystem_Req_t CAPI2_SYS_SoftResetSystem_Req;
+		struct SYS_SimApi_ColdResetEvt_Req_t
+			SYS_SimApi_ColdResetEvt_Req;
 #endif				//DEVELOPMENT_SYSRPC_UNION_DECLARE
 /*** _SYSRPC_CODE_GEN_END_ ***/
 

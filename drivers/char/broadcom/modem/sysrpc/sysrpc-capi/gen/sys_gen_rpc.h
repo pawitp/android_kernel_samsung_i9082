@@ -100,6 +100,12 @@ typedef struct {
 	UInt32 param;
 } CAPI2_SYS_SoftResetSystem_Req_t;
 
+struct SYS_SimApi_ColdResetEvt_Req_t {
+	UInt8  simId;
+	Boolean  isMasterMode;
+	UInt32  event;
+};
+
 //***************** < 2 > **********************
 
 bool_t xdr_CAPI2_CPPS_Control_Req_t(void *xdrs, CAPI2_CPPS_Control_Req_t * rsp);
@@ -138,6 +144,9 @@ bool_t xdr_SYS_SimApi_GetCurrLockedSimlockTypeEx_Rsp_t(void *xdrs,
 bool_t xdr_CAPI2_SYS_SoftResetSystem_Req_t(void *xdrs,
 					   CAPI2_SYS_SoftResetSystem_Req_t
 					   *rsp);
+bool_t xdr_SYS_SimApi_ColdResetEvt_Req_t(void *xdrs,
+	struct SYS_SimApi_ColdResetEvt_Req_t *rsp);
+
 
 //***************** < 3 > **********************
 
@@ -162,6 +171,8 @@ Result_t Handle_SYS_SIMLOCKApi_SetStatusEx(RPC_Msg_t *pReqMsg, UInt8 simId,
 Result_t Handle_SYS_SimApi_GetCurrLockedSimlockTypeEx(RPC_Msg_t *pReqMsg,
 						      UInt8 simId);
 Result_t Handle_CAPI2_SYS_SoftResetSystem(RPC_Msg_t *pReqMsg, UInt32 param);
+Result_t Handle_SYS_SimApi_ColdResetEvt(RPC_Msg_t *pReqMsg,
+	UInt8 simId, Boolean isMasterMode, UInt32 event);
 
 //***************** < 12 > **********************
 
@@ -278,6 +289,23 @@ void SYS_SimApi_GetCurrLockedSimlockTypeEx(UInt32 tid, UInt8 clientID,
 	@n Response to CP will be notified via ::MSG_SYS_SOFT_RESET_SYSTEM_RSP
 **/
 void CAPI2_SYS_SoftResetSystem(UInt32 tid, UInt8 clientID, UInt32 param);
+
+/***************************************************************************
+ **
+	Function response for the SYS_SimApi_ColdResetEvt
+	@param		tid (in) Unique exchange/transaction id which is
+				passed in the request
+	@param		clientID (in) Client ID
+	@param		simId(in) param of type UInt8
+	@param		isMasterMode(in) param of type Boolean
+	@param		event(in) param of type UInt32
+	@return		Not Applicable
+	@note
+	Payload: default_proc
+	@n Response to CP will be notified via ::MSG_SYS_SIM_COLD_RESET_EVT_RSP
+**/
+void SYS_SimApi_ColdResetEvt(UInt32 tid, UInt8 clientID,
+	UInt8 simId, Boolean isMasterMode, UInt32 event);
 
 //***************** < 16 > **********************
 

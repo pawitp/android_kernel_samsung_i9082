@@ -41,6 +41,8 @@
 #define MDNIE_SUSPEND 0
 #define MDNIE_RESUME 1
  
+#define LCD_DUALIZATION
+ 
 #if defined(CONFIG_MACH_CAPRI_SS_CRATER)
 #define LCD_LOW_TEMP_CONVERSION 0
 #else
@@ -68,6 +70,7 @@ struct class *mdnie_class;
 struct mdnie_info *g_mdnie;
  
 int cabc_status;
+int mdnie_value_setted = TUNNING_SCRNARIO_MAX;
 EXPORT_SYMBOL(cabc_status);
  
 #ifdef CONFIG_MACH_P4NOTE
@@ -93,9 +96,45 @@ extern int vc_display_bus_read(int unsigned display,
 			                      uint8_t *data,
 			                      size_t count);
  
+#ifdef LCD_DUALIZATION
+extern  int vc_display_get_name(int unsigned display,
+                                           uint8_t *data,
+                                           size_t count);   
+#endif         
+
 extern void backlight_update_CABC();
 
 int mdnie_status = MDNIE_RESUME;
+
+#ifdef LCD_DUALIZATION
+int lcd_panel_id = 0;
+
+static int get_lcd_panel_id(void)
+{
+
+     uint8_t data[32];
+     size_t count = 32;
+     int ret = 0;
+
+     printk("%s Read LCD_ID\n", __func__);
+
+     ret = vc_display_get_name(0, data, count);
+
+     printk("%s [%d]Got LCD_ID name:%s[%d]", __func__, ret, data, count);
+
+     if (!strcmp(data, "default")){
+        lcd_panel_id = LCD_PANEL_DEFAULT;
+        printk("DEFAULT LCD \n");
+     }else if(!strcmp(data, "dtc")){
+        lcd_panel_id = LCD_PANEL_DTC;
+        printk("DTC LCD \n");
+     }else{
+        lcd_panel_id = LCD_PANEL_DEFAULT;
+     }
+
+     return lcd_panel_id;
+}
+#endif
 
 int mdnie_send_sequence(struct mdnie_info *mdnie, const unsigned char *seq)
 {
@@ -129,11 +168,7 @@ int mdnie_send_sequence(struct mdnie_info *mdnie, const unsigned char *seq)
 {
    int ret = 0;
 
-   ret = vc_display_bus_write(0,0xB9,cabc_on00,3);
-   ret = vc_display_bus_write(0,0xC9,cabc_on01,2);
-   ret = vc_display_bus_write(0,0x51,cabc_on02,2);
-   ret = vc_display_bus_write(0,0x53,cabc_on03,2);
-   ret = vc_display_bus_write(0,0x55,cabc_ui,2);
+   ret = vc_display_bus_write(0,0x55,cabc_ui,1);
    
    mdelay(5);
 
@@ -144,11 +179,23 @@ static int ldi_cabc_off(void)
 {
    int ret = 0;
 
-   ret = vc_display_bus_write(0,0x55,cabc_off,2);
+   ret = vc_display_bus_write(0,0x55,cabc_off,1);
 
    mdelay(5);
 
    return ret;
+}
+
+void backlight_cabc_on(void)
+{
+   int ret;
+   ret =  ldi_cabc_on();
+}
+
+void backlight_cabc_off(void)
+{
+   int ret;
+   ret =  ldi_cabc_off();
 }
 
 void set_cabc_value(struct mdnie_info *mdnie, u8 force)
@@ -173,61 +220,145 @@ void set_mdnie_value(struct mdnie_info *mdnie, u8 force)
  		return;
  	}
  
-
-#if 1
      printk("%s mdnie->mode = %d  mdnie->scenario = %d, mdnie->negative = %d \n",__func__, mdnie->mode ,mdnie->scenario, mdnie->negative);
      mutex_lock(&mdnie->lock);
 
       if(NEGATIVE_ON == mdnie->negative){
+
+#ifdef LCD_DUALIZATION
+            mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][NEGATIVE_T]); 
+#else
           mdnie_send_sequence(mdnie, negative_tuning); 
+#endif
+            mutex_unlock(&mdnie->lock);
+            return;
+      }
+
+#ifdef LCD_DUALIZATION
+    /* + for DTC LCD */
+    if(VIDEO_WARM_MODE == mdnie->scenario){
+
+        if (VIDEO_WARM_T == mdnie_value_setted && OUTDOOR_OFF == mdnie->outdoor){
           mutex_unlock(&mdnie->lock);
           return;
       }
       
+        if (VIDEO_WARM_OUTDOOR_T == mdnie_value_setted && OUTDOOR_ON == mdnie->outdoor){
+            mutex_unlock(&mdnie->lock);
+            return;
+        }
+    }
+
+    if(VIDEO_COLD_MODE == mdnie->scenario){
+
+        if (VIDEO_COLD_T == mdnie_value_setted && OUTDOOR_OFF == mdnie->outdoor){
+            mutex_unlock(&mdnie->lock);
+            return;
+        }
+
+        if (VIDEO_COLD_OUTDOOR_T == mdnie_value_setted && OUTDOOR_ON == mdnie->outdoor){
+            mutex_unlock(&mdnie->lock);
+            return;
+        }
+
+    }
+    /* - for DTC LCD */
+#endif
+      
      switch (mdnie->scenario) {
 
 	  case UI_MODE:
+#ifdef LCD_DUALIZATION
+             mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][UI_T]); 
+             mdnie_value_setted = UI_T;
+#else
              mdnie_send_sequence(mdnie, ui_tuning); 
+#endif
 		break;
 
 	  case VIDEO_MODE:
 
-             if(OUTDOOR_ON == mdnie->outdoor)
+             if(OUTDOOR_ON == mdnie->outdoor){
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_OUTDOOR_T]); 
+                    mdnie_value_setted = VIDEO_OUTDOOR_T;
+#else
                   mdnie_send_sequence(mdnie, video_outdoor_tuning); 
-             else
+#endif
+             }else{
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_T]); 
+                    mdnie_value_setted = VIDEO_T;
+#else
                   mdnie_send_sequence(mdnie, video_tuning); 
-
+#endif
+             }
 		break;
 
         case VIDEO_WARM_MODE:
 
-              if(OUTDOOR_ON == mdnie->outdoor)
+              if(OUTDOOR_ON == mdnie->outdoor){
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_WARM_OUTDOOR_T]); /* TEST for DTC Video problem VIDEO_WARM_OUTDOOR_T*/
+                    mdnie_value_setted = VIDEO_WARM_OUTDOOR_T;
+#else
                   mdnie_send_sequence(mdnie, video_warm_outdoor_tuning); 
-             else
+#endif
+             }else{
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_WARM_T]); /* TEST for DTC Video problem VIDEO_WARM_T*/
+                    mdnie_value_setted = VIDEO_WARM_T;
+#else
                   mdnie_send_sequence(mdnie, video_warm_tuning); 
-
+#endif
+             }
 		break;
 
         case VIDEO_COLD_MODE:
 
-             if(OUTDOOR_ON == mdnie->outdoor)
+             if(OUTDOOR_ON == mdnie->outdoor){
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_COLD_OUTDOOR_T]); /* TEST for DTC Video problem VIDEO_COLD_OUTDOOR_T*/
+                    mdnie_value_setted = VIDEO_COLD_OUTDOOR_T;
+#else
                   mdnie_send_sequence(mdnie, video_cold_outdoor_tuning); 
-             else
+#endif
+             }else{
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][VIDEO_COLD_T]); /* TEST for DTC Video problem VIDEO_COLD_T*/
+                    mdnie_value_setted = VIDEO_COLD_T;
+#else
                   mdnie_send_sequence(mdnie, video_cold_tuning); 
-
+#endif
+             }
 		break;
 
 	  case CAMERA_MODE:
 
-             if(OUTDOOR_ON == mdnie->outdoor)
+             if(OUTDOOR_ON == mdnie->outdoor){
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][CAMERA_OUTDOOR_T]); 
+                    mdnie_value_setted = CAMERA_OUTDOOR_T;
+#else
                  mdnie_send_sequence(mdnie, camera_outdoor_tuning); 
-             else
+#endif
+             }else{
+#ifdef LCD_DUALIZATION
+                    mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][CAMERA_T]); 
+                    mdnie_value_setted = CAMERA_T;
+#else
                  mdnie_send_sequence(mdnie, camera_tuning); 
-
+#endif
+            }
 		break;
 
       	  case GALLERY_MODE:
+#ifdef LCD_DUALIZATION
+                mdnie_send_sequence(mdnie, mdnie_tunning_values[lcd_panel_id][GALLERY_T]); 
+                mdnie_value_setted = GALLERY_T;
+#else
              mdnie_send_sequence(mdnie, gallery_tuning); 
+#endif
 		break;
 
 	  default:
@@ -236,74 +367,6 @@ void set_mdnie_value(struct mdnie_info *mdnie, u8 force)
      }
      
 
-
-
-#else
- 
- 	if (mdnie->scenario == VIDEO_WARM_MODE)
- 		mdnie->tone = TONE_WARM;
- 	else if (mdnie->scenario == VIDEO_COLD_MODE)
- 		mdnie->tone = TONE_COLD;
- 	else
- 		mdnie->tone = TONE_NORMAL;
- 
- 	if (mdnie->tunning) {
- 		dev_info(mdnie->dev, "mdnie tunning mode is enabled\n");
- 		return;
- 	}
- 
- 	mutex_lock(&mdnie->lock);
- 
- 	if (mdnie->negative == NEGATIVE_ON) {
- 		dev_info(mdnie->dev, "NEGATIVE_ON\n");
-
-             printk("mdnie testNegative\n");
-             mdnie_send_sequence(mdnie, camera_table[mdnie->outdoor].seq);  /* SKC for test */
- 		//mdnie_send_sequence(mdnie, negative_table[mdnie->cabc].seq);
- 		goto exit;
- 	}
- 
- #if defined(CONFIG_TDMB) || defined(CONFIG_TARGET_LOCALE_NTT)
- 	if (SCENARIO_IS_DMB(mdnie->scenario)) {
- 		idx = mdnie->scenario - DMB_NORMAL_MODE;
- 		mdnie_send_sequence(mdnie, tune_dmb[mdnie->mode].seq);
- 		dev_info(mdnie->dev, "mode=%d, scenario=%d, outdoor=%d, cabc=%d, %s\n",
- 			mdnie->mode, mdnie->scenario, mdnie->outdoor,
- 			mdnie->cabc, tune_dmb[mdnie->mode].name);
- 		goto etc;
- 	}
- #endif
- 
- 	if (SCENARIO_IS_COLOR(mdnie->scenario)) {
- 		idx = mdnie->scenario - COLOR_TONE_1;
- 		//mdnie_send_sequence(mdnie, color_tone_table[idx].seq);
- 		//dev_info(mdnie->dev, "mode=%d, scenario=%d, outdoor=%d, cabc=%d, %s\n",
- 		//	mdnie->mode, mdnie->scenario, mdnie->outdoor, mdnie->cabc,
- 		//	color_tone_table[idx].name);
- 
- 		goto exit;
- 	} else if (mdnie->scenario == CAMERA_MODE) {
- 		mdnie_send_sequence(mdnie, camera_table[mdnie->outdoor].seq);
- 		dev_info(mdnie->dev, "%s\n", camera_table[mdnie->outdoor].name);
- 
- 		goto exit;
- 	} else {
- 		mdnie_send_sequence(mdnie, tunning_table[mdnie->cabc][mdnie->mode][mdnie->scenario].seq);
- 		dev_info(mdnie->dev, "mode=%d, scenario=%d, outdoor=%d, cabc=%d, %s\n",
- 			mdnie->mode, mdnie->scenario, mdnie->outdoor, mdnie->cabc,
- 			tunning_table[mdnie->cabc][mdnie->mode][mdnie->scenario].name);
- 	}
- 
- #if defined(CONFIG_TDMB) || defined(CONFIG_TARGET_LOCALE_NTT)
- etc:
- #endif
- 	if (!IS_ERR_OR_NULL(etc_table[mdnie->cabc][mdnie->outdoor][mdnie->tone].seq)) {
- 		mdnie_send_sequence(mdnie, etc_table[mdnie->cabc][mdnie->outdoor][mdnie->tone].seq);
- 		dev_info(mdnie->dev, "%s\n", etc_table[mdnie->cabc][mdnie->outdoor][mdnie->tone].name);
- 	}
- 
-#endif /* SKC */
- 
  exit:
  	mutex_unlock(&mdnie->lock);
  
@@ -872,6 +935,8 @@ void mdnie_early_suspend(struct early_suspend *h)
 #endif
  
       mdnie_status = MDNIE_SUSPEND;
+      mdnie_value_setted = TUNNING_SCRNARIO_MAX;
+
       printk("[mdnie] %s \n", __func__);
  
  	return ;
@@ -933,6 +998,7 @@ void mdnie_late_resume(struct early_suspend *h)
  	}
  	}
 
+
       //if(NEGATIVE_ON == mdnie->negative)
          mdelay(110);
 
@@ -943,11 +1009,19 @@ void mdnie_late_resume(struct early_suspend *h)
         mdelay(30);
  
 #if LCD_LOW_TEMP_CONVERSION
-      if( -50 < get_temp_from_ps_battery())
+        if(lcd_panel_id == LCD_PANEL_DTC){
+           if( -50 < get_temp_from_ps_battery()){
          conversion = 0x02;
-      else
+            }else{
          conversion = 0x01;
-
+            }
+        }else{
+            if( -50 < get_temp_from_ps_battery()){
+                conversion = 0x02;
+            }else{
+                conversion = 0x01;
+            }
+         }
       vc_display_bus_write(0,0xB4,&conversion,1);
 #endif
 
@@ -1076,6 +1150,10 @@ static int mdnie_probe(struct platform_device *pdev)
  
  	g_mdnie = mdnie;
  
+#ifdef LCD_DUALIZATION 
+      get_lcd_panel_id();
+#endif
+
  	set_mdnie_value(mdnie, 0);
  
  	dev_info(mdnie->dev, "registered successfully\n");

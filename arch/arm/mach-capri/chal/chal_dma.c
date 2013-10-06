@@ -700,20 +700,32 @@ void chal_dma_clear_int_status(CHAL_CHANNEL_HANDLE handle)
  * 
  * ******************************************************************************
  */
-void chal_dma_shutdown_channel(CHAL_CHANNEL_HANDLE handle)
+CHAL_DMA_STATUS_t chal_dma_shutdown_channel(CHAL_CHANNEL_HANDLE handle)
 {
 	uint32_t val;
 	DMA_CHAN_INFO_t *pChanInfo = (DMA_CHAN_INFO_t *) handle;
 	DMA_DEV_t *pDmaDev = (DMA_DEV_t *) pChanInfo->dmaHandle;
 	CHAL_DMA_CHANNEL_t channel = pChanInfo->channel;
 
-	val = dmacInstEncode[DMAC_INST_DMAKILL].inst_enc;
-	val <<= 16;
-	val |= (channel << 8) | 1;
-	CHAL_REG_WRITE32(pDmaDev->baseAddr + NON_DMAC_DBGINST0_OFFSET, val);
+	/* Try to aquire DMA lock */
+	if (chal_dmux_protect(pDmaDev->config->dmuxHandle) ==
+	    CHAL_DMUX_STATUS_SUCCESS) {
+		val = dmacInstEncode[DMAC_INST_DMAKILL].inst_enc;
+		val <<= 16;
+		val |= (channel << 8) | 1;
+		CHAL_REG_WRITE32(pDmaDev->baseAddr +
+				 NON_DMAC_DBGINST0_OFFSET, val);
 
-	val = 0;
-	CHAL_REG_WRITE32(pDmaDev->baseAddr + NON_DMAC_DBGCMD_OFFSET, val);
+		val = 0;
+		CHAL_REG_WRITE32(pDmaDev->baseAddr +
+				 NON_DMAC_DBGCMD_OFFSET, val);
+
+		chal_dmux_unprotect(pDmaDev->config->dmuxHandle);
+	} else {
+		return CHAL_DMA_STATUS_FAILURE;
+	}
+
+	return CHAL_DMA_STATUS_SUCCESS;
 }
 
 /*
@@ -2224,9 +2236,6 @@ void chal_dma_dump_register(CHAL_CHANNEL_HANDLE handle,
 	uint32_t baseAddr = pDmaDev->baseAddr;
 	uint8_t *startCode, *endCode, *phyAddr;
 	uint32_t count;
-
-	if (!pChanInfo->chanPhysicalAddr)
-		return;
 
 	(*fpPrint) ("\nDebugging for channel # %d\n", pChanInfo->channel);
 

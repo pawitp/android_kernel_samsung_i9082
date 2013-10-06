@@ -20,14 +20,15 @@
 *
 *****************************************************************************/
 
-#if !defined( CSX_AF_H )
+#if !defined(CSX_AF_H)
 #define CSX_AF_H
 
 /* ---- Constants and Types ---------------------------------------------- */
 
 typedef int CSX_AF_HDL;
 
-#define CSX_AF_IO_POINT_NUM_MAX      80	/* Maximum number of CSX I/O points supported */
+#define CSX_AF_IO_POINT_NUM_MAX      80
+	/* Maximum number of CSX I/O points supported */
 
 typedef struct csx_af_info {
 	AF_SERVER_POINT_ID af_server_point;
@@ -44,9 +45,9 @@ typedef struct csx_af_point {
 /* ---- Variable Externs ------------------------------------------------- */
 /* ---- Function Prototypes ---------------------------------------------- */
 
-#if !defined( SWIG ) && !defined( MAKEDEFS )
+#if !defined(SWIG) && !defined(MAKEDEFS)
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 int csx_af_add_point(CSX_IO_POINT_INFO *csx_info,
 		     CSX_AF_INFO *csx_af_info, CSX_IO_HANDLE *csx_handle);
 

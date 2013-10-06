@@ -26,7 +26,9 @@ enum android_alarm_type {
 	ANDROID_ALARM_ELAPSED_REALTIME_WAKEUP,
 	ANDROID_ALARM_ELAPSED_REALTIME,
 	ANDROID_ALARM_SYSTEMTIME,
-
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+	ANDROID_ALARM_RTC_POWERUP,
+#endif
 	ANDROID_ALARM_TYPE_COUNT,
 
 	/* return code bit numbers */
@@ -74,6 +76,11 @@ ktime_t alarm_get_elapsed_realtime(void);
 
 /* set rtc while preserving elapsed realtime */
 int alarm_set_rtc(const struct timespec ts);
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+int alarm_powerup_cancel(void);
+int alarm_powerup_set_alarm(struct timespec new_time);
+#endif
+
 #if defined(CONFIG_RTC_CHN_ALARM_BOOT)
 int alarm_set_alarm(char *alarmboot_data);
 #endif

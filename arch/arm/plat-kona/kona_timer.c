@@ -121,15 +121,15 @@ static struct kona_timer_module timer_module_list[NUM_OF_TIMER_MODULES] = {
 	{.pkt = &aon_hub_timer[0], .name = "aon-timer",
 	 .cfg_state = NOT_CONFIGURED, .rate = 0,
 	 .num_of_timers = NUM_OF_CHANNELS, .reg_base = IOMEM(KONA_TMR_HUB_VA),
-	 .clk_name = "hub_timer_clk",
+	 .clk_name = HUB_TIMER_PERI_CLK_NAME_STR,
 #ifdef CONFIG_KONA_TIMER_DEBUG
-	 .max_repeat_count = 0
+	 .max_repeat_count = 0,
 #endif
 	},
 	{.pkt = &periph_timer[0], .name = "slave-timer",
 	 .cfg_state = NOT_CONFIGURED, .rate = 0,
 	 .num_of_timers = NUM_OF_CHANNELS, .reg_base = IOMEM(KONA_SYSTMR_VA),
-	 .clk_name = "timers_clk",
+	 .clk_name = TIMERS_PERI_CLK_NAME_STR,
 #ifdef CONFIG_KONA_TIMER_DEBUG
 	 .max_repeat_count = 0
 #endif
@@ -603,6 +603,7 @@ int kona_timer_set_match_start(struct kona_timer *kt, unsigned long load)
 	reg |= (1 << (kt->ch_num + KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT));
 	writel_dbg(reg,	ktm->reg_base + KONA_GPTIMER_STCS_OFFSET, cpu,
 		jiffies);
+
 #ifdef CONFIG_GP_TIMER_COMPARATOR_LOAD_DELAY
 	/* __wait_for_compare_enable_sync(kt); */
 #endif
@@ -635,6 +636,66 @@ int kona_timer_stop(struct kona_timer *kt)
 	return 0;
 }
 EXPORT_SYMBOL(kona_timer_stop);
+
+int kona_timer_suspend(struct kona_timer *kt)
+{
+	struct kona_timer_module *ktm;
+	struct clk *clk;
+	unsigned long flags;
+
+	if (NULL == kt)
+		return -EINVAL;
+
+	ktm = kt->ktm;
+	/* don't ever stop the clock for the aon-timer */
+	if (strcmp(ktm->name, "aon-timer") == 0)
+		return 0;
+
+	clk = clk_get(NULL, ktm->clk_name);
+	if (IS_ERR(clk)) {
+		pr_err("timer_suspend: clk_get of %s failed\n", ktm->clk_name);
+		/* still allow suspend */
+		return 0;
+	}
+
+	spin_lock_irqsave(&ktm->lock, flags);
+	clk_disable(clk);
+	spin_unlock_irqrestore(&ktm->lock, flags);
+
+	return 0;
+}
+
+int kona_timer_resume(struct kona_timer *kt)
+{
+	struct kona_timer_module *ktm;
+	struct clk *clk;
+	unsigned long flags;
+	int ret;
+
+	if (NULL == kt)
+		return -EINVAL;
+
+	ktm = kt->ktm;
+	/* don't ever touch the clock for the aon-timer */
+	if (strcmp(ktm->name, "aon-timer") == 0)
+		return 0;
+
+	clk = clk_get(NULL, ktm->clk_name);
+	if (IS_ERR(clk)) {
+		pr_err("timer_resume: clk_get of %s failed\n", ktm->clk_name);
+		/* still allow resume */
+		return 0;
+	}
+
+	spin_lock_irqsave(&ktm->lock, flags);
+	ret = clk_enable(clk);
+	if (ret < 0)
+		pr_err("timer_resume: clk_enable of %s failed\n",
+			ktm->clk_name);
+	spin_unlock_irqrestore(&ktm->lock, flags);
+
+	return 0;
+}
 
 /*
  * kona_timer_free - Release the timer, after this call the timer can be used
@@ -679,7 +740,7 @@ int kona_timer_free(struct kona_timer *kt)
 	 */
 	if (i == NUM_OF_CHANNELS) {
 #ifdef CONFIG_HAVE_CLK
-		if (IS_ERR_OR_NULL(clk))
+		if (IS_ERR(clk))
 			pr_err("timer_free: clk_get failed, so clock manager"
 			       " is not up use local calls\r\n");
 		else
@@ -853,23 +914,27 @@ static struct kona_timer_module *__get_timer_module(char *name)
  */
 static int __config_slave_timer_have_clock(unsigned int rt)
 {
+	int ret;
 	struct clk *clk;
 
-	clk = clk_get(NULL, "timers_apb_clk");
-	if (IS_ERR_OR_NULL(clk)) {
+	clk = clk_get(NULL, TIMERS_APB_BUS_CLK_NAME_STR);
+	if (IS_ERR(clk)) {
 		pr_err("clk_get failed, so clock manager is not up"
 		       " use local calls\r\n");
-		return -1;
+		return PTR_ERR(clk);
 	}
 	clk_enable(clk);
 
-	clk = clk_get(NULL, "timers_clk");
-	if (IS_ERR_OR_NULL(clk)) {
+	clk = clk_get(NULL, TIMERS_PERI_CLK_NAME_STR);
+	if (IS_ERR(clk)) {
 		pr_err("clk_get failed, so clock manager is not up"
 		       " use local calls\r\n");
-		return -1;
+		return PTR_ERR(clk);
 	}
-	clk_set_rate(clk, rt);
+	ret = clk_set_rate(clk, rt);
+	if (ret < 0)
+		printk(KERN_ERR "failed to set slave timer to %u\n", rt);
+
 	clk_enable(clk);
 	return 0;
 }
@@ -1075,19 +1140,19 @@ static int __config_aon_hub_timer_have_clock(unsigned int rt)
 {
 	struct clk *clk;
 
-	clk = clk_get(NULL, "hub_timer_apb_clk");
-	if (IS_ERR_OR_NULL(clk)) {
+	clk = clk_get(NULL, HUB_TIMER_APB_BUS_CLK_NAME_STR);
+	if (IS_ERR(clk)) {
 		pr_err("clk_get failed, so clock manager is not up use"
 		       " local calls\r\n");
-		return -1;
+		return PTR_ERR(clk);
 	}
 	clk_enable(clk);
 
-	clk = clk_get(NULL, "hub_timer_clk");
-	if (IS_ERR_OR_NULL(clk)) {
+	clk = clk_get(NULL, HUB_TIMER_PERI_CLK_NAME_STR);
+	if (IS_ERR(clk)) {
 		pr_err("clk_get failed, so clock manager is not up use"
 		       " local calls\r\n");
-		return -1;
+		return PTR_ERR(clk);
 	}
 	clk_set_rate(clk, rt);
 	clk_enable(clk);
@@ -1209,13 +1274,20 @@ static inline void __disable_channel(struct kona_timer *kt)
 static inline unsigned long __get_counter(struct kona_timer_module *ktm)
 {
 #define KONA_MAX_REPEAT_TIMES	100
-	unsigned long lsw;
+#define KONA_MAX_COUNTER_DIFF   1
+	unsigned long first_lsw, second_lsw;
 	int i = 0;
 
 	for (i = 0; i < KONA_MAX_REPEAT_TIMES; i++) {
-		lsw = readl(ktm->reg_base +
-			KONA_GPTIMER_STCLO_OFFSET);
-		if (lsw == readl(ktm->reg_base + KONA_GPTIMER_STCLO_OFFSET))
+		/*
+		 * Double read here in case we get a garbage value
+		 * occasionally (HW bug with Kona timer)
+		 *
+		 * Allowing max one tick of difference on the two reads
+		 */
+		first_lsw = readl(ktm->reg_base + KONA_GPTIMER_STCLO_OFFSET);
+		second_lsw = readl(ktm->reg_base + KONA_GPTIMER_STCLO_OFFSET);
+		if (second_lsw - first_lsw <= KONA_MAX_COUNTER_DIFF)
 			break;
 	}
 
@@ -1227,7 +1299,7 @@ static inline unsigned long __get_counter(struct kona_timer_module *ktm)
 	if (i > ktm->max_repeat_count)
 		ktm->max_repeat_count = i;
 #endif
-	return lsw;
+	return second_lsw;
 }
 
 static inline int __is_channel_enabled(struct kona_timer_module *ktm,
@@ -1393,15 +1465,16 @@ static irqreturn_t kona_timer_isr(int irq, void *dev_id)
 		     (kt->ch_num + KONA_GPTIMER_STCS_COMPARE_ENABLE_SHIFT));
 		writel_dbg(reg, ktm->reg_base + KONA_GPTIMER_STCS_OFFSET, cpu,
 				jiffies);
-
 #ifdef CONFIG_GP_TIMER_COMPARATOR_LOAD_DELAY
 		__wait_for_compare_enable_sync(kt);
 #endif
 	} else {
 #ifdef CONFIG_GP_TIMER_COMPARATOR_LOAD_DELAY
 		/* if already disabled, do nothing */
-		if (!__wait_for_compare_enable_sync(kt))
-			return;
+		if (!__wait_for_compare_enable_sync(kt)) {
+			spin_unlock_irqrestore(&ktm->lock, flags);
+			goto ret;
+		}
 #endif
 		/* disable timer, but don't need enable sync in the end */
 		reg = readl(ktm->reg_base + KONA_GPTIMER_STCS_OFFSET);

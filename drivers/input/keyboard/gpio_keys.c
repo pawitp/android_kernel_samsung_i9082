@@ -368,18 +368,19 @@ static void gpio_keys_report_event(struct gpio_button_data *bdata)
 		if (state)
 			input_event(input, type, button->code, button->value);
 	} else {
-		if ( state && button->wakeup == 1 && button->suspend_resume_state == 2)
-		{	
-			printk("\n Debug: gpio_keys_report_event state =1, reset flag \n");
+		if ( state && button->wakeup == 1 && button->suspend_resume_state == 2)	{	
+			printk("\n gpio_keys_report_event state =1, reset flag \n");
 			button->suspend_resume_state = 0;
 		}
 		else if (state == 0 && button->wakeup == 1 && button->suspend_resume_state == 2) {
              		input_event(input, type, button->code, 1);
 			input_sync(input);
-			printk("\n Debug: gpio_keys_report_event state =0, reset flag \n");
+			printk("\n gpio_keys_report_event state =0, reset flag \n");
 			button->suspend_resume_state = 0;	
 		}	
                 input_event(input, type, button->code, !!state);
+
+		printk("[GPIO_KEY] code=%d, key state=%d\n",button->code, !!state);
 
 		keyreadstatus = !!state;
 	}

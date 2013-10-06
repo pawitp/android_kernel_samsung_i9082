@@ -195,7 +195,7 @@ Client RPC handle
 		This callback is registered via RPC_SYS_RegisterClient
 		for RPC commands.
 **/
-	typedef void (RPC_CPResetCallbackFunc_t) (RPC_CPResetEvent_t event,
+typedef void (RPC_NotificationFunc_t) (struct RpcNotificationEvent_t event,
 						  UInt8 clientID);
 
 /**
@@ -206,7 +206,7 @@ RPC Init params
 		RPC_ResponseCallbackFunc_t *respCb;	///< Response callback
 		RPC_AckCallbackFunc_t *ackCb;	///< Ack calback
 		RPC_FlowControlCallbackFunc_t *flowCb;	///< Flow control event callback
-		RPC_CPResetCallbackFunc_t *cpResetCb; /**< CP reset
+		RPC_NotificationFunc_t *rpcNtfFn; /**< CP reset
 						control callback */
 		RPC_InterfaceType_t iType;	///< Interface type
 		RPC_XdrInfo_t *xdrtbl;	///< Pointer XDR map table

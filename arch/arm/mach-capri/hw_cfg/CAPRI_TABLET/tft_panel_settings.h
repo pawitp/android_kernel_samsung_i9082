@@ -17,11 +17,11 @@
 
 #define TFT_PANEL_SETTINGS \
 { \
-	.gpio_lcd_pwr_en     = 4, 	/* LCD_PWR_EN */ \
-	.gpio_lcd_reset      = 5, 	/* LCD_RST_B */ \
-	.gpio_bl_en          = 7, 	/* LCD_BL_EN */ \
-	.gpio_bl_pwr_en      = 100, 	/* LCD_BL_BST_EN */ \
-	.gpio_bl_pwm         = 6, 	/* LCD_BL_PWM */ \
+	.gpio_lcd_pwr_en     = 4,	/* LCD_PWR_EN */ \
+	.gpio_lcd_reset      = 5,	/* LCD_RST_B */ \
+	.gpio_bl_en          = -1,	/* LCD_BL_EN */ \
+	.gpio_bl_pwr_en      = 100,	/* LCD_BL_BST_EN */ \
+	.gpio_bl_pwm         = 6,	/* LCD_BL_PWM */ \
 }
 
 #endif /* TFT_PANEL_H */

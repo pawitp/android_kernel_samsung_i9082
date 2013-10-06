@@ -22,6 +22,12 @@
 #define VC_FB_MAX_MSG_LEN  (sizeof(VC_FB_MSG_UNION_T) + \
 	sizeof(VC_FB_MSG_HDR_T))
 
+/* Allocation type preference */
+#define VC_FB_ALLOC_INTERNAL_HEAP       (1<<0)
+#define VC_FB_ALLOC_RELOC_HEAP          (1<<1)
+#define VC_FB_ALLOC_ALLOW_FALLBACK      (1<<2)
+#define VC_FB_ALLOC_WISH_GRANTED        (1<<3)
+
 /* List of screens that are currently supported */
 typedef enum {
 	VC_FB_SCRN_LCD = 0,
@@ -88,6 +94,8 @@ typedef struct {
 	/* 0 = (default) pads unaligned pitch.
 	 * 1 = no pad added. */
 	uint32_t nopad;
+	/* Prefered heap allocation policy. */
+	uint32_t alloc;
 
 } VC_FB_ALLOC_T;
 
@@ -159,20 +167,20 @@ typedef struct {
 
 } VC_FB_CFG_RESULT_T;
 
-// Request to read screen in a framebuffer (HOST->VC)
+/* Request to read screen in a framebuffer (HOST->VC)*/
 typedef struct {
-	uint32_t res_handle;	// Resource handle (returned from alloc)
-	uint32_t size;		// frame size 
+	uint32_t res_handle;	/* Resource handle (returned from alloc) */
+	uint32_t size;		/* frame size  */
 
 } VC_FB_READ_T;
 
-// Generic result for a request (VC->HOST)
+/* Generic result for a request (VC->HOST)*/
 typedef struct {
-	int32_t success;	// Success value
+	int32_t success;	/* Success value */
 
 } VC_FB_RESULT_T;
 
-// Union of ALL messages
+/* Union of ALL messages */
 typedef union {
 	VC_FB_GET_SCRN_INFO_T get_scrn_info;
 	VC_FB_SCRN_INFO_T scrn_info;

@@ -21,13 +21,23 @@
 #include <linux/string.h>
 #include <linux/broadcom/vc_dt.h>
 
-#define VC_DT_PMU_LIST_LEN 63
+#define VC_DT_PMU_LIST_LEN  63
+
+#define VC_DT_FB_WIDTH_DEF  540
+#define VC_DT_FB_HEIGHT_DEF 960
+#define VC_DT_FB_FRAME_DEF  2
 
 struct vc_dt_data {
 	int valid;
+	/* vc image parameter. */
 	uint32_t  base;
 	uint32_t  load;
 	uint32_t  size;
+	/* vc framebuffer parameters. */
+	uint32_t  fb_width;
+	uint32_t  fb_height;
+	uint32_t  fb_frames;
+	/* vc controlled pmu ldo's parameters. */
 	char      pmu_list[VC_DT_PMU_LIST_LEN + 1];
 	/* anticipated maximum bulk transfer size in bytes. */
 	int       vchiq_bulk_xfer_size;
@@ -80,6 +90,25 @@ int __init early_init_dt_scan_vc(unsigned long node, const char *uname,
 			vc_dt_data.pmu_list);
 	}
 
+	vc_dt_data.fb_width = VC_DT_FB_WIDTH_DEF;
+	vc_dt_data.fb_height = VC_DT_FB_HEIGHT_DEF;
+	vc_dt_data.fb_frames = VC_DT_FB_FRAME_DEF;
+	prop = of_get_flat_dt_prop(node, "fb-width", &size);
+	if (prop != NULL) {
+		uprop = (uint32_t *)prop;
+		vc_dt_data.fb_width = be32_to_cpu(uprop[0]);
+	}
+	prop = of_get_flat_dt_prop(node, "fb-height", &size);
+	if (prop != NULL) {
+		uprop = (uint32_t *)prop;
+		vc_dt_data.fb_height = be32_to_cpu(uprop[0]);
+	}
+	prop = of_get_flat_dt_prop(node, "fb-frames", &size);
+	if (prop != NULL) {
+		uprop = (uint32_t *)prop;
+		vc_dt_data.fb_frames = be32_to_cpu(uprop[0]);
+	}
+
 	prop = of_get_flat_dt_prop(node, "vchiq-bulk-xfer-size", &size);
 	if (prop == NULL) {
 		vc_dt_data.vchiq_bulk_xfer_size = 0;
@@ -120,6 +149,22 @@ const char *vc_dt_get_pmu_config(void)
 	return vc_dt_data.pmu_list;
 }
 EXPORT_SYMBOL_GPL(vc_dt_get_pmu_config);
+
+int vc_dt_get_fb_config(uint32_t *width, uint32_t *height, uint32_t *frame)
+{
+	if (!vc_dt_data.valid)
+		return -EINVAL;
+
+	if ((width == NULL) || (height == NULL) || (frame == NULL))
+		return -EINVAL;
+
+	*width = vc_dt_data.fb_width;
+	*height = vc_dt_data.fb_height;
+	*frame = vc_dt_data.fb_frames;
+
+	return 0;
+}
+EXPORT_SYMBOL_GPL(vc_dt_get_fb_config);
 
 int vc_dt_get_vchiq_bulk_xfer_size(void)
 {

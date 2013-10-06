@@ -1,13 +1,15 @@
-//*********************************************************************
-//
-// (c)1999-2011 Broadcom Corporation
-//
-// Unless you and Broadcom execute a separate written software license agreement governing use of this software,
-// this software is licensed to you under the terms of the GNU General Public License version 2,
-// available at http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
-//
-//*********************************************************************
-/**
+/*********************************************************************
+*
+* (c)1999-2011 Broadcom Corporation
+*
+* Unless you and Broadcom execute a separate written software license
+* agreement governing use of this software,
+* this software is licensed to you under the terms of the GNU General
+* Public License version 2,
+* available at http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
+*
+*********************************************************************
+**
 *
 *   @file   tones_def.h
 *
@@ -35,7 +37,7 @@ extern "C" {
  users of this enum could be CAPI, modem, csl driver, peripheral driver.
 **/
 	typedef enum {
-// DTMF Tones
+/* DTMF Tones*/
 		SPEAKERTONE_ZERO = 0,
 		SPEAKERTONE_ONE,
 		SPEAKERTONE_TWO,
@@ -49,7 +51,7 @@ extern "C" {
 		SPEAKERTONE_POUND,
 		SPEAKERTONE_STAR,
 
-// Supervisory Tones
+/* Supervisory Tones*/
 		SPEAKERTONE_DIALING,
 		SPEAKERTONE_BUSY,
 		SPEAKERTONE_RINGING,
@@ -64,7 +66,7 @@ extern "C" {
 	tone types
 **/
 	typedef enum {
-// DTMF Tones
+/* DTMF Tones*/
 		AUDIO_TONE_ZERO = 0,
 		AUDIO_TONE_ONE,
 		AUDIO_TONE_TWO,
@@ -78,7 +80,7 @@ extern "C" {
 		AUDIO_TONE_POUND,
 		AUDIO_TONE_STAR,
 
-// Supervisory Tones
+/* Supervisory Tones*/
 		AUDIO_TONE_DIALING,
 		AUDIO_TONE_BUSY,
 		AUDIO_TONE_RINGING,
@@ -89,8 +91,8 @@ extern "C" {
 		AUDIO_TONE_ERROR
 	} AUDIO_TONE_ID_t;
 
-//????
-//! Audio tone type.
+/*????*/
+/*! Audio tone type.*/
 	typedef enum {
 		TONE_TYPE_DTMF = 2,
 		TONE_TYPE_GENERIC,
@@ -100,4 +102,4 @@ extern "C" {
 #ifdef __cplusplus
 }
 #endif
-#endif				// _INC_AUDIO_TONES_DEF_H_
+#endif				/* _INC_AUDIO_TONES_DEF_H_*/

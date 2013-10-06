@@ -20,6 +20,7 @@
 #include <linux/pwm/pwm.h>
 #include <linux/pwm_backlight.h>
 #include <linux/slab.h>
+#include <linux/gpio.h>
 
 struct pwm_bl_data {
 	struct pwm_device	*pwm;
@@ -29,7 +30,8 @@ struct pwm_bl_data {
 	int			(*notify)(struct device *,
 					  int brightness);
 	int			(*check_fb)(struct device *, struct fb_info *);
-	int 			pwm_started;
+	int			pwm_started;
+	int			gpio;
 };
 
 static int pwm_backlight_update_status(struct backlight_device *bl)
@@ -50,16 +52,22 @@ static int pwm_backlight_update_status(struct backlight_device *bl)
 	pwm_set_period_ns(pb->pwm, pb->period);
 	if (brightness == 0) {
 		pwm_set_duty_ns(pb->pwm, 0);
-		if(pb->pwm_started != 0){ 
+		if (pb->pwm_started != 0) {
 			pwm_stop(pb->pwm);
 			pb->pwm_started = 0;
 		}
 	} else {
 		pwm_set_duty_ns(pb->pwm, brightness * pb->period / max);
-		if(pb->pwm_started == 0){
+		if (pb->pwm_started == 0) {
 			pwm_start(pb->pwm);
 			pb->pwm_started = 1;
 		}
+	}
+	if (pb->gpio >= 0) {
+		if (brightness == 0)
+			gpio_set_value(pb->gpio, 0);
+		else
+			gpio_set_value(pb->gpio, 1);
 	}
 	return 0;
 }
@@ -124,6 +132,17 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 	} else
 		dev_dbg(&pdev->dev, "got pwm for backlight\n");
 
+	if (data->enable_gpio >= 0) {
+		ret = gpio_request_one(data->enable_gpio,
+				       GPIOF_OUT_INIT_HIGH, "Backlight Enable");
+		pb->gpio = data->enable_gpio;
+		printk(KERN_INFO "%s() Backlight GPIO requested: %d, status: %d\n",
+		       __func__, data->enable_gpio, ret);
+		if (ret)
+			return ret;
+	} else
+		pb->gpio = -1;
+
 	memset(&props, 0, sizeof(struct backlight_properties));
 	props.type = BACKLIGHT_RAW;
 	props.max_brightness = data->max_brightness;
@@ -138,6 +157,13 @@ static int pwm_backlight_probe(struct platform_device *pdev)
 	bl->props.brightness = data->dft_brightness;
 	pwm_set_polarity(pb->pwm, data->polarity);
 	backlight_update_status(bl);
+
+	if (data->enable_gpio >= 0) {
+		if (bl->props.brightness == 0)
+			gpio_set_value(data->enable_gpio, 0);
+		else
+			gpio_set_value(data->enable_gpio, 1);
+	}
 
 	platform_set_drvdata(pdev, bl);
 	return 0;

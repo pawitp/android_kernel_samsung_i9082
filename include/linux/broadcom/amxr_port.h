@@ -16,7 +16,7 @@
 *  @file    amxr_ports.h
 *
 *****************************************************************************/
-#if !defined( AMXR_PORTS_H )
+#if !defined(AMXR_PORTS_H)
 #define AMXR_PORTS_H
 
 /* ---- Constants and Types ---------------------------------------------- */
@@ -112,24 +112,24 @@ extern "C" {
 *     -ve      Error code
 */
 	int amxrCreatePort(const char *name,
-				    /**< (i) Name string */
-			   AMXR_PORT_CB * cb,
-				    /**< (i) Callbacks */
-			   void *privdata,
-				    /**< (i) Private data passed back to callbacks */
-			   int dst_hz,
-				    /**< (i) Current destination sampling frequency in Hz */
-			   int dst_chans,
-				    /**< (i) Number of channels, i.e. mono = 1 */
-			   int dst_bytes,	/*<< (i) Destination period size in bytes */
-			   int src_hz,
-				    /**< (i) Current source sampling frequency in Hz */
-			   int src_chans,
-				    /**< (i) Number of channels, i.e. mono = 1 */
-			   int src_bytes,	/*<< (i) Source period size in bytes */
-			   AMXR_PORT_ID * portidp
-				    /**< (o) Ptr to port ID */
-	    );
+		    /**< (i) Name string */
+	   AMXR_PORT_CB * cb,
+		    /**< (i) Callbacks */
+	   void *privdata,
+		    /**< (i) Private data passed back to callbacks */
+	   int dst_hz,
+		    /**< (i) Current destination sampling frequency in Hz */
+	   int dst_chans,
+		    /**< (i) Number of channels, i.e. mono = 1 */
+	   int dst_bytes,	/*<< (i) Destination period size in bytes */
+	   int src_hz,
+		    /**< (i) Current source sampling frequency in Hz */
+	   int src_chans,
+		    /**< (i) Number of channels, i.e. mono = 1 */
+	   int src_bytes,	/*<< (i) Source period size in bytes */
+	   AMXR_PORT_ID * portidp
+		    /**< (o) Ptr to port ID */
+	   );
 
 /***************************************************************************/
 /**
@@ -161,9 +161,9 @@ extern "C" {
 *     -ve         On general failure
 */
 	int amxrSetPortDstFreq(AMXR_PORT_ID portid,
-				    /**< (i) Destination port id */
-			       int dst_hz,	/*<< (i) Destination sampling frequency in Hz */
-			       int dst_bytes	/*<< (i) Destination period size in bytes */
+		    /**< (i) Destination port id */
+	       int dst_hz,	/*<< (i) Destination sampling frequency in Hz */
+	       int dst_bytes	/*<< (i) Destination period size in bytes */
 	    );
 
 /***************************************************************************/
@@ -194,19 +194,20 @@ extern "C" {
 *     Source and destination sampling frequencies may be asymmetric.
 */
 	static inline int amxrSetPortFreq(AMXR_PORT_ID portid,
-				    /**< (i) port id */
-					  int dst_hz,
-				    /**< (i) Destination sampling frequency in Hz */
-					  int dst_bytes,	/*<< (i) Destination period size in bytes */
-					  int src_hz,
-				    /**< (i) Source sampling frequency in Hz */
-					  int src_bytes	/*<< (i) Source period size in bytes */
+		    /**< (i) port id */
+			  int dst_hz,
+		    /**< (i) Destination sampling frequency in Hz */
+			  int dst_bytes,
+		    /*<< (i) Destination period size in bytes */
+			  int src_hz,
+		    /**< (i) Source sampling frequency in Hz */
+			  int src_bytes	/*<< (i) Source period size in bytes */
 	    ) {
 		int err;
 		 err = amxrSetPortDstFreq(portid, dst_hz, dst_bytes);
-		if (!err) {
+		if (!err)
 			err = amxrSetPortSrcFreq(portid, src_hz, src_bytes);
-		}
+
 		return err;
 	}
 
@@ -224,9 +225,10 @@ extern "C" {
 */
 	int amxrSetPortDstChannels(AMXR_PORT_ID portid,
 				    /**< (i) Destination port id */
-				   int dst_chans,	/*<< (i) Number of channels: 1 for mono, 2 for stereo, etc */
-				   int dst_bytes	/*<< (i) Destination period size in bytes */
-	    );
+	   int dst_chans,
+		/*<< (i) Number of channels: 1 for mono, 2 for stereo, etc */
+	   int dst_bytes	/*<< (i) Destination period size in bytes */
+	   );
 
 /***************************************************************************/
 /**
@@ -242,11 +244,12 @@ extern "C" {
 */
 	int amxrSetPortSrcChannels(AMXR_PORT_ID portid,
 				    /**< (i) Source port id */
-				   int src_chans,	/*<< (i) Number of src channels: 1 for mono, 2 for stereo, etc. */
-				   int src_bytes	/*<< (i) Source period size in bytes */
-	    );
+	   int src_chans,
+		/*<< (i) Number of src channels: 1 for mono, 2 for stereo, etc. */
+	   int src_bytes	/*<< (i) Source period size in bytes */
+	   );
 
-#if !defined( __KERNEL__ )
+#if !defined(__KERNEL__)
 /* User space only APIs */
 
 /***************************************************************************/
@@ -272,7 +275,7 @@ extern "C" {
 	    );
 #endif
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 /* Move following definitions here from amxr.h to resolve circular dependency
  * between amxr.h and amxr_ports.h. These definitions will be made obsolete
  * soon once the driver and core code are refactored
@@ -320,7 +323,7 @@ extern "C" {
 */
 	void amxrSetApiFuncs(const AMXR_API_FUNCS * funcs
 				    /**< (i) Ptr to API functions.
-                                             If NULL, clears registration */
+					If NULL, clears registration */
 	    );
 #endif
 

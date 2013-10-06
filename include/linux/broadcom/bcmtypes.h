@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/bcmtypes.h
+*	@file	include/linux/broadcom/bcmtypes.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -13,10 +13,10 @@
 * other than the GPL, without Broadcom's express prior written consent.
 *******************************************************************************/
 
-/* --------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------- */
 /* bcmtypes.h - misc useful typedefs */
 /*  $Id: bcmtypes.h,v 1.2 2004/01/02 23:20:22 blukas Exp $ */
-/* --------------------------------------------------------------------------- */
+/* --------------------------------------------------------------------- */
 #ifndef BCMTYPES_H
 #define BCMTYPES_H
 
@@ -52,9 +52,11 @@ typedef unsigned char BOOL;
 #endif
 
 /*
-** Macro OFFSETOF returns the offset, in bytes, of a structure member within a structure
+** Macro OFFSETOF returns the offset, in bytes, of a structure member
+ within a structure
 **/
-#define OFFSETOF(structName, memberName)   ((size_t)&((structName *)0)->memberName)
+#define OFFSETOF(structName, memberName)\
+	((size_t)&((structName *)0)->memberName)
 
 /*
  * Macro to calculate length of an array.

@@ -76,14 +76,14 @@ extern "C" {
 	typedef enum {
 		UNICODE_NONE = 0x00,	/* deprecated (use UNICODE_GSM) */
 		UNICODE_GSM = 0x00,	/* 7-bit GSM Default Alphabet */
-		UNICODE_UCS1 = 0x01,	/* 8-bit Extended ASCII (or ISO-8859-1) */
+		UNICODE_UCS1 = 0x01,/* 8-bit Extended ASCII (or ISO-8859-1) */
 
 		/* Unicode 80, 81, 82 are defined in GSM 11.11 Annex B */
 		UNICODE_80 = 0x80,	/*unicode tag 80 */
 		UNICODE_81 = 0x81,	/*unicode tag 81 */
 		UNICODE_82 = 0x82,	/*unicode tag 82 */
 
-		UNICODE_UCS2 = 0xF0,	/*2 byte unicode with native endianess */
+		UNICODE_UCS2 = 0xF0, /*2 byte unicode with native endianess */
 
 		UNICODE_RESERVED = 0xFF	/* reserved value */
 	} Unicode_t;		/* unicode types */
@@ -91,7 +91,7 @@ extern "C" {
 /* Macro to determine if the passed coding type is non-UCS2 format.
 These include UNICODE_GSM & UNICODE_UCS1 cases */
 #define IS_NON_UCS2_CODING(code_type) (((code_type) == UNICODE_GSM) || \
-										((code_type) == UNICODE_UCS1))
+				((code_type) == UNICODE_UCS1))
 
 /** @} */
 

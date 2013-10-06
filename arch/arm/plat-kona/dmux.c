@@ -289,9 +289,9 @@ __init int dmux_init(void)
 
 	/* get the clocks going */
 	dmux.dmux_clk = clk_get(NULL, "dmac_mux_apb_clk");
-	if (!dmux.dmux_clk) {
+	if (IS_ERR(dmux.dmux_clk)) {
 		printk("Failed to get the dmac_mux_apb_clk!!!\n");
-		return -1;
+		return PTR_ERR(dmux.dmux_clk);
 	}
 	clk_enable(dmux.dmux_clk);
 	return 0;

@@ -12,13 +12,13 @@
 * consent.
 *****************************************************************************/
 
-#if !defined( VC_DEBUG_SYM_H )
+#if !defined(VC_DEBUG_SYM_H)
 #define VC_DEBUG_SYM_H
 
 /* ---- Include Files ----------------------------------------------------- */
 
 #include <stddef.h>
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
@@ -46,12 +46,14 @@ typedef struct {
 	uint32_t symbolTableLength;
 } VC_DEBUG_PARAMS_T;
 
-#define VC_DEBUG_HEADER_MAGIC  (('V' << 0) + ('C' << 8) + ('D' << 16) + ('H' << 24))
+#define VC_DEBUG_HEADER_MAGIC\
+	(('V' << 0) + ('C' << 8) + ('D' << 16) + ('H' << 24))
 
-// Offset within the videocore memory map to get the address of the debug header.
+/* Offset within the videocore memory map to get the address
+of the debug header.*/
 #define VC_DEBUG_HEADER_OFFSET 0x2800
 
-#if defined( __VC4_BIG_ISLAND__ )
+#if defined(__VC4_BIG_ISLAND__)
 
     /* Use of the debug symbols only makes sense on machines which have
      * some type of shared memory architecture.
@@ -74,61 +76,62 @@ typedef struct {
  */
 
 #if USE_VC_DEBUG_SYMS
-#define VC_DEBUG_SYMBOL(name,label,addr,size) \
-    PRAGMA( Data(LIT, ".init.vc_debug_sym" ); ) \
-    static const VC_DEBUG_SYMBOL_T vc_sym_##name = { label, (uint32_t)addr, size }; \
-    PRAGMA( Data )
+#define VC_DEBUG_SYMBOL(name, label, addr, size) \
+PRAGMA(Data(LIT, ".init.vc_debug_sym");) \
+static const VC_DEBUG_SYMBOL_T vc_sym_##name
+	= { label, (uint32_t)addr, size }; \
+PRAGMA(Data)
 #else
-#define VC_DEBUG_SYMBOL(name,label,addr,size)
+#define VC_DEBUG_SYMBOL(name, label, addr, size)
 #endif
 
-#define VC_DEBUG_VAR(var)   VC_DEBUG_SYMBOL(var,#var,&var,sizeof(var))
+#define VC_DEBUG_VAR(var)   VC_DEBUG_SYMBOL(var, #var, &var, sizeof(var))
 
 /*
- * When using VC_DEBUG_VAR, you typically want to use uncached memory, otherwise 
- * it will go in cached memory and the host won't get a coherent view of the 
- * memory. So we take advantage of the .ucdata section which gets linked into 
- * the uncached memory space. 
- *  
- * Now this causes another problem, namely that the videocore linker ld/st 
- * instructions only have 27-bit relocations, and accessing a global from 
- * uncached memory is more than 27-bits away. So we create a couple of macros 
- * which can be used to declare a variable and put it into the .ucdata section 
- * and another macro which will dereference it as if it were a pointer. 
- *  
- * To use: 
- *  
+ * When using VC_DEBUG_VAR, you typically want to use uncached memory, otherwise
+ * it will go in cached memory and the host won't get a coherent view of the
+ * memory. So we take advantage of the .ucdata section which gets linked into
+ * the uncached memory space.
+ *
+ * Now this causes another problem, namely that the videocore linker ld/st
+ * instructions only have 27-bit relocations, and accessing a global from
+ * uncached memory is more than 27-bits away. So we create a couple of macros
+ * which can be used to declare a variable and put it into the .ucdata section
+ * and another macro which will dereference it as if it were a pointer.
+ *
+ * To use:
+ *
  *      VC_DEBUG_DECLARE_UNCACHED_VAR( int, foo, 0xCafeBeef );
  *      #define foo VC_DEBUG_ACCESS_UNCACHED_VAR(foo)
  */
 
-#define VC_DEBUG_DECLARE_UNCACHED_VAR(var_type,var_name,var_init) \
-    PRAGMA( Data(".ucdata"); ) \
-    var_type var_name = (var_init); \
-    PRAGMA( Data(); ) \
-    var_type *vc_var_ptr_##var_name = &var_name; \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_UNCACHED_VAR(var_type, var_name, var_init) \
+PRAGMA(Data(".ucdata");) \
+var_type var_name = (var_init); \
+PRAGMA(Data();) \
+var_type *vc_var_ptr_##var_name = &var_name; \
+VC_DEBUG_VAR(var_name)
 
-#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR(var_type,var_name,var_init) \
-    PRAGMA( Data(".ucdata"); ) \
-    static var_type var_name = (var_init); \
-    PRAGMA( Data(); ) \
-    static var_type *vc_var_ptr_##var_name = &var_name; \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR(var_type, var_name, var_init) \
+PRAGMA(Data(".ucdata");) \
+static var_type var_name = (var_init); \
+PRAGMA(Data();) \
+static var_type *vc_var_ptr_##var_name = &var_name; \
+VC_DEBUG_VAR(var_name)
 
-#define VC_DEBUG_DECLARE_UNCACHED_VAR_ZERO(var_type,var_name) \
-    PRAGMA( Data(".ucdata"); ) \
-    var_type var_name = {0}; \
-    PRAGMA( Data(); ) \
-    var_type *vc_var_ptr_##var_name = &var_name; \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_UNCACHED_VAR_ZERO(var_type, var_name) \
+PRAGMA(Data(".ucdata");) \
+var_type var_name = {0}; \
+PRAGMA(Data();) \
+var_type *vc_var_ptr_##var_name = &var_name; \
+VC_DEBUG_VAR(var_name)
 
-#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR_ZERO(var_type,var_name) \
-    PRAGMA( Data(".ucdata"); ) \
-    static var_type var_name = {0}; \
-    PRAGMA( Data(); ) \
-    static var_type *vc_var_ptr_##var_name = &var_name; \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR_ZERO(var_type, var_name) \
+PRAGMA(Data(".ucdata");) \
+static var_type var_name = {0}; \
+PRAGMA(Data();) \
+static var_type *vc_var_ptr_##var_name = &var_name; \
+VC_DEBUG_VAR(var_name)
 
 #define VC_DEBUG_ACCESS_UNCACHED_VAR(var_name) (*vc_var_ptr_##var_name)
 
@@ -137,21 +140,21 @@ typedef struct {
  * since it never changes.
  */
 
-#define VC_DEBUG_DECLARE_STRING_VAR(var_name,var_init) \
-    const char var_name[] = var_init; \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_STRING_VAR(var_name, var_init) \
+const char var_name[] = var_init; \
+VC_DEBUG_VAR(var_name)
 
 /*
- * Since some variable aren't actually referenced by the videocore 
- * this variant uses a .init.* section to ensure that the variable 
+ * Since some variable aren't actually referenced by the videocore
+ * this variant uses a .init.* section to ensure that the variable
  * doesn't get pruned by the linker.
  */
 
-#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR_NO_PTR(var_type,var_name,var_init) \
-    PRAGMA( Data(".init.ucdata"); ) \
-    static var_type var_name = (var_init); \
-    PRAGMA( Data(); ) \
-    VC_DEBUG_VAR(var_name)
+#define VC_DEBUG_DECLARE_UNCACHED_STATIC_VAR_NO_PTR(var_type, var_name, var_init) \
+PRAGMA(Data(".init.ucdata");) \
+static var_type var_name = (var_init); \
+PRAGMA(Data();) \
+VC_DEBUG_VAR(var_name)
 
 /* ---- Variable Externs ------------------------------------------------- */
 

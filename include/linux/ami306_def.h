@@ -48,9 +48,7 @@ struct ami_chipinfo {
 /** magnetic sensor parameter */
 struct ami_mag_parameter {
 	u16 sensitivity[3];		/**< sensitivity */
-	u16 origin[3];			/**< origin  */
 	u8 interference[6];		/**< axis interference */
-	s16 si[9];		/**< soft iron */
 };
 
 /** magnetic sensor window parameter */

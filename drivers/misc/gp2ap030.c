@@ -53,7 +53,6 @@
 
 static struct i2c_client *opt_i2c_client = NULL;
 static int lightval_logcount = 250;
-static struct regulator *prox_regulator;
 
 struct gp2a_data {
 	struct i2c_client *client;
@@ -97,14 +96,14 @@ static u8 gp2a_reg[COL][2] = {
 	{0x02, 0x1A},
 	/*LED drive current 110mA, Detection/Non-detection judgment output */
 	{0x03, 0x3C},
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC) || defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CHU)
-	{0x08, 0x0B},		/*PS mode LTH(Loff):  (??mm) */
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)	
+	{0x08, 0x07},		/*PS mode LTH(Loff):  (??mm) */
 #else
 	{0x08, 0x09},		/*PS mode LTH(Loff):  (??mm) */
-#endif
+#endif	
 	{0x09, 0x00},		/*PS mode LTH(Loff) : */
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC) || defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CHU)
-	{0x0A, 0x0D},		/*PS mode HTH(Lon) : (??mm) */
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)	
+	{0x0A, 0x0A},		/*PS mode HTH(Lon) : (??mm) */
 #else
 	{0x0A, 0x0C},		/*PS mode HTH(Lon) : (??mm) */
 #endif
@@ -231,6 +230,22 @@ int lightsensor_get_adc(struct gp2a_data *data)
 				light_beta = 0;
 			}
 		} else {
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
+			if (100 * D1_raw_data <= 41 * D0_raw_data) {
+				light_alpha = 771;
+				light_beta = 0;
+			} else if (100 * D1_raw_data <= 62 * D0_raw_data) {
+				light_alpha = 1868;
+				light_beta = 2743;
+			} else if (100 * D1_raw_data <= d0_boundary * D0_raw_data) {
+				light_alpha = 526;
+				light_beta = 578;
+			} else {
+				light_alpha = 0;
+				light_beta = 0;
+			}
+
+#else
 			if (100 * D1_raw_data <= 41 * D0_raw_data) {
 				light_alpha = 830;
 				light_beta = 0;
@@ -244,6 +259,7 @@ int lightsensor_get_adc(struct gp2a_data *data)
 				light_alpha = 0;
 				light_beta = 0;
 			}
+#endif
 		}
 	} else {   /* GP2AP 020 */
 		if (data->lightsensor_mode) {	/* HIGH_MODE */
@@ -436,8 +452,8 @@ static int proximity_adc_read(struct gp2a_data *data)
 	int sum[OFFSET_ARRAY_LENGTH];
 	int i = OFFSET_ARRAY_LENGTH-1;
 	int avg;
-	int min;
-	int max;
+	int min = 0;
+	int max = 0;
 	int total = 0;
 	int D2_data;
 	unsigned char get_D2_data[2]={0,};
@@ -449,7 +465,7 @@ static int proximity_adc_read(struct gp2a_data *data)
 			sizeof(get_D2_data));
 		D2_data = (get_D2_data[1] << 8) | get_D2_data[0];
 		sum[i] = D2_data;
-		if (i == 0) {
+		if (i == OFFSET_ARRAY_LENGTH - 1) {
 			min = sum[i];
 			max = sum[i];
 		} else {
@@ -717,6 +733,8 @@ static struct device_attribute dev_attr_proximity_enable =
 	__ATTR(enable, S_IRUGO|S_IWUSR|S_IWGRP,
 			proximity_enable_show, proximity_enable_store);
 
+static int D2_data_val = 0;
+
 static ssize_t proximity_state_show(struct device *dev,
 				struct device_attribute *attr, char *buf)
 {
@@ -728,7 +746,8 @@ static ssize_t proximity_state_show(struct device *dev,
 	unsigned char get_D2_data[2] = { 0, };
 
 	mutex_lock(&data->data_mutex);
-	gp2a_i2c_read(0x10, get_D2_data, sizeof(get_D2_data));
+	msleep(10);
+	gp2a_i2c_read(DATA2_LSB, get_D2_data, sizeof(get_D2_data));
 	mutex_unlock(&data->data_mutex);
 	D2_data = (get_D2_data[1] << 8) | get_D2_data[0];
 
@@ -740,6 +759,12 @@ static ssize_t proximity_state_show(struct device *dev,
 	//D2_data = D2_data - (data->offset_value); // for ADC compensation
 	
 	//printk(KERN_INFO "[GP2A] %s: D2_data = %d\n", __func__, D2_data);
+
+        if(D2_data >=0 && D2_data <1024)
+            D2_data_val = D2_data;
+        else
+            D2_data = D2_data_val;
+    
 	return snprintf(buf, PAGE_SIZE, "%d\n", D2_data);
 }
 static struct device_attribute dev_attr_proximity_sensor_state =
@@ -1022,6 +1047,7 @@ light_enable_store(struct device *dev, struct device_attribute *attr,
 			const char *buf, size_t count)
 {
 	struct gp2a_data *data = dev_get_drvdata(dev);
+	struct regulator *prox_regulator = NULL;
 
 	int value;
 	int err = 0;
@@ -1043,13 +1069,23 @@ light_enable_store(struct device *dev, struct device_attribute *attr,
 		data->light_enabled = value;
 		cancel_delayed_work_sync(&data->light_work);
 		lightsensor_onoff(0, data);
-		regulator_disable(prox_regulator);
+        
+                prox_regulator = regulator_get(NULL, "mmcldo1_uc");
+		err = regulator_disable(prox_regulator); 
+                printk(KERN_INFO "[GP2A] regulator_disable : %d\n", err);
+                regulator_put(prox_regulator);
 	}
 	if (!data->light_enabled && value) {
 		data->light_enabled = value;
-		regulator_enable(prox_regulator);
+
+                prox_regulator = regulator_get(NULL, "mmcldo1_uc");
+		err = regulator_enable(prox_regulator);
+                printk(KERN_INFO "[GP2A] regulator_enable : %d\n", err);
+                regulator_put(prox_regulator);
+
         	msleep(5);
 		lightsensor_onoff(1, data);
+            
 		schedule_delayed_work(&data->light_work,
 			msecs_to_jiffies(20));
 	}
@@ -1278,8 +1314,8 @@ static int light_input_init(struct gp2a_data *data)
 		goto done;
 	}
 
-	input_set_capability(dev, EV_ABS, ABS_MISC);
-       input_set_abs_params(dev, ABS_MISC, 0, 1, 0, 0);
+	input_set_capability(dev, EV_REL, REL_MISC);
+       //input_set_abs_params(dev, ABS_MISC, 0, 1, 0, 0);
 
 	dev->name = "light_sensor";
 	input_set_drvdata(dev, data);
@@ -1304,11 +1340,11 @@ static void gp2a_work_func_light(struct work_struct *work)
 
 	adc = lightsensor_get_adc(data);
 
-	input_report_abs(data->light_input_dev, ABS_MISC, adc);
+	input_report_rel(data->light_input_dev, REL_MISC, adc + 1);
 	input_sync(data->light_input_dev);
 
 	if (lightval_logcount++ > 250) {
-		printk(KERN_INFO "[GP2A] light value = %d \n", adc);
+		printk(KERN_INFO "[GP2A] light value = %d \n", adc + 1);
 		lightval_logcount = 0;
 	}
    
@@ -1438,25 +1474,23 @@ static int gp2a_i2c_probe(struct i2c_client *client,
 
 	if (pdata->version) { /* GP2AP030 */
 		gp2a_reg[1][1] = 0x1A;
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC) || defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CHU)
+
 		if (pdata->thresh[0])
 			gp2a_reg[3][1] = pdata->thresh[0];
 		else
-			gp2a_reg[3][1] = 0x0B;
-		if (pdata->thresh[1])
-			gp2a_reg[5][1] = pdata->thresh[1];
-		else
-			gp2a_reg[5][1] = 0x0D;
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)  
+			gp2a_reg[3][1] = 0x07;
 #else
-		if (pdata->thresh[0])
-			gp2a_reg[3][1] = pdata->thresh[0];
-		else
 			gp2a_reg[3][1] = 0x09;
+#endif		
 		if (pdata->thresh[1])
 			gp2a_reg[5][1] = pdata->thresh[1];
 		else
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER) 
+			gp2a_reg[5][1] = 0x0A;
+#else			
 			gp2a_reg[5][1] = 0x0C;		
-#endif
+#endif		
 	}
 
 	INIT_DELAYED_WORK(&gp2a->light_work, gp2a_work_func_light);
@@ -1673,26 +1707,43 @@ static int gp2a_i2c_init(void)
 {
 	/* Power On */
 	int ret=0;
+	struct regulator *prox_regulator = NULL;
+
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER)
+        struct regulator *VCC_PDA_2_8_V;  //mmcldo2_uc
+#endif        
 
 	printk(KERN_INFO "[GP2A] %s called",__func__); 
 
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER)
+  	VCC_PDA_2_8_V = regulator_get(NULL,"mmcldo2_uc");
+	if(IS_ERR(VCC_PDA_2_8_V)){
+		printk(KERN_ERR "[GP2A] can not get VCC_PDA_2.8V\n");
+	}	
+
+        ret = regulator_is_enabled(VCC_PDA_2_8_V);
+        printk(KERN_INFO "[GP2A] regulator_is_enabled : %d\n", ret);
+
+         ret = regulator_set_voltage(VCC_PDA_2_8_V,2800000,2800000);	
+        printk(KERN_INFO "[GP2A] regulator_set_voltage : %d\n", ret);
+
+        ret = regulator_enable(VCC_PDA_2_8_V);
+        printk(KERN_INFO "[GP2A] regulator_enable : %d\n", ret);        
+#endif
+
 	/* regulator init */
-	prox_regulator = regulator_get(NULL, "mmcldo1_uc");
-	if (IS_ERR(prox_regulator)){
-	    printk(KERN_ERR "[GP2A] can not get prox_regulator (ALS_VDD_2.8V) \n");
-	}
-
-	ret = regulator_set_voltage(prox_regulator,2800000,2800000);	
-	printk(KERN_INFO "[GP2A] regulator_set_voltage : %d\n", ret);        
-
-	ret = regulator_enable(prox_regulator);
-	if (ret) {
-	    printk(KERN_ERR "[GP2A] cregulator enable failed (ALS_VDD_2.8V) \n");
-	}
-	printk(KERN_INFO "[GP2A] regulator_enable : %d\n", ret);
-
-        /*After Power Supply is supplied, about 1ms delay is required before issuing read/write commands */
-        mdelay(10);      
+    	prox_regulator = regulator_get(NULL, "mmcldo1_uc");
+    	if (IS_ERR(prox_regulator)){
+    	    printk(KERN_ERR "[GP2A] can not get prox_regulator (ALS_VDD_2.8V) \n");
+    	} else {
+            ret = regulator_set_voltage(prox_regulator,2800000,2800000);
+            printk(KERN_INFO "[GP2A] regulator_set_voltage : %d\n", ret);
+            ret = regulator_enable(prox_regulator);
+            printk(KERN_INFO "[GP2A] regulator_enable : %d\n", ret);
+            regulator_put(prox_regulator);
+            /*After Power Supply is supplied, about 1ms delay is required before issuing read/write commands */
+            mdelay(10);      
+    	}   
 	
 	if (i2c_add_driver(&gp2a_i2c_driver)) {
 		pr_err("i2c_add_driver failed\n");

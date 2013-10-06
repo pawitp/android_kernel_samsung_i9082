@@ -304,12 +304,12 @@ static int vc_dnfo_proc_write(struct file *file, const char __user *buffer,
 		if (strcmp(name, vc_dnfo_lut[i].name) == 0) {
 			lut_entry = &vc_dnfo_lut[i];
 			break;
-	}
+		}
 	}
 
 	if (!lut_entry) {
 		LOG_ERR("[%s]: attribute '%s' is **unknown** to driver '%s'",
-			__func__, name, DRIVER_NAME);
+				__func__, name, DRIVER_NAME);
 	} else if (lut_entry->type == VC_DNFO_FRAC) {
 		/* Fractional format. */
 		int *field = (int *)((char *)&vc_dnfo_info + lut_entry->offset);
@@ -317,7 +317,7 @@ static int vc_dnfo_proc_write(struct file *file, const char __user *buffer,
 		if (vc_dnfo_scan_frac(source, field)) {
 			LOG_ERR("[%s]: echo <field> <value> > /proc/%s",
 				__func__, DRIVER_NAME);
-	}
+		}
 	} else {
 		/* Either signed or unsigned format. */
 		int value;

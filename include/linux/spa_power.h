@@ -231,6 +231,7 @@ struct spa_power_desc
 	struct workqueue_struct *spa_workqueue;
 	struct wake_lock spa_wakelock;
 	struct wake_lock acc_wakelock;
+	struct wake_lock batt_wakelock;
 
 	struct spa_power_data *pdata;
 

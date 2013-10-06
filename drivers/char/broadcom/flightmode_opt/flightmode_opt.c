@@ -106,7 +106,7 @@ static long flightmode_opt_ioctl(struct file *file, unsigned int cmd,
 #if !defined(CONFIG_ARCH_CAPRI) && !defined(CONFIG_ARCH_RHEA)
 		/* Restore all clocks moved from PLL1 -> PLL0 */
 		clk_switch_src_pll0_pll1(0);
-#endif		
+#endif
 
 		break;
 	default:

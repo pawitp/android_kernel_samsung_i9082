@@ -62,6 +62,7 @@ typedef enum DSPC_COMMAND_tag {
 	DSPC_COMMAND_GET_BRIGHTNESS,
 	DSPC_COMMAND_CONTROL_WRITE,
 	DSPC_COMMAND_CONTROL_READ,
+	DSPC_COMMAND_GET_NAME,
 
 	DSPC_COMMAND_MAX
 } DSPC_COMMAND_T;
@@ -528,6 +529,39 @@ int vc_display_bus_read(int unsigned display,
 }
 
 EXPORT_SYMBOL(vc_display_bus_read);
+
+int vc_display_get_name(int unsigned display,
+			uint8_t *data, size_t count)
+{
+//	uint32_t params[1] = {count };
+	struct vc_display_response response = { 0 };
+	struct completion completion;
+	VCHIQ_STATUS_T vc_s;
+
+	LOG_DBG("Broadcom vc-display entered %s", __func__);
+
+	if (!count || !data) {
+		LOG_ERR("Broadcom vc-display: read without buffer");
+		return -1;
+	}
+
+	init_completion(&completion);
+	response.completion = &completion;
+	response.buffer = data;
+	response.buffer_size = count;
+
+	vc_s = vc_display_send_message_ex(vcd_state_instance,
+					  DSPC_COMMAND_GET_NAME,
+					  NULL, 0, NULL, 0, &response);
+
+	if (vc_s == 0)
+		wait_for_completion(&completion);
+
+  LOG_DBG("Broadcom vc-display LCD_ID %s : %s[%d]", __func__, data, count);
+	return (vc_s == 0) ? response.result : -1;
+}
+
+EXPORT_SYMBOL(vc_display_get_name);
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 static void vc_display_early_suspend(struct early_suspend *s)

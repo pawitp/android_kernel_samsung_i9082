@@ -21,7 +21,6 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS
    SOFTWARE IS DISCLAIMED.
 */
-#define CONFIG_BT_MGMT 
 #ifdef CONFIG_BT_MGMT
 #include "hci_core_mgmt.h"
 #elif defined(CONFIG_BT_TIZEN)
@@ -173,8 +172,6 @@ struct hci_dev {
 	unsigned long	acl_last_tx;
 	unsigned long	sco_last_tx;
 	unsigned long	le_last_tx;
-
-    __s8        is_wbs;
 
 	struct workqueue_struct	*workqueue;
 

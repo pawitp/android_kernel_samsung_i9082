@@ -275,13 +275,6 @@ static ssize_t bcm2079x_dev_read(struct file *filp, char __user *buf,
 	DBG(dev_info(&bcm2079x_dev->client->dev,
 		      "bcm2079x_dev_read %d\n", total));
 
-#ifdef CONFIG_HAS_WAKELOCK
-	DBG(dev_info(&bcm2079x_dev->client->dev,
-		      "release wake lock\n"));
-	if (bcm2079x_dev->count_irq == 0)
-		wake_unlock(&nfc_wake_lock);
-#endif
-
 	return total;
 }
 
@@ -398,7 +391,23 @@ static long bcm2079x_dev_unlocked_ioctl(struct file *filp,
 		DBG(dev_info(&bcm2079x_dev->client->dev,
 			 "%s, BCMNFC_WAKE_CTL (%x, %lx):\n", __func__, cmd,
 			 arg));
+
+#ifdef CONFIG_HAS_WAKELOCK
+		if (arg == 0) {
+			wake_lock(&nfc_wake_lock);
+			DBG(dev_info(&bcm2079x_dev->client->dev, "%s: got wake lock", __func__));
+		}
+#endif
+
 		gpio_set_value(bcm2079x_dev->wake_gpio, arg);
+
+#ifdef CONFIG_HAS_WAKELOCK
+		if (arg == 1) {
+			wake_unlock(&nfc_wake_lock);
+			DBG(dev_info(&bcm2079x_dev->client->dev, "%s: release wake lock, count_irq = %d",
+						__func__, bcm2079x_dev->count_irq));
+		}
+#endif
 		break;
 	default:
 		dev_err(&bcm2079x_dev->client->dev,
@@ -495,7 +504,7 @@ static int bcm2079x_probe(struct i2c_client *client,
 	bcm2079x_dev->original_address = client->addr;
 
 #ifdef CONFIG_HAS_WAKELOCK
-	wake_lock_init(&nfc_wake_lock, WAKE_LOCK_IDLE, "NFCWAKE");
+	wake_lock_init(&nfc_wake_lock, WAKE_LOCK_SUSPEND, "NFCWAKE");
 #endif
 	i2c_set_clientdata(client, bcm2079x_dev);
 

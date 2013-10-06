@@ -220,21 +220,13 @@ static int ami_cmd(unsigned int cmd, unsigned long arg)
 		if (0 > res)
 			return -EFAULT;
 		break;
-	case AMI_IOCTL_READ_PARAMS:
-		res = AMI_ReadParameter(g_handle, &k_param);
+	case AMI_IOCTL_GET_SOFTIRON:
+		res = AMI_GetSoftIron(g_handle, k_si);
 		if (0 > res)
 			return -EFAULT;
-		if (copy_to_user(argp, &k_param, sizeof k_param))
+		if (copy_to_user(argp, k_si, sizeof k_si))
 			return -EFAULT;
 		break;
-	case AMI_IOCTL_DRIVERINFO:
-		res = AMI_DriverInformation(g_handle, &k_drv);
-		if (0 > res)
-			return -EFAULT;
-		if (copy_to_user(argp, &k_drv, sizeof k_drv))
-			return -EFAULT;
-		break;
-
 	case AMI_IOCTL_SET_DIR:
 		AMI_DLOG("Set Direction");
 		if (copy_from_user(k_dir, argp, sizeof(k_dir)))
@@ -249,6 +241,20 @@ static int ami_cmd(unsigned int cmd, unsigned long arg)
 		if (0 > res)
 			return -EFAULT;
 		if (copy_to_user(argp, k_dir, sizeof k_dir))
+			return -EFAULT;
+		break;
+	case AMI_IOCTL_READ_PARAMS:
+		res = AMI_ReadParameter(g_handle, &k_param);
+		if (0 > res)
+			return -EFAULT;
+		if (copy_to_user(argp, &k_param, sizeof k_param))
+			return -EFAULT;
+		break;
+	case AMI_IOCTL_DRIVERINFO:
+		res = AMI_DriverInformation(g_handle, &k_drv);
+		if (0 > res)
+			return -EFAULT;
+		if (copy_to_user(argp, &k_drv, sizeof k_drv))
 			return -EFAULT;
 		break;
 
@@ -379,7 +385,8 @@ static int __devinit ami_probe(struct i2c_client *client,
 static int __devexit ami_remove(struct i2c_client *client)
 {
 	AMI_LOG("%s %s %s", AMI_DRV_NAME, __FUNCTION__, "start");
-	kfree(k_mem);
+	if (k_mem != NULL)
+		kfree(k_mem);
 	AMI_LOG("%s %s %s", AMI_DRV_NAME, __FUNCTION__, "end");
 	return 0;
 }

@@ -358,22 +358,26 @@ int set_cpufreq_limit(unsigned int val, int limit_type)
 {
 	struct cpufreq_policy *policy;
 	int cpu = raw_smp_processor_id();
+	int ret = 0;
 
 	if (limit_type != MAX_LIMIT && limit_type != MIN_LIMIT)
 		return -EINVAL;
 	policy = cpufreq_cpu_get(cpu);
-
+	if (!policy)
+		return -EINVAL;
 	if (limit_type == MAX_LIMIT && \
 		val != DEFAULT_LIMIT && val < policy->user_policy.min) {
 			/* For max value less than cpufreq_max_limit */
-		_set_cpufreq_limit(val, MIN_LIMIT);
-		_set_cpufreq_limit(val, MAX_LIMIT);
+		ret = _set_cpufreq_limit(val, MIN_LIMIT);
+		if (ret)
+			return -EINVAL;
+		ret = _set_cpufreq_limit(val, MAX_LIMIT);
 	} else {
 		/* Normal case */
-		_set_cpufreq_limit(val, limit_type);
+		ret = _set_cpufreq_limit(val, limit_type);
 	}
 
-	return 0;
+	return ret;
 }
 
 #ifdef CONFIG_KONA_CPU_FREQ_LIMITS

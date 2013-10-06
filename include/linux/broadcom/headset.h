@@ -4,7 +4,7 @@
 * Unless you and Broadcom execute a separate written software license
 * agreement governing use of this software, this software is licensed to you
 * under the terms of the GNU General Public License version 2, available at
-* http://www.broadcom.com/licenses/GPLv2.php (the "GPL"). 
+* http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
 *
 * Notwithstanding the above, under no circumstances may you combine this
 * software in any way with any other Broadcom software provided under a
@@ -26,7 +26,7 @@
 *
 *****************************************************************************/
 
-#if !defined( LINUX_HEADSET_H )
+#if !defined(LINUX_HEADSET_H)
 #define LINUX_HEADSET_H
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -40,7 +40,7 @@ typedef enum {
 
 } headset_state;
 
-#define HEADSET_STATE_INIT (headset_state)-1
+#define HEADSET_STATE_INIT ((headset_state)-1)
 
 #ifdef __KERNEL__
 typedef enum {
@@ -63,11 +63,11 @@ typedef enum {
 #define HEADSET_CMD_SET_MIC_DEBOUNCE   0x84
 #define HEADSET_CMD_LAST               0x84
 
-#define HEADSET_IOCTL_GET_STATE _IOR( HEADSET_MAGIC, HEADSET_CMD_GET_STATE, headset_state )
-#define HEADSET_IOCTL_GET_DEBOUNCE _IOR( HEADSET_MAGIC, HEADSET_CMD_GET_DEBOUNCE, int )
-#define HEADSET_IOCTL_SET_DEBOUNCE _IOR( HEADSET_MAGIC, HEADSET_CMD_SET_DEBOUNCE, int )
-#define HEADSET_IOCTL_GET_MIC_DEBOUNCE _IOR( HEADSET_MAGIC, HEADSET_CMD_GET_MIC_DEBOUNCE, int )
-#define HEADSET_IOCTL_SET_MIC_DEBOUNCE _IOR( HEADSET_MAGIC, HEADSET_CMD_SET_MIC_DEBOUNCE, int )
+#define HEADSET_IOCTL_GET_STATE _IOR(HEADSET_MAGIC, HEADSET_CMD_GET_STATE, headset_state)
+#define HEADSET_IOCTL_GET_DEBOUNCE _IOR(HEADSET_MAGIC, HEADSET_CMD_GET_DEBOUNCE, int)
+#define HEADSET_IOCTL_SET_DEBOUNCE _IOR(HEADSET_MAGIC, HEADSET_CMD_SET_DEBOUNCE, int)
+#define HEADSET_IOCTL_GET_MIC_DEBOUNCE _IOR(HEADSET_MAGIC, HEADSET_CMD_GET_MIC_DEBOUNCE, int)
+#define HEADSET_IOCTL_SET_MIC_DEBOUNCE _IOR(HEADSET_MAGIC, HEADSET_CMD_SET_MIC_DEBOUNCE, int)
 
 #define HEADSET_SPEAKER_MIC_SWITCH_STATE  0x1
 #define HEADSET_SPEAKER_ONLY_SWITCH_STATE 0x2

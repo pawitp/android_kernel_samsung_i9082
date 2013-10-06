@@ -148,6 +148,12 @@ config BQ24272_CHARGER
 	help
 	  Say Y here to enable support for charger bq24272 chips.
 
+config SMB358_CHARGER
+	bool "SMB358 support"
+	default n
+	help
+	  Say Y here to enable support for charger SMB358 chips.	  
+
 
 config BATTERY_DA9030
 	tristate "DA9030 battery driver"

@@ -80,4 +80,4 @@ obj-$(CONFIG_USB_ANDROID_RNDIS)	+= f_rndis.o u_ether.o
 obj-$(CONFIG_USB_ANDROID_ACCESSORY)	+= f_accessory.o
 obj-$(CONFIG_USB_BRCM)	+= brcm.o f_acm.o u_serial.o f_mass_storage.o f_rndis.o u_ether.o
 obj-$(CONFIG_USB_ANDROID_OBEX)	+= f_obex.o
-
+obj-$(CONFIG_USB_G_ANDROID_SAMSUNG_COMPOSITE)	+= multi_config.o

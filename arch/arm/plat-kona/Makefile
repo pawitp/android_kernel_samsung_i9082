@@ -12,7 +12,7 @@
 # consent.
 #*****************************************************************************
 
-obj-y := irq.o kona_timer.o timer.o profile_timer.o pinmux.o sysfs.o kona_mic_bias.o
+obj-y := irq.o kona_timer.o timer.o profile_timer.o pinmux.o sysfs.o kona_mic_bias.o ns_ioremap.o
 
 obj-$(CONFIG_SMP) += headsmp.o platsmp.o
 obj-$(CONFIG_LOCAL_TIMERS) += localtimer.o
@@ -58,7 +58,8 @@ obj-$(CONFIG_KONA_PROFILER) += profiler.o ccu_profiler.o pi_profiler.o
 obj-$(CONFIG_BCM_HWCAPRI_1605) += blocker.o
 
 obj-$(CONFIG_BCM_VC_SERVICES) += vc_dt.o vc_panic.o
-CFLAGS_vc_panic.o += -I"drivers/misc/vc04_services/interface/debug_sym"
+CFLAGS_vc_panic.o += -I"drivers/misc/vc04_services/interface/debug_sym" \
+	-I"include/linux/broadcom"
 
 ifeq ($(CONFIG_KONA_USB_CONTROL),)
 obj-y += bcm_hsotgctrl_dummy.o

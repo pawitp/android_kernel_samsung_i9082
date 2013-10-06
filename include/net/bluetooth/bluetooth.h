@@ -21,9 +21,6 @@
    COPYRIGHTS, TRADEMARKS OR OTHER RIGHTS, RELATING TO USE OF THIS 
    SOFTWARE IS DISCLAIMED.
 */
-
-
-#define CONFIG_BT_MGMT 
 #ifdef CONFIG_BT_MGMT
 #include "bluetooth_mgmt.h"
 #elif defined(CONFIG_BT_TIZEN)
@@ -90,7 +87,6 @@ int bt_printk(const char *level, const char *fmt, ...);
 #define BT_INFO(fmt, arg...)   bt_printk(KERN_INFO, pr_fmt(fmt), ##arg)
 #define BT_ERR(fmt, arg...)    bt_printk(KERN_ERR, pr_fmt(fmt), ##arg)
 #define BT_DBG(fmt, arg...)    pr_debug(fmt "\n", ##arg)
-//#define BT_DBG(fmt, arg...)    printk("%s "fmt "\n",__FUNCTION__, ##arg)
 
 /* Connection and socket states */
 enum {

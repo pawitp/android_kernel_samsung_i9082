@@ -527,6 +527,7 @@ static struct regulator_init_data bcm59056_vsr_data = {
 
 struct regulator_consumer_supply gp1_supply[] = {
 	{.supply = "gpldo1_uc"},
+	REGULATOR_SUPPLY("cam_sensor_vdd", NULL), /* CAM Sensor VDD */
 };
 static struct regulator_init_data bcm59056_gpldo1_data = {
 	.constraints = {
@@ -546,6 +547,7 @@ static struct regulator_init_data bcm59056_gpldo1_data = {
 
 struct regulator_consumer_supply gp2_supply[] = {
 	{.supply = "gpldo2_uc"},
+	REGULATOR_SUPPLY("vt_vdd", NULL), /* VT VDD */
 };
 static struct regulator_init_data bcm59056_gpldo2_data = {
 	.constraints = {
@@ -565,6 +567,7 @@ static struct regulator_init_data bcm59056_gpldo2_data = {
 
 struct regulator_consumer_supply gp3_supply[] = {
 	{.supply = "gpldo3_uc"},
+	REGULATOR_SUPPLY("8m_cam_vdd", NULL), /* CAM Sensor VDD */
 };
 static struct regulator_init_data bcm59056_gpldo3_data = {
 	.constraints = {
@@ -584,6 +587,7 @@ static struct regulator_init_data bcm59056_gpldo3_data = {
 
 struct regulator_consumer_supply gp4_supply[] = {
 	{.supply = "gpldo4_uc"},
+	REGULATOR_SUPPLY("cam_vdd", NULL), /* CAM  VDD */
 };
 static struct regulator_init_data bcm59056_gpldo4_data = {
 	.constraints = {

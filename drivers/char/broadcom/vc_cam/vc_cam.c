@@ -236,7 +236,7 @@ ssize_t vc_cam_front_ver_show(struct device *dev,
 #define CAM_FLASH_EN_GPIO   9
 #define CAM_FLASH_MODE_GPIO 13
 ssize_t vc_cam_rear_flash_toggle(struct device *dev,
-					struct device_attribute *attr, const char *buf, size_t count)
+	struct device_attribute *attr, const char *buf, size_t count)
 {
 	if (buf[0] == '0') {
 		gpio_direction_output(CAM_FLASH_EN_GPIO, 0);
@@ -419,7 +419,9 @@ static void vc_cam_fw_new(unsigned int vc_size)
 	 */
 	vc_cam_fw_size = vc_size;
 	send_vc_msg(VC_CAMDUAL_CMD_RECEIVE_GET_BUF, vc_cam_fw_size, 0);
+
 	vchiq_use_service(cam_service);
+
 }
 
 static void vc_cam_fw_done(int vc_update, int eeprom_update)
@@ -445,7 +447,9 @@ static void vc_cam_fw_done(int vc_update, int eeprom_update)
 			eeprom_update);
 
 		send_vc_msg(VC_CAMDUAL_CMD_RECEIVE_GET_BUF, 0, 0);
+
 		vchiq_use_service(cam_service);
+
 	}
 
 	/* end of any forced-update processing... */
@@ -805,6 +809,7 @@ static void write_cam_fw_size(int real_size, int crc)
 			  (kbuf[1] << 8)  |
 				kbuf[0]);
 		write_len = sys_write(fd, kbuf, sizeof(uint32_t));
+
 		LOG_DBG("%s: cam-fw %d (%d) - ret %d",
 			__func__,
 			size_to_write,

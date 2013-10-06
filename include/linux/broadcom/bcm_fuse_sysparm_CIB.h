@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010,2011 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/bcm_fuse_sysparm_CIB.h
+*	@file	include/linux/broadcom/bcm_fuse_sysparm_CIB.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -19,14 +19,23 @@
 #define SYSPARM_INDEX_READY_INDICATOR   0x5059504D
 #define MAX_SYSPARM_NAME_SIZE   128
 
-#define   DSP_FEATURE_AHS_SID_UPDATE_BEC_CHECK	/* Additional BEC check to determine SID updaet frame in Rxqual_s calculation */
+#define   DSP_FEATURE_AHS_SID_UPDATE_BEC_CHECK
+/* Additional BEC check to determine SID updaet frame in Rxqual_s calculation */
 #ifdef UNDER_LINUX
 
-#define   DSP_FEATURE_SUBBAND_NLP	/* Enable the compilation of ARM code specific to the subband_nlp feature in the DSP */
-#define   DSP_FEATURE_SUBBAND_INF_COMP	/* Enable Infinite compression subband compressor */
-#define   DSP_FEATURE_SUBBAND_INF_COMP_UL	/* Enable Infinite compression subband compressor sysparm/sheredmem init; not all the chips have ul and dl inf comp */
-#define   DSP_FEATURE_EC_DYN_RNG_ENHANCEMENT	/* Enable EC dynamic range enhancements in the DSP */
-#define   DSP_FEATURE_SUBBAND_NLP_MARGIN_VECTOR	/* Change single variable subband_nlp_UL_margin and subband_nlp_noise_margin thresholds into vector */
+#define   DSP_FEATURE_SUBBAND_NLP
+/* Enable the compilation of ARM code specific to the subband_nlp
+ feature in the DSP */
+#define   DSP_FEATURE_SUBBAND_INF_COMP
+/* Enable Infinite compression subband compressor */
+#define   DSP_FEATURE_SUBBAND_INF_COMP_UL
+/* Enable Infinite compression subband compressor sysparm/sheredmem init;
+ not all the chips have ul and dl inf comp */
+#define   DSP_FEATURE_EC_DYN_RNG_ENHANCEMENT
+/* Enable EC dynamic range enhancements in the DSP */
+#define   DSP_FEATURE_SUBBAND_NLP_MARGIN_VECTOR
+/* Change single variable subband_nlp_UL_margin and subband_nlp_noise_margin
+ thresholds into vector */
 #define   DSP_FEATURE_CLASS_33	/* Enable class 33 feature in the DSP */
 #define   DSP_FEATURE_NEW_FACCH_MUTING
 #define   DSP_FEATURE_NULLPAGE_AUTOTRACK
@@ -39,14 +48,17 @@
 #define   DSP_FEATURE_GAIN_DL_UL_NON_JUNO
 #define   DSP_FEATURE_USB_HEADSET_GAIN
 #define   DSP_FEATURE_AAC_LC_ENCODE_MIC_INPUT
-#define   DSP_FEATURE_OTD_SNR_CHECK	/* OTD reported in SCH is updated when passing SNR threshold. */
-#define   DSP_FEATURE_NORX0	/* Disable 1st RX slot so the previous frame can increase by one slot for search */
+#define   DSP_FEATURE_OTD_SNR_CHECK
+/* OTD reported in SCH is updated when passing SNR threshold. */
+#define   DSP_FEATURE_NORX0
+/* Disable 1st RX slot so the previous frame can increase by one slot
+ for search */
 #define   DSP_FEATURE_AAC_ENCODER_DOWNLOADABLE
 #define   DSP_FEATURE_OMEGA_VOICE
 #define   DSP_FEATURE_FR_MUTE_FRAME
 #include <linux/broadcom/chip_version.h>
 
-#endif // UNDER_LINUX
+#endif /* UNDER_LINUX */
 
 #include "audio_tuning.h"
 #include "sysparm_shared.h"
@@ -57,9 +69,10 @@
 
 #define NUM_OF_FREQ_OFFSETS			8
 
-/** Number of byte of Terminal Profile data defined in Sysparm. If the number of bytes is larger
- * than the "MAX_PROFILE_ARRAY_SIZE" defined in USIMAP/SIMAP, the extra bytes are truncated
- * and are not sent to the USIM/SIM.
+/** Number of byte of Terminal Profile data defined in Sysparm. If the number
+ * of bytes is larger than the "MAX_PROFILE_ARRAY_SIZE" defined in
+ * USIMAP/SIMAP, the extra bytes are truncated and are not sent to
+ * the USIM/SIM.
  */
 #define MAX_TERMINAL_PROFILE_ARRAY_SIZE  30
 

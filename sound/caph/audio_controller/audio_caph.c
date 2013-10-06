@@ -152,6 +152,8 @@ static char action_names[ACTION_AUD_TOTAL][40] = {
 #endif
 
 static unsigned int pathID[CTL_STREAM_PANEL_LAST];
+/* PCMOUT1,PCMOUT2*/
+static unsigned int pcm_playback_stream_id[2];
 static unsigned int n_msg_in, n_msg_out, last_action;
 static struct completion complete_kfifo;
 static struct TAudioHalThreadData sgThreadData;
@@ -807,6 +809,8 @@ static void AUDIO_Ctrl_Process(BRCM_AUDIO_ACTION_en_t action_code,
 					  AUDIO_DRIVER_START,
 					  &param_start->pdev_prop->p[0].
 					  sink);
+			pcm_playback_stream_id[param_start->stream] =
+				StreamIdOfDriver(param_start->drv_handle);
 		} else if (param_start->pdev_prop->p[0].drv_type ==
 			   AUDIO_DRIVER_PLAY_VOICE) {
 			AUDIO_DRIVER_Ctrl(param_start->drv_handle,
@@ -853,13 +857,13 @@ static void AUDIO_Ctrl_Process(BRCM_AUDIO_ACTION_en_t action_code,
 			    || (param_stop->pdev_prop->p[0].drv_type ==
 				AUDIO_DRIVER_PLAY_EPT)) {
 				/* disable the playback path */
-				AUDCTRL_DisablePlay(param_stop->pdev_prop->p[0].
-						    source,
-						    param_stop->pdev_prop->p[0].
-						    sink,
+
+ 				AUDCTRL_DisablePlay(param_stop->source,
+				param_stop->sink,
 						    pathID[param_stop->stream]);
 
 				pathID[param_stop->stream] = 0;
+				pcm_playback_stream_id[param_stop->stream] = 0;
 			}
 			aTrace(LOG_AUDIO_CNTLR,
 			       "AUDIO_Ctrl_Process ACTION_AUD_StopPlay"
@@ -882,7 +886,7 @@ static void AUDIO_Ctrl_Process(BRCM_AUDIO_ACTION_en_t action_code,
 				    (CTL_STREAM_PANEL_LAST - 1));
 
 			AUDIO_DRIVER_Ctrl(param_bufferready->drv_handle,
-					  AUDIO_DRIVER_BUFFER_READY, NULL);
+					  AUDIO_DRIVER_BUFFER_READY, arg_param);
 
 			/*aTrace(LOG_AUDIO_CNTLR,
 			"AUDIO_Ctrl_Process ACTION_AUD_BufferReady"
@@ -1679,6 +1683,33 @@ static void AUDIO_Ctrl_Process(BRCM_AUDIO_ACTION_en_t action_code,
 			aTrace(LOG_AUDIO_CNTLR,
 				"\n %lx:AUDIO_Ctrl_Process-"
 				"ACTION_AUD_HwCtl.\n", jiffies);
+
+			if (param_hwCtl->access_type == AUDCTRL_HW_CFG_DMA) {
+				if (pathID[0] != 0) {
+					/* PCMOUT1 is active	*/
+					param_hwCtl->arg2 =
+					pcm_playback_stream_id[0];
+					AUDCTRL_HardwareControl(
+						param_hwCtl->access_type,
+						param_hwCtl->arg1,
+						param_hwCtl->arg2,
+						param_hwCtl->arg3,
+						param_hwCtl->arg4);
+				}
+				if (pathID[1] != 0) {
+					/* PCMOUT2 is active*/
+					param_hwCtl->arg2 =
+					pcm_playback_stream_id[1];
+					AUDCTRL_HardwareControl(
+						param_hwCtl->access_type,
+						param_hwCtl->arg1,
+						param_hwCtl->arg2,
+						param_hwCtl->arg3,
+						param_hwCtl->arg4);
+				}
+				break;
+			}
+
 			AUDCTRL_HardwareControl(param_hwCtl->access_type,
 				param_hwCtl->arg1,
 				param_hwCtl->arg2,

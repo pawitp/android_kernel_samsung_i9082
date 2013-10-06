@@ -57,6 +57,7 @@
 #define SSAPI_ROW_AES			0x0E000006
 #define SSAPI_BRCM_START_VC_CORE	0x0E000008
 
+#ifndef __ASSEMBLY__
 extern void secure_api_call_init(void);
 
 extern unsigned secure_api_call(unsigned service_id, unsigned arg0,
@@ -65,8 +66,12 @@ extern unsigned secure_api_call(unsigned service_id, unsigned arg0,
 extern unsigned get_secure_buffer(void);
 
 extern unsigned get_secure_buffer_size(void);
+#endif /* __ASSEMBLY__ */
+
 #ifdef CONFIG_MOBICORE_DRIVER
-inline u32 mobicore_smc(u32 cmd, u32 arg1, u32 arg2, u32 arg3);
+#ifndef __ASSEMBLY__
+u32 mobicore_smc(u32 cmd, u32 arg1, u32 arg2, u32 arg3);
+#endif
 #define SMC_CMD_SLEEP		(-3)
 #define SMC_CMD_L2X0CTRL	(-21)
 #define SMC_CMD_L2X0SETUP1	(-22)

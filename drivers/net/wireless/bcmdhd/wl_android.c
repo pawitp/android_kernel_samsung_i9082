@@ -2,13 +2,13 @@
  * Linux cfg80211 driver - Android related functions
  *
  * Copyright (C) 1999-2012, Broadcom Corporation
- *
+ * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- *
+ * 
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,12 +16,12 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- *
+ * 
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wl_android.c 372067 2012-11-30 08:03:06Z $
+ * $Id: wl_android.c 397119 2013-04-17 08:58:29Z $
  */
 
 #include <linux/module.h>
@@ -93,6 +93,9 @@
 #endif
 #if defined(SUPPORT_SOFTAP_SINGL_DISASSOC)
 #define CMD_HAPD_STA_DISASSOC		"HAPD_STA_DISASSOC"
+#endif
+#if defined(SUPPORT_TRIGGER_HANG_EVENT)
+#define CMD_TEST_FORCE_HANG		"TEST_FORCE_HANG"
 #endif
 
 /* CCX Private Commands */
@@ -956,7 +959,7 @@ int wl_android_reassoc(struct net_device *dev, char *command, int total_len)
 	}
 	else {
 		band = ((channel <= CH_MAX_2G_CHANNEL) ? WL_CHANSPEC_BAND_2G : WL_CHANSPEC_BAND_5G);
-		reassoc_params.chanspec_list[0] = channel | band | WL_LCHANSPEC_BW_20;
+		reassoc_params.chanspec_list[0] = channel | band | WL_CHANSPEC_BW_20;
 	}
 #else
 	band = ((channel <= CH_MAX_2G_CHANNEL) ? WL_CHANSPEC_BAND_2G : WL_CHANSPEC_BAND_5G);
@@ -1359,6 +1362,10 @@ wl_android_set_ssid(struct net_device *dev, const char* hapd_ssid)
 	s32 ret;
 
 	ssid.SSID_len = strlen(hapd_ssid);
+	if (ssid.SSID_len > DOT11_MAX_SSID_LEN) {
+		ssid.SSID_len = DOT11_MAX_SSID_LEN;
+		DHD_ERROR(("%s : Too long SSID Length %d\n", __FUNCTION__, strlen(hapd_ssid)));
+	}
 	bcm_strncpy_s(ssid.SSID, sizeof(ssid.SSID), hapd_ssid, ssid.SSID_len);
 	DHD_INFO(("%s: HAPD_SSID = %s\n", __FUNCTION__, ssid.SSID));
 	ret = wldev_ioctl(dev, WLC_SET_SSID, &ssid, sizeof(wlc_ssid_t), true);
@@ -1464,7 +1471,7 @@ wl_android_sta_diassoc(struct net_device *dev, const char* straddr)
 	scbval.val = htod32(1);
 	bcm_ether_atoe(straddr, &scbval.ea);
 
-	DHD_INFO(("%s: deauth STA: "MACDBG "\n", __FUNCTION__,
+	DHD_ERROR(("%s: deauth STA: "MACDBG "\n", __FUNCTION__,
 		MAC2STRDBG(scbval.ea.octet)));
 
 	wldev_ioctl(dev, WLC_SCB_DEAUTHENTICATE_FOR_REASON, &scbval,
@@ -1903,6 +1910,12 @@ int wl_android_priv_cmd(struct net_device *net, struct ifreq *ifr, int cmd)
 		wl_android_sta_diassoc(net, (const char*)command+skip);
 	}
 #endif /* SUPPORT_SOFTAP_SINGL_DISASSOC */
+#if defined(SUPPORT_TRIGGER_HANG_EVENT)
+	else if (strnicmp(command, CMD_TEST_FORCE_HANG,
+		strlen(CMD_TEST_FORCE_HANG)) == 0) {
+		net_os_send_hang_message(net);
+	}
+#endif /* SUPPORT_TRIGGER_HANG_EVENT */
 #ifdef OKC_SUPPORT
 	else if (strnicmp(command, CMD_OKC_SET_PMK, strlen(CMD_OKC_SET_PMK)) == 0)
 		bytes_written = wl_android_set_pmk(net, command, priv_cmd.total_len);

@@ -15,7 +15,7 @@
 #ifndef _AL3006_I2C_SETTINGS_H_
 #define _AL3006_I2C_SETTINGS_H_
 
-#define AL3006_I2C_BUS_ID	0
+#define AL3006_I2C_BUS_ID	1
 #define AL3006_I2C_ADDRESS	0x1d
 
 /* Do not define AL3006_IRQ_GPIO as Capri board does not have GPIO127 poplulated */

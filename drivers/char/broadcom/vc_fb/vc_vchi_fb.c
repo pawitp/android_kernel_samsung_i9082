@@ -20,7 +20,7 @@
 #include <linux/slab.h>
 
 #include "vc_vchi_fb.h"
-#define VC_FB_VER 1
+#define VC_FB_VER       2
 #define VC_FB_VER_MIN   0
 
 /* ---- Private Constants and Types -------------------------------------- */
@@ -61,7 +61,7 @@ static void fb_vchi_callback(void *param,
 }
 
 VC_VCHI_FB_HANDLE_T vc_vchi_fb_init(VCHI_INSTANCE_T vchi_instance,
-				    VCHI_CONNECTION_T ** vchi_connections,
+				    VCHI_CONNECTION_T **vchi_connections,
 				    uint32_t num_connections)
 {
 	uint32_t i;
@@ -127,7 +127,7 @@ err_close_services:
 	return NULL;
 }
 
-int32_t vc_vchi_fb_stop(VC_VCHI_FB_HANDLE_T * handle)
+int32_t vc_vchi_fb_stop(VC_VCHI_FB_HANDLE_T *handle)
 {
 	FB_INSTANCE_T *instance;
 	uint32_t i;
@@ -167,7 +167,7 @@ int32_t vc_vchi_fb_stop(VC_VCHI_FB_HANDLE_T * handle)
 }
 
 int32_t vc_vchi_fb_get_scrn_info(VC_VCHI_FB_HANDLE_T handle,
-				 VC_FB_SCRN scrn, VC_FB_SCRN_INFO_T * info)
+				 VC_FB_SCRN scrn, VC_FB_SCRN_INFO_T *info)
 {
 	int ret;
 	FB_INSTANCE_T *instance = handle;
@@ -247,8 +247,8 @@ unlock:
 }
 
 int32_t vc_vchi_fb_alloc(VC_VCHI_FB_HANDLE_T handle,
-			 VC_FB_ALLOC_T * alloc,
-			 VC_FB_ALLOC_RESULT_T * alloc_result)
+			 VC_FB_ALLOC_T *alloc,
+			 VC_FB_ALLOC_RESULT_T *alloc_result)
 {
 	FB_INSTANCE_T *instance = handle;
 	int32_t success;
@@ -534,7 +534,7 @@ unlock:
 }
 
 int32_t vc_vchi_fb_cfg(VC_VCHI_FB_HANDLE_T handle,
-		       VC_FB_CFG_T * cfg, VC_FB_CFG_RESULT_T * cfg_result)
+		       VC_FB_CFG_T *cfg, VC_FB_CFG_RESULT_T *cfg_result)
 {
 	int32_t ret;
 	FB_INSTANCE_T *instance = handle;

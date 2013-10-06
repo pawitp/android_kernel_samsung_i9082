@@ -71,6 +71,7 @@ struct bcm_hsotgctrl_drv_data {
 	int hsotgctrl_irq;
 	bool irq_enabled;
 	bool allow_suspend;
+	bool usb_active;
 };
 
 static struct bcm_hsotgctrl_drv_data *local_hsotgctrl_handle;
@@ -82,12 +83,14 @@ static ssize_t dump_hsotgctrl(struct device *dev,
 {
 	struct bcm_hsotgctrl_drv_data *hsotgctrl_drvdata = dev_get_drvdata(dev);
 	void __iomem *hsotg_ctrl_base = hsotgctrl_drvdata->hsotg_ctrl_base;
+	int clk_cnt = clk_get_usage(hsotgctrl_drvdata->otg_clk);
 
 	/* This could be done after USB is unplugged
 	 * Turn on AHB clock so registers
 	 * can be read even when USB is unplugged
 	 */
-	bcm_hsotgctrl_en_clock(true);
+	if (!clk_cnt)
+		bcm_hsotgctrl_en_clock(true);
 
 	pr_info("\nusbotgcontrol: 0x%08X",
 		readl(hsotg_ctrl_base +
@@ -121,7 +124,8 @@ static ssize_t dump_hsotgctrl(struct device *dev,
 		    HSOTG_CTRL_USBPROBEN_OFFSET));
 
 	/* We turned on the clock so turn it off */
-	bcm_hsotgctrl_en_clock(false);
+	if (!clk_cnt)
+		bcm_hsotgctrl_en_clock(false);
 
 	return sprintf(buf, "hsotgctrl register dump\n");
 }
@@ -139,10 +143,22 @@ int bcm_hsotgctrl_en_clock(bool on)
 
 	if (on) {
 		bcm_hsotgctrl_handle->allow_suspend = false;
-		rc = clk_enable(bcm_hsotgctrl_handle->otg_clk);
+		pr_info("hsotgctrl_clk=on, clk_usage=%d\n",
+			clk_get_usage(bcm_hsotgctrl_handle->otg_clk));
+		if (!clk_get_usage(bcm_hsotgctrl_handle->otg_clk))
+			rc = clk_enable(bcm_hsotgctrl_handle->otg_clk);
 	} else {
-		clk_disable(bcm_hsotgctrl_handle->otg_clk);
-		bcm_hsotgctrl_handle->allow_suspend = true;
+		pr_info("hsotgctrl_clk=off, clk_usage=%d usb_active:%d\n",
+			clk_get_usage(bcm_hsotgctrl_handle->otg_clk),
+			bcm_hsotgctrl_handle->usb_active);
+		/*
+		* Only allow the clock to be shut off by the
+		* PMU if usb is not active
+		*/
+		if (!bcm_hsotgctrl_handle->usb_active) {
+			clk_disable(bcm_hsotgctrl_handle->otg_clk);
+			bcm_hsotgctrl_handle->allow_suspend = true;
+		}
 	}
 
 	if (rc)
@@ -159,13 +175,15 @@ int bcm_hsotgctrl_phy_init(bool id_device)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle =
 		local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) ||
 		  (!bcm_hsotgctrl_handle->hsotg_ctrl_base) ||
 		  (!bcm_hsotgctrl_handle->dev))
 		return -EIO;
 
+	bcm_hsotgctrl_handle->usb_active = true;
 	bcm_hsotgctrl_en_clock(true);
 	mdelay(HSOTGCTRL_STEP_DELAY_IN_MS);
 	/* clear bit 15 RDB error */
@@ -237,6 +255,7 @@ int bcm_hsotgctrl_phy_init(bool id_device)
 		/* Clear non-driving */
 		bcm_hsotgctrl_phy_set_non_driving(false);
 	}
+	msleep(HSOTGCTRL_ID_CHANGE_DELAY_IN_MS);
 
 	return 0;
 }
@@ -247,7 +266,8 @@ int bcm_hsotgctrl_phy_deinit(void)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle
 		= local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) || (!bcm_hsotgctrl_handle->dev))
 		return -EIO;
@@ -292,6 +312,7 @@ int bcm_hsotgctrl_phy_deinit(void)
 	bcm_hsotgctrl_phy_set_vbus_stat(false);
 
 	/* Disable the OTG core AHB clock */
+	bcm_hsotgctrl_handle->usb_active = false;
 	bcm_hsotgctrl_en_clock(false);
 	return 0;
 }
@@ -304,7 +325,8 @@ int bcm_hsotgctrl_bc_reset(void)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle
 		= local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) ||
 		  (!bcm_hsotgctrl_handle->dev))
@@ -350,7 +372,8 @@ int bcm_hsotgctrl_bc_status(unsigned long *status)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle
 		= local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk)
 		|| (!bcm_hsotgctrl_handle->dev) || !status)
@@ -370,7 +393,8 @@ int bcm_hsotgctrl_bc_vdp_src_off(void)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle
 		= local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) ||
 		  (!bcm_hsotgctrl_handle->dev))
@@ -408,12 +432,13 @@ void bcm_hsotgctrl_wakeup_core(void)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle =
 		local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return;
 
-	if (!clk_get_usage(bcm_hsotgctrl_handle->otg_clk)) {
-		/* Enable OTG AHB clock */
-		bcm_hsotgctrl_en_clock(true);
-	}
+	bcm_hsotgctrl_handle->usb_active = true;
+
+	/* Enable OTG AHB clock */
+	bcm_hsotgctrl_en_clock(true);
 
 	/* Disable wakeup interrupt */
 	bcm_hsotgctrl_phy_wakeup_condition(false);
@@ -460,7 +485,8 @@ static void bcm_hsotgctrl_delayed_wakeup_handler(struct work_struct *work)
 		container_of(work, struct bcm_hsotgctrl_drv_data,
 			 wakeup_work.work);
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return;
 
 	if (bcm_hsotgctrl_handle !=	local_hsotgctrl_handle) {
 		dev_warn(local_hsotgctrl_handle->dev,
@@ -479,7 +505,8 @@ static irqreturn_t bcm_hsotgctrl_wake_irq(int irq, void *dev)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle =
 		local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) || (!bcm_hsotgctrl_handle->dev))
 		return IRQ_NONE;
@@ -499,7 +526,8 @@ int bcm_hsotgctrl_get_clk_count(void)
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle =
 		local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) ||
 		  (!bcm_hsotgctrl_handle->dev))
@@ -515,7 +543,8 @@ int bcm_hsotgctrl_handle_bus_suspend(send_core_event_cb_t suspend_core_cb,
 	struct bcm_hsotgctrl_drv_data *bcm_hsotgctrl_handle =
 		local_hsotgctrl_handle;
 
-	if ( NULL == local_hsotgctrl_handle) return -ENODEV;
+	if (NULL == local_hsotgctrl_handle)
+		return -ENODEV;
 
 	if ((!bcm_hsotgctrl_handle->otg_clk) ||
 		  (!bcm_hsotgctrl_handle->dev))
@@ -543,6 +572,7 @@ int bcm_hsotgctrl_handle_bus_suspend(send_core_event_cb_t suspend_core_cb,
 	bcm_hsotgctrl_phy_wakeup_condition(true);
 
 	/* Disable OTG AHB clock */
+	bcm_hsotgctrl_handle->usb_active = false;
 	bcm_hsotgctrl_en_clock(false);
 
 	if (bcm_hsotgctrl_handle->irq_enabled == false) {
@@ -563,10 +593,10 @@ static int __devinit bcm_hsotgctrl_probe(struct platform_device *pdev)
 	struct bcm_hsotgctrl_platform_data *plat_data =
 	  (struct bcm_hsotgctrl_platform_data *)pdev->dev.platform_data;
 
-  if (plat_data == NULL) { 
+	if (plat_data == NULL) {
 		dev_err(&pdev->dev, "platform_data failed\n");
 		return -ENODEV;
-  } 
+	}
 
 	hsotgctrl_drvdata = kzalloc(sizeof(*hsotgctrl_drvdata), GFP_KERNEL);
 	if (!hsotgctrl_drvdata) {
@@ -596,25 +626,28 @@ static int __devinit bcm_hsotgctrl_probe(struct platform_device *pdev)
 	hsotgctrl_drvdata->otg_clk = clk_get(NULL,
 		plat_data->usb_ahb_clk_name);
 
-	if (IS_ERR_OR_NULL(hsotgctrl_drvdata->otg_clk)) {
+	if (IS_ERR(hsotgctrl_drvdata->otg_clk)) {
+		error = PTR_ERR(hsotgctrl_drvdata->otg_clk);
 		dev_warn(&pdev->dev, "OTG clock allocation failed\n");
 		kfree(hsotgctrl_drvdata);
-		return -EIO;
+		return error;
 	}
 
 	hsotgctrl_drvdata->mdio_master_clk = clk_get(NULL,
 		plat_data->mdio_mstr_clk_name);
 
-	if (IS_ERR_OR_NULL(hsotgctrl_drvdata->mdio_master_clk)) {
+	if (IS_ERR(hsotgctrl_drvdata->mdio_master_clk)) {
+		error = PTR_ERR(hsotgctrl_drvdata->mdio_master_clk);
 		dev_warn(&pdev->dev, "MDIO Mst clk alloc failed\n");
 		kfree(hsotgctrl_drvdata);
-		return -EIO;
+		return error;
 	}
 
 	hsotgctrl_drvdata->allow_suspend = true;
 	platform_set_drvdata(pdev, hsotgctrl_drvdata);
 
 	/* Init the PHY */
+	hsotgctrl_drvdata->usb_active = true;
 	bcm_hsotgctrl_en_clock(true);
 
 	mdelay(HSOTGCTRL_STEP_DELAY_IN_MS);
@@ -1104,12 +1137,12 @@ int bcm_hsotgctrl_phy_set_id_stat(bool floating)
 {
 	unsigned long val;
 	void *hsotg_ctrl_base;
-  
+
 	if (NULL != local_hsotgctrl_handle)
 		hsotg_ctrl_base = local_hsotgctrl_handle->hsotg_ctrl_base;
 	else
 		return -ENODEV;
-  printk("USBD][%s] start floating=%d\n",__func__,floating);
+	printk("USBD][%s] start floating=%d\n",__func__,floating);
 	val = readl(hsotg_ctrl_base + HSOTG_CTRL_USBOTGCONTROL_OFFSET);
 
 	if (floating)
@@ -1157,7 +1190,8 @@ int bcm_hsotgctrl_is_suspend_allowed(bool *suspend_allowed)
 		/* Return the status */
 		*suspend_allowed = local_hsotgctrl_handle->allow_suspend;
 		
-		pr_info("USBD][bcm_hsotgctrl_is_suspend_allowed]: %d\n",local_hsotgctrl_handle->allow_suspend);		
+		pr_info("USBD][bcm_hsotgctrl_is_suspend_allowed]: %d\n",
+			local_hsotgctrl_handle->allow_suspend);
 	} else {
 		/* No device handle */
 		return -ENODEV;

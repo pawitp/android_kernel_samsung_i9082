@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: bcmsdh_sdmmc.c 362913 2012-10-15 11:26:11Z $
+ * $Id: bcmsdh_sdmmc.c 396586 2013-04-13 08:54:51Z $
  */
 #include <typedefs.h>
 
@@ -884,8 +884,9 @@ sdioh_request_byte(sdioh_info_t *sd, uint rw, uint func, uint regaddr, uint8 *by
 	}
 
 	if (err_ret) {
-		sd_err(("bcmsdh_sdmmc: Failed to %s byte F%d:@0x%05x=%02x, Err: %d\n",
-		                        rw ? "Write" : "Read", func, regaddr, *byte, err_ret));
+		if (regaddr != 0x1001F && err_ret != -110)
+			sd_err(("bcmsdh_sdmmc: Failed to %s byte F%d:@0x%05x=%02x, Err: %d\n",
+				rw ? "Write" : "Read", func, regaddr, *byte, err_ret));
 	}
 
 	return ((err_ret == 0) ? SDIOH_API_RC_SUCCESS : SDIOH_API_RC_FAIL);
@@ -1097,7 +1098,7 @@ sdioh_request_packet(sdioh_info_t *sd, uint fix_inc, uint write, uint func,
 			 */
 			if (write == 0 || pkt_len < 32)
 				pkt_len = (pkt_len + 3) & 0xFFFFFFFC;
-			else if (pkt_len % blk_size)
+			else if ((pkt_len > blk_size) && (pkt_len % blk_size))
 				pkt_len += blk_size - (pkt_len % blk_size);
 
 #if defined(CUSTOMER_HW4) && defined(USE_DYNAMIC_F2_BLKSIZE)

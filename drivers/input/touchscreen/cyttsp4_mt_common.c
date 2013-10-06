@@ -41,20 +41,20 @@
 
 #ifdef PALM_ACTION
 	static int palm_detected = 0;
+      static int palm_reported = 0;
 #endif
 
 
 static void cyttsp4_lift_all(struct cyttsp4_mt_data *md)
 {
+	mutex_lock(&md->report_lock);
 	if (md->num_prv_tch != 0) {
 		if (md->mt_function.report_slot_liftoff)
 			md->mt_function.report_slot_liftoff(md);
-		/* ICS Lift off button release signal and empty mt */
-		if (md->prv_tch_type != CY_OBJ_HOVER)
-			input_report_key(md->input, BTN_TOUCH, CY_BTN_RELEASED);
 		input_sync(md->input);
 		md->num_prv_tch = 0;
 	}
+	mutex_unlock(&md->report_lock);
 }
 
 static void cyttsp4_get_touch_axis(struct cyttsp4_mt_data *md,
@@ -142,12 +142,23 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 	struct cyttsp4_touch tch;
 	int sig;
 	int i, j, t = 0;
-	int ids[max(CY_TMA1036_MAX_TCH + 1,
-		CY_TMA4XX_MAX_TCH + 1)]; /* add one for hover */
+	int ids[max(CY_TMA1036_MAX_TCH, CY_TMA4XX_MAX_TCH)];
 	int mt_sync_count = 0;
 
-	memset(ids, 0, (si->si_ofs.max_tchs + 1) * sizeof(int));
+	memset(ids, 0, si->si_ofs.tch_abs[CY_TCH_T].max * sizeof(int));
 	memset(&tch, 0, sizeof(struct cyttsp4_touch));
+
+	mutex_lock(&md->report_lock);
+#ifdef CONFIG_HAS_EARLYSUSPEND
+	/* Already suspended, ignore the touch report */
+	if (md->is_suspended) {
+		mutex_unlock(&md->report_lock);
+		dev_info(dev, "%s: Ignoring touch report due to suspend\n",
+			__func__);
+		return;
+             }
+#endif
+
 	for (i = 0; i < num_cur_tch; i++) {
 		cyttsp4_get_touch(md, &tch, si->xy_data +
 			(i * si->si_ofs.tch_rec_size));
@@ -165,15 +176,6 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 			continue;
 		}
 
-		/*
-		 * if any touch is hover, then there is only one touch
-		 * so it is OK to check the first touch for hover condition
-		 */
-		/*if ((md->num_prv_tch == 0 && tch.abs[CY_TCH_O] != CY_OBJ_HOVER)
-			|| (md->prv_tch_type == CY_OBJ_HOVER
-			&& tch.abs[CY_TCH_O] != CY_OBJ_HOVER))
-			input_report_key(md->input, BTN_TOUCH, CY_BTN_PRESSED); */
-
 		/* use 0 based track id's */
 		sig = md->pdata->frmwrk->abs
 			[(CY_ABS_ID_OST * CY_NUM_ABS_SET) + 0];
@@ -188,15 +190,6 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 			if (md->mt_function.input_report)
 				md->mt_function.input_report(md->input, sig, t);
 			ids[t] = true;
-		}
-
-		/* Check if hover on this touch */
-		dev_vdbg(dev, "%s: t=%d z=%d\n", __func__, t,
-			tch.abs[CY_TCH_P]);
-		if (t == CY_ACTIVE_STYLUS_ID) {
-			tch.abs[CY_TCH_P] = 0;
-			dev_dbg(dev, "%s: t=%d z=%d force zero\n", __func__, t,
-				tch.abs[CY_TCH_P]);
 		}
 
 		/* all devices: position and pressure fields */
@@ -274,7 +267,22 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 #endif
 			}
 #ifdef PALM_ACTION
-			input_report_abs(md->input, ABS_MT_PALM, palm_detected);
+            if (palm_detected) {
+                if (3 == palm_reported) {
+                    palm_reported= 1;
+                } else {
+                    palm_reported = 3;
+                }
+            } else {
+                if (2 == palm_reported) {
+                    palm_reported = 0;
+                } else {
+                    palm_reported = 2;
+
+                }
+            }
+
+            input_report_abs(md->input, ABS_MT_PALM, palm_reported);
 #endif
 
 		}
@@ -283,8 +291,9 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 		mt_sync_count++;
 
 cyttsp4_get_mt_touches_pr_tch:
+//print the touch event in logs
 		if (si->si_ofs.tch_rec_size > CY_TMA1036_TCH_REC_SIZE)
-			dev_dbg(dev,
+			dev_err(dev,
 				"%s: t=%d x=%d y=%d z=%d M=%d m=%d o=%d e=%d\n",
 				__func__, t,
 				tch.abs[CY_TCH_X],
@@ -295,7 +304,7 @@ cyttsp4_get_mt_touches_pr_tch:
 				tch.abs[CY_TCH_OR],
 				tch.abs[CY_TCH_E]);
 		else
-			dev_dbg(dev,
+			dev_err(dev,
 				"%s: t=%d x=%d y=%d z=%d e=%d\n", __func__,
 				t,
 				tch.abs[CY_TCH_X],
@@ -305,11 +314,12 @@ cyttsp4_get_mt_touches_pr_tch:
 	}
 
 	if (md->mt_function.final_sync)
-		md->mt_function.final_sync(md->input, si->si_ofs.max_tchs,
+		md->mt_function.final_sync(md->input, si->si_ofs.tch_abs[CY_TCH_T].max,
 				mt_sync_count, ids);
 
 	md->num_prv_tch = num_cur_tch;
 	md->prv_tch_type = tch.abs[CY_TCH_O];
+	mutex_unlock(&md->report_lock);
 
 	return;
 }
@@ -518,11 +528,13 @@ static void cyttsp4_mt_early_suspend(struct early_suspend *h)
 
 	dev_dbg(dev, "%s\n", __func__);
 
-	if (md->si)
-	cyttsp4_lift_all(md);
-	pm_runtime_put(dev);
 
 	md->is_suspended = true;
+
+	if (md->si)
+	cyttsp4_lift_all(md);
+
+	pm_runtime_put(dev);
 }
 
 static void cyttsp4_mt_late_resume(struct early_suspend *h)
@@ -557,6 +569,7 @@ static int cyttsp4_mt_suspend(struct device *dev)
 
 	if (md->si)
 	cyttsp4_lift_all(md);
+
 	return 0;
 }
 
@@ -590,7 +603,6 @@ static int cyttsp4_setup_input_device(struct cyttsp4_device *ttsp)
 	bitmap_fill(md->input->absbit, ABS_MAX);
 
        __set_bit(INPUT_PROP_DIRECT, md->input->propbit);
-	// __set_bit(BTN_TOUCH, md->input->keybit);
 
 	/* If virtualkeys enabled, don't use all screen */
 	if (md->pdata->flags & CY_FLAG_VKEYS) {
@@ -652,7 +664,7 @@ static int cyttsp4_setup_input_device(struct cyttsp4_device *ttsp)
 #endif
 
 	rc = md->mt_function.input_register_device(md->input,
-			md->si->si_ofs.max_tchs);
+			md->si->si_ofs.tch_abs[CY_TCH_T].max);
 	if (rc < 0)
 		dev_err(dev, "%s: Error, failed register input device r=%d\n",
 			__func__, rc);
@@ -736,6 +748,7 @@ static int cyttsp4_mt_probe(struct cyttsp4_device *ttsp)
 
 	cyttsp4_init_function_ptrs(md);
 
+	mutex_init(&md->report_lock);
 	md->prv_tch_type = CY_OBJ_STANDARD_FINGER;
 	md->ttsp = ttsp;
 	md->pdata = pdata;

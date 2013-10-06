@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/regaccess.h
+*	@file	include/linux/broadcom/regaccess.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -92,18 +92,18 @@ static inline void reg8_and_bits(volatile u8 *reg, u8 bits)
 }
 
 #define regaccess_or_bits(reg, bits) (\
-   (sizeof(*reg) == sizeof(u32)) ? \
-   reg32_or_bits((volatile u32 *)reg, (u32)bits) : \
-   ((sizeof(*reg) == sizeof(u16)) ? \
-   reg16_or_bits((volatile u16 *)reg, (u16)bits) : \
-   reg8_or_bits((volatile u8 *)reg, (u8)bits)))
+(sizeof(*reg) == sizeof(u32)) ? \
+reg32_or_bits((volatile u32 *)reg, (u32)bits) : \
+((sizeof(*reg) == sizeof(u16)) ? \
+reg16_or_bits((volatile u16 *)reg, (u16)bits) : \
+reg8_or_bits((volatile u8 *)reg, (u8)bits)))
 
 #define regaccess_and_bits(reg, bits) (\
-   (sizeof(*reg) == sizeof(u32)) ? \
-   reg32_and_bits((volatile u32 *)reg, (u32)bits) : \
-   ((sizeof(*reg) == sizeof(u16)) ? \
-   reg16_and_bits((volatile u16 *)reg, (u16)bits) : \
-   reg8_and_bits((volatile u8 *)reg, (u8)bits)))
+(sizeof(*reg) == sizeof(u32)) ? \
+reg32_and_bits((volatile u32 *)reg, (u32)bits) : \
+((sizeof(*reg) == sizeof(u16)) ? \
+reg16_and_bits((volatile u16 *)reg, (u16)bits) : \
+reg8_and_bits((volatile u8 *)reg, (u8)bits)))
 
 #endif /* __KERNEL__ */
 #endif /* __ASM_ARCH_REGACESS_H */

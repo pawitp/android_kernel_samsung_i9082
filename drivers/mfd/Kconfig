@@ -58,6 +58,13 @@ config MFD_BCM59056
 	help
 	  This enables PMU driver to support BCM59056.
 
+config MFD_BCM59054
+	bool "PMU BCM59054 Support"
+	depends on MFD_BCMPMU
+	default n
+	help
+	  This enables PMU driver to support BCM59054.
+
 config MFD_BCM_PWRMGR_SW_SEQUENCER
 	bool "MFD BCM POWER MANAGER I2C SEQUENCER Support"
 	depends on MFD_BCMPMU && KONA_PWRMGR_REV2 && (RHEA_PWRMGR_USE_DUMMY_SEQ=n || CAPRI_PWRMGR_USE_DUMMY_SEQ=n)

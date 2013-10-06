@@ -622,6 +622,7 @@ static int SelCtrlPut(struct snd_kcontrol *kcontrol,
 					 * If stIHF remove EP path first.
 					 */
 #ifndef CONFIG_CAPH_STEREO_IHF
+				if (i < MAX_PLAYBACK_DEV - 1)
 					if ((isSTIHF) &&
 					    (pCurSel[i] == AUDIO_SINK_LOUDSPK)
 					    && (pChip->streamCtl[stream - 1].
@@ -1176,6 +1177,7 @@ static int MiscCtrlGet(struct snd_kcontrol *kcontrol,
 	case CTL_FUNCTION_CFG_IHF:
 		ucontrol->value.integer.value[0] = pChip->pi32CfgIHF[0];
 		ucontrol->value.integer.value[1] = pChip->pi32CfgIHF[1];
+		break;
 	case CTL_FUNCTION_CFG_SSP:
 		ucontrol->value.integer.value[0] =
 		    pChip->i32CfgSSP[kcontrol->id.index];
@@ -2143,12 +2145,15 @@ static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_IHFDL,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_HW_CTL)),
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)	
-	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_MODE_SEL,
-				 CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
+	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_PRIMARY_MIC,
+			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_MIC_SEL,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
+				 CTL_FUNCTION_HW_CTL)),
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)	
+	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_MODE_SEL,
+				 CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_CFG_BT_SEL,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
@@ -2167,6 +2172,8 @@ static struct snd_kcontrol_new sgSndCtrls[] __devinitdata = {
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
 				 CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_PRINT_PATH,
+				CAPH_CTL_PRIVATE(1, 1, CTL_FUNCTION_HW_CTL)),
+	BRCM_MIXER_CTRL_MISC(0, 0, "HW-CTL", AUDCTRL_HW_PRINT_MICS,
 				CAPH_CTL_PRIVATE(1, 1, CTL_FUNCTION_HW_CTL)),
 	BRCM_MIXER_CTRL_MISC(0, 0, "AMP-CTL", 0,
 			     CAPH_CTL_PRIVATE(CTL_STREAM_PANEL_MISC, 1,
@@ -2215,6 +2222,8 @@ int __devinit ControlDeviceNew(struct snd_card *card)
 		devSelect.name = gStrCtlNames[nIndex++];
 		devSelect.private_value = CAPH_CTL_PRIVATE(idx + 1, 0, 0);
 
+		if (idx >= CTL_STREAM_PANEL_MISC)
+			continue;
 		CAPH_ASSERT(strlen(devSelect.name) < MAX_CTL_NAME_LENGTH);
 		err = snd_ctl_add(card, snd_ctl_new1(&devSelect, pChip));
 		if (err < 0) {

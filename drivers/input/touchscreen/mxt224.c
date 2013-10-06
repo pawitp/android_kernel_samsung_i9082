@@ -551,6 +551,7 @@ static void mxt224_ta_probe(struct mxt224_data *data, bool ta_status)
 			  size_one, &value);
 	}
 	data->ta_status_pre = (bool) ta_status;
+	calibrate_chip(data);
 };
 
 static void check_chip_calibration(struct mxt224_data *data,
@@ -2666,7 +2667,7 @@ static ssize_t set_mxt_firm_version_show(struct device *dev,
 	struct mxt224_data *data = dev_get_drvdata(dev);
 	fw_latest_version = data->tsp_version_disp;
 	pr_info("Atmel Last firmware version is %d\n", fw_latest_version);
-	return sprintf(buf, "%#02x\n", fw_latest_version);
+	return sprintf(buf, "%#02x", fw_latest_version);
 }
 
 static ssize_t set_mxt_firm_version_read_show(struct device *dev,
@@ -2674,7 +2675,7 @@ static ssize_t set_mxt_firm_version_read_show(struct device *dev,
 					      char *buf)
 {
 	struct mxt224_data *data = dev_get_drvdata(dev);
-	return sprintf(buf, "%#02x\n", data->tsp_version_disp);
+	return sprintf(buf, "%#02x", data->tsp_version_disp);
 }
 
 static ssize_t set_mxt_config_version_read_show(struct device *dev,

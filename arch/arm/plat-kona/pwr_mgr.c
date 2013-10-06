@@ -1479,6 +1479,43 @@ int pwr_mgr_unregister_event_handler(u32 event_id)
 
 EXPORT_SYMBOL(pwr_mgr_unregister_event_handler);
 
+int pwr_mgr_get_wakeup_events(u32 *eventBuff, int eventBuffSize)
+{
+	u32 reg_val = 0;
+	int inx, i;
+	unsigned long flgs;
+
+	pwr_dbg(PWR_LOG_EVENT, "%s\n", __func__);
+	if (unlikely(!pwr_mgr.info)) {
+		pwr_dbg(PWR_LOG_ERR, "%s:ERROR - pwr mgr not initialized\n",
+			__func__);
+		return -EPERM;
+	}
+
+	spin_lock_irqsave(&pwr_mgr_lock, flgs);
+
+	for (i = 0; i < eventBuffSize; i++)
+		eventBuff[i] = 0;
+
+	i = 0;
+
+	for (inx = 0; inx < PWR_MGR_NUM_EVENTS; inx++) {
+		reg_val = readl(PWR_MGR_REG_ADDR(inx * 4));
+		if (reg_val & (PWRMGR_EVENT_NEGEDGE_CONDITION_ENABLE_MASK \
+			| PWRMGR_EVENT_POSEDGE_CONDITION_ENABLE_MASK)) {
+			if (reg_val & PWRMGR_EVENT_CONDITION_ACTIVE_MASK) {
+				eventBuff[i++] = inx;
+				if (i >= eventBuffSize)
+					break;
+			}
+		}
+	}
+
+	spin_unlock_irqrestore(&pwr_mgr_lock, flgs);
+	return 0;
+}
+EXPORT_SYMBOL(pwr_mgr_get_wakeup_events);
+
 int pwr_mgr_process_events(u32 event_start, u32 event_end, int clear_event)
 {
 	u32 reg_val = 0;
@@ -1614,7 +1651,7 @@ static irqreturn_t pwr_mgr_irq_handler(int irq, void *dev_id)
 					pr_err("CMD CTRL: %08x, status: %08x"
 					" mask: %08x, busy_count: %ull\n",
 					reg, status, mask, pm_seq_busy_count);
-			return IRQ_HANDLED;
+					return IRQ_HANDLED;
 				}
 			} else
 				break;
@@ -2507,7 +2544,11 @@ static int set_pm_is_idle_dbg_indx(void *data, u64 val)
 	u32 reg_val = 0;
 	struct clk *root_ccu;
 	struct ccu_clk *ccu_clk;
+
 	root_ccu = clk_get(NULL, ROOT_CCU_CLK_NAME_STR);
+	if (IS_ERR(root_ccu))
+		return PTR_ERR(root_ccu);
+
 	ccu_clk = to_ccu_clk(root_ccu);
 	#define INDEX_VAL 0xFF
 
@@ -2517,9 +2558,7 @@ static int set_pm_is_idle_dbg_indx(void *data, u64 val)
 		return -EPERM;
 	}
 
-	if (IS_ERR_OR_NULL(ccu_clk) ||
-		!ccu_clk->ccu_ops ||
-		!ccu_clk->ccu_ops->write_access)
+	if (!ccu_clk->ccu_ops || !ccu_clk->ccu_ops->write_access)
 		return -EINVAL;
 
 	spin_lock_irqsave(&ccu_clk->wr_lock, flags);

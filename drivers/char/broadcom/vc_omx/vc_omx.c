@@ -46,7 +46,7 @@ static dev_t vc_omx_devnum;
 static struct class *vc_omx_class;
 static struct cdev vc_omx_cdev;
 static struct vc_omx_comp_supported
- vc_omx_info[OMX_PLUGIN__COMPONENT_SUPPORTED__NUM + 1] = {
+	vc_omx_info[OMX_PLUGIN__COMPONENT_SUPPORTED__NUM + 1] = {
 	{1,
 	 OMX_PLUGIN__MKNAME(OMX_PLUGIN__COMPONENT_SUPPORTED__VIDEO_DECODER,
 			    OMX_PLUGIN__COMPONENT_SUPPORTED__MPEG4)},
@@ -81,6 +81,9 @@ static struct vc_omx_comp_supported
 	{1,
 	 OMX_PLUGIN__MKNAME(OMX_PLUGIN__COMPONENT_SUPPORTED__VIDEO_ENCODER,
 			    OMX_PLUGIN__COMPONENT_SUPPORTED__AVC)},
+	{1,
+	 OMX_PLUGIN__MKNAME(OMX_PLUGIN__COMPONENT_SUPPORTED__VIDEO_ENCODER,
+			    OMX_PLUGIN__COMPONENT_SUPPORTED__MIRACAST)},
 };
 
 static struct vc_omx_comp_status vc_omx_status;

@@ -31,6 +31,10 @@
 #include <mach/rdb/brcm_rdb_ehci.h>
 
 #ifdef __ASSEMBLY__
+
+/* Group 1 */
+#define KONA_SRAM_VA \
+	IO_TO_VIRT_XLATE(INT_SRAM_BASE, IO_APB_G1_PHYS, IO_APB_G1_VIRT)
 /* Group 6 */
 #define KONA_UART0_VA \
 	IO_TO_VIRT_XLATE(UARTB_BASE_ADDR, IO_APB_G6_PHYS, IO_APB_G6_VIRT)
@@ -102,6 +106,11 @@
 #define KONA_MEMC0_DPHY_VA          HW_IO_PHYS_TO_VIRT( MEMC0_OPEN_DPHY_BASE_ADDR )	/* System Memory Controller DPHY */
 #define KONA_MEMC0_NS_VA            HW_IO_PHYS_TO_VIRT( MEMC0_OPEN_BASE_ADDR )	/* Non-Secure System Memory Controller */
 #define KONA_MEMC0_S_VA             HW_IO_PHYS_TO_VIRT( MEMC0_SECURE_BASE_ADDR )	/* Secure System Memory Controller */
+/* DDR3 related address (share addresses with DDR2) */
+#define KONA_MEMC0_DDR3_CTL         HW_IO_PHYS_TO_VIRT(MEMC0_DDR3_CTL_BASE_ADDR)    /* DDR3 Control (0x3500_8400) */
+#define KONA_MEMC0_DDR3_PHY_ADDR_CTL_VA HW_IO_PHYS_TO_VIRT(MEMC0_DDR3_PHY_ADDR_CTL_BASE_ADDR) /* DDR40 PHY Address Control (0x3500_8800) */
+#define KONA_MEMC0_DDR3_PHY_WL_0    HW_IO_PHYS_TO_VIRT(MEMC0_DDR3_PHY_WL_0_BASE_ADDR)  /* DDR4 PHY Word Lane 0 (0x3500_8A00) */
+#define KONA_MEMC0_DDR3_PHY_WL_1    HW_IO_PHYS_TO_VIRT(MEMC0_DDR3_PHY_WL_1_BASE_ADDR)  /* DDR4 PHY Word Lane 1 (0x3500_8C00) */
 #define KONA_MEMC1_APHY_VA          HW_IO_PHYS_TO_VIRT( MEMC1_OPEN_APHY_BASE_ADDR)	/* Videocore Memory Controller APHY */
 #define KONA_MEMC1_DPHY_VA          HW_IO_PHYS_TO_VIRT( MEMC1_OPEN_DPHY_BASE_ADDR)	/* Videocore Memory Controller DPHY */
 #define KONA_MEMC1_NS_VA            HW_IO_PHYS_TO_VIRT( MEMC1_OPEN_BASE_ADDR)	/* Non-Secure Videocore Memory Controller */

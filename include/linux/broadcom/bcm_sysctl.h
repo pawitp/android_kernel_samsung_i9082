@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/bcm_sysctl.h
+*	@file	include/linux/broadcom/bcm_sysctl.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -69,31 +69,53 @@
 
 #define BCM_SYSCTL_LCD_PERF            1	/* int: 0 = off, 1 = on     */
 #define BCM_SYSCTL_LCD_PERF_FREQ       2	/* int: jiffies per update  */
-#define BCM_SYSCTL_LCD_PERF_PEAKBUSY   3	/* int: peak busy in jiffy units */
-#define BCM_SYSCTL_LCD_PERF_USRBUSY    4	/* int: user busy in cpu usage percentage */
-#define BCM_SYSCTL_LCD_PERF_SYSBUSY    5	/* int: system busy in cpu usage percentage */
-#define BCM_SYSCTL_LCD_PERF_NICEBUSY   6	/* int: nice busy in cpu usage percentage */
+#define BCM_SYSCTL_LCD_PERF_PEAKBUSY   3
+	/* int: peak busy in jiffy units */
+#define BCM_SYSCTL_LCD_PERF_USRBUSY    4
+	/* int: user busy in cpu usage percentage */
+#define BCM_SYSCTL_LCD_PERF_SYSBUSY    5
+	/* int: system busy in cpu usage percentage */
+#define BCM_SYSCTL_LCD_PERF_NICEBUSY   6
+	/* int: nice busy in cpu usage percentage */
 
-#define BCM_SYSCTL_PMU_LEVEL           1	/* int: debug message level          */
-#define BCM_SYSCTL_PMU_IRQS            2	/* int: # interrupts processed       */
-#define BCM_SYSCTL_PMU_BATTLEVEL       3	/* int: battery level (0 to 5)       */
-#define BCM_SYSCTL_PMU_CHGPLUGGEDIN    4	/* int: charger insertion status     */
-#define BCM_SYSCTL_PMU_CHGSTATE        5	/* int: 1 when battery fully charged */
-#define BCM_SYSCTL_PMU_PWRON           6	/* int: power-on condition           */
-#define BCM_SYSCTL_PMU_PWRSTATE        7	/* int: 0 = off, 1 = on              */
-#define BCM_SYSCTL_PMU_HSSTATE         8	/* int: headset state                */
+#define BCM_SYSCTL_PMU_LEVEL           1
+	/* int: debug message level          */
+#define BCM_SYSCTL_PMU_IRQS            2
+	/* int: # interrupts processed       */
+#define BCM_SYSCTL_PMU_BATTLEVEL       3
+	/* int: battery level (0 to 5)       */
+#define BCM_SYSCTL_PMU_CHGPLUGGEDIN    4
+	/* int: charger insertion status     */
+#define BCM_SYSCTL_PMU_CHGSTATE        5
+	/* int: 1 when battery fully charged */
+#define BCM_SYSCTL_PMU_PWRON           6
+	/* int: power-on condition           */
+#define BCM_SYSCTL_PMU_PWRSTATE        7
+	/* int: 0 = off, 1 = on              */
+#define BCM_SYSCTL_PMU_HSSTATE         8
+	/* int: headset state                */
 
-#define BCM_SYSCTL_CAM_LEVEL           1	/* int: debug message level          */
-#define BCM_SYSCTL_CAM_VSYNCIRQS       2	/* int: # vsync interrupts processed */
-#define BCM_SYSCTL_CAM_DMA_CAM         3	/* int: # dma ints from cam to mem   */
-#define BCM_SYSCTL_CAM_BLOCKED         4	/* int: # dma transfers blocked      */
+#define BCM_SYSCTL_CAM_LEVEL           1
+	/* int: debug message level          */
+#define BCM_SYSCTL_CAM_VSYNCIRQS       2
+	/* int: # vsync interrupts processed */
+#define BCM_SYSCTL_CAM_DMA_CAM         3
+	/* int: # dma ints from cam to mem   */
+#define BCM_SYSCTL_CAM_BLOCKED         4
+	/* int: # dma transfers blocked      */
 
-#define BCM_SYSCTL_GPIO_LEVEL          1	/* int: debug message level          */
-#define BCM_SYSCTL_GPIO_ISR            2	/* int: global GPIO ISR registered   */
-#define BCM_SYSCTL_GPIO_IRQS           3	/* int: number of global GPIO IRQs   */
-#define BCM_SYSCTL_GPIO_REGISTERED0    4	/* int: mask of GPIO line registered  (0 to 31) */
-#define BCM_SYSCTL_GPIO_REGISTERED1    5	/* int: mask of GPIO line registered (32 to 64) */
-#define BCM_SYSCTL_GPIO_BASE           6	/* int: base number for GPIO info    */
+#define BCM_SYSCTL_GPIO_LEVEL          1
+	/* int: debug message level          */
+#define BCM_SYSCTL_GPIO_ISR            2
+	/* int: global GPIO ISR registered   */
+#define BCM_SYSCTL_GPIO_IRQS           3
+	/* int: number of global GPIO IRQs   */
+#define BCM_SYSCTL_GPIO_REGISTERED0    4
+	/* int: mask of GPIO line registered  (0 to 31) */
+#define BCM_SYSCTL_GPIO_REGISTERED1    5
+	/* int: mask of GPIO line registered (32 to 64) */
+#define BCM_SYSCTL_GPIO_BASE           6
+	/* int: base number for GPIO info    */
 
 #define BCM_SYSCTL_DMA_LEVEL           1
 #define BCM_SYSCTL_DMA_ISR             2

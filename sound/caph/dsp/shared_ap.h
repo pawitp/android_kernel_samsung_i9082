@@ -62,6 +62,8 @@
 #define AP_SHARED_SEC_GEN_AUDIO        __attribute__( ( section( ".DSECT ap_shared_sec_gen_audio") ) )          
 // Debug
 #define AP_SHARED_SEC_DIAGNOS          __attribute__( ( section( ".DSECT ap_shared_sec_diagnos") ) )          
+#define DSP_AP_SCRATCHMEM_SEC	\
+	__attribute__((section(".DSECT dsp_ap_scratchmem_sec")))
 #    undef EXTERN
 #    ifdef RIP_EXTERN_DECLARE
 #        define EXTERN
@@ -75,6 +77,7 @@
 #define    AP_SHARED_SEC_CMD_STATUS        
 #define    AP_SHARED_SEC_GEN_AUDIO
 #define    AP_SHARED_SEC_DIAGNOS         
+#define	DSP_AP_SCRATCHMEM_SEC
 #endif	// MSP
 
 
@@ -105,6 +108,15 @@
 
 #define DJB_BUFFER_SIZE     			600		// 600 words ~ 300ms
 
+/*---------- Defining supported features --------*/
+
+/* AADMAC buffers are in scratch memory instead of shared memory */
+#define SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BIT 0
+#define SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BITF \
+	(1<<SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BIT)
+
+
+/*---------- Typedefs --------*/
 typedef struct
 {
 	UInt32 array2[35];
@@ -569,7 +581,7 @@ typedef enum
     *  
     *              \note  To prevent the 20ms speech fragments left in the audio output buffer from repeatedly being played 
     *              out to the speaker/ear-piece in IDLE mode, it is necessary for the ARM to instruct the DSP to disable the
-    *              audio path via the vp_disable_audio_path flag.
+    *              audio path via the “vp_disable_audio_path” flag.
     */
 	VP_COMMAND_STOP_PLAYBACK,				// 0x9 	()
    /** \HR */
@@ -951,21 +963,9 @@ typedef enum
 	*  \par Command Code		   
 	* 				   0x1D
 	*  \par Description 
-	* 	  This command enables the output to the speaker path at 48kHz. This command has to be sent by the APE before 
-	*     sending COMMAND_SOFTWARE_ SPEAKER_PROTECTION_ENABLE. COMMAND_NEWAUDFIFO_START and before enabling EANC.
-	*     APE should enable the Audio interrupts to
-    *     come to the DSP at 16kHz using the COMMAND_AUDIO_ENABLE command, and the audio
-    *     input or output should be enabled using the COMMAND_AUDIO_CONNECT command.
-	* 			 
-	* 			 @param  UInt16  	{
-	*								Bit 0: Enable_48kHz_Speaker_Output: 0 = Disable, 1 = Enable
-	*                                                    Bit 1: Interrupt is enabled for this  // Not supported currently
-	*                                                    Bit 2: = 0 Mono, = 1 Stereo // Currently only supports mono 
-	*							}
-	*
-	* 			 \see COMMAND_SOFTWARE_SPEAKER_PROTECTION_ENABLE, NEWAUDFIFO Interface, COMMAND_NEWAUDFIFO_START  
+	*	This command is obsolete
 	*/
-	VP_COMMAND_48KHZ_SPEAKER_OUTPUT_ENABLE,	// 0x1D	  ( enable )
+	VP_COMMAND_48KHZ_SPEAKER_OUTPUT_ENABLE,	/* 0x1D	  ( obsolete ) */
    /** \HR */
    /** \par Module
 	* 				   Audio 
@@ -1080,6 +1080,10 @@ typedef enum
      *       This command is sent by the ARM to the DSP for starting or
      *       stopping of 48kHz data transfer from the ARM to the DSP. \BR
      *
+     *       Once the DSP completes the processing of this command it sends
+     *       the VP_STATUS_ARM2SP_HQ_DL_INIT_DONE to the AP to indicate to it
+     *       that the AADMAC channel is ready for transmission.
+     *
      *  \note Before getting this command ARM should have sent
      *       COMMAND_AUDIO_ENABLE, and the audio inputs and outputs enabled
      *       by COMMAND_AUDIO_CONNECT, along with enabling of the 48kHz
@@ -1087,43 +1091,20 @@ typedef enum
      *
      *       To start ARM2SP_HQ_DL: ARM enables ARM2SP_HQ_DL by
      *                              VP_COMMAND_SET_ARM2SP_HQ_DL.
-     *       To resume ARM2SP_HQ_DL: ARM enables ARM2SP_HQ_DL by
-     *                              VP_COMMAND_SET_ARM2SP_HQ_DL with arg1=1.
      *
-     *       To control shared_Arm2SP_InBuf[]: DSP interrupts ARM
-     *       with VP_STATUS_ARM2SP_HQ_DL_EMPTY( shared_ARM2SP_HQ_DL_done_flag,
-     *       shared_ARM2SP_HQ_DL_InBuf_out, ARM2SP_HQ_DL_flag )
-     *       whenever finishing every 2/4 20ms data.
-     *       shared_ARM2SP_HQ_DL_InBuf_out indicates the next index DSP will
-     *       read.\BR
      * 
      *       To stop ARM2SP_HQ_DL:\BR
      *       Quick stop: ARM disables ARM2SP_HQ_DL using
      *       VP_COMMAND_SET_ARM2SP_HQ_DL (arg0=0).\BR
      *       The ARM2SP_HQ_DL will be stopped right away. There may be
-     *       un-finished PCM data in shared_Arm2SP_InBuf[].\BR
-     * 
-     *       Finishing stop: After finishing filling the last speech frames of
-     *       PCM data, ARM set shared_ARM2SP_HQ_DL_done_flag=1
-     *       to indicate the end of PCM data. DSP ISR finishes the last speech
-     *       frames and disables ARM2SP_HQ_DL. DSP sends
-     *       VP_STATUS_ARM2SP_HQ_DL_EMPTY and arg0=0. \BR
-     * 
-     *       To pause ARM2SP_HQ_DL : ARM disables ARM2SP_HQ_DL using
-     *       VP_COMMAND_SET_ARM2SP_HQ_DL (arg0=0, arg1=1).
+     *       un-finished PCM data in shared_Arm2SP_HQ_DL_InBuf[].\BR
      * 
      * 
      *              @param  UInt16 ARM2SP_HQ_DL_flag \BR
      *                      \htmlonly
      *                      <pre>
      *                             {
-     *                               bits14:12   - Number of frames of data
-     *                                             after which the DSP is
-     *                                             supposed to send the
-     *                                             VP_STATUS_ARM2SP_HQ_DL_EMPTY
-     *                                             reply
-     *                                             (between 1 and 4 or 1 and 2)
-     *                               bit11:10    - reserved
+     *                               bit15:10    - reserved
      *                               bit9        - DL_OVERWRITE_bit
      *                                             1= overwrite ARM2SP_HQ_DL
      *                                                buffer to DL
@@ -1135,29 +1116,16 @@ typedef enum
      *                                                DL_OVERWRITE_bit
      *                                                setting)
      *                               bit7        - 48kHz Mono/Stereo
-     *                                             [1/0] = [Mono/Stereo]
+     *                                             [0/1] = [Mono/Stereo]
      *                               bit6-1      - reserved
      *                               bit0        - 48kHz DL PCM enable
      *                                             [1/0] = [enable/disable]
      *                             }
      *                      </pre>
      *                      \endhtmlonly
-     *              @param  UInt16 Reset_out_ptr_flag \BR
-     *                                        =0, reset output pointer -
-     *                                            shared_ARM2SP_HQ_DL_InBuf_out
-     *                                            - of buffer
-     *                                            shared_Arm2SP_InBuf[]
-     *                                            to 0. Used for new
-     *                                            ARM2SP_HQ_DL session.\BR
-     *                                        =1, keep output pointer -
-     *                                            shared_ARM2SP_HQ_DL_InBuf_out
-     *                                            - unchanged.
-     *                                            Used for PAUSE/RESUME the
-     *                                            same ARM2SP_HQ_DL session.
      * 
-     *  \see ARM2SP_HQ_DL_interface, shared_Arm2SP_InBuf,
-     *       shared_ARM2SP_HQ_DL_InBuf_out, shared_ARM2SP_HQ_DL_done_flag,
-     *       VP_STATUS_ARM2SP_HQ_DL_EMPTY
+     *  \see ARM2SP_HQ_DL_interface, shared_Arm2SP_HQ_DL_InBuf,
+     *  VP_STATUS_ARM2SP_HQ_DL_INIT_DONE
      *
      */
  	VP_COMMAND_SET_ARM2SP_HQ_DL,   		   // 0x25
@@ -1167,93 +1135,112 @@ typedef enum
      *  \par Command Code
      *                    0x26
      *  \par Description
-     *       This command is used for configuring the ARM2SP2_HQ_DL interface
-     *       for mixing/playing 48kHz PCM data to Downlink. \BR
-     *
-     *       This command is sent by the ARM to the DSP for starting or
-     *       stopping of 48kHz data transfer from the ARM to the DSP. \BR
-     *
-     *  \note Before getting this command ARM should have sent
-     *       COMMAND_AUDIO_ENABLE, and the audio inputs and outputs enabled
-     *       by COMMAND_AUDIO_CONNECT, along with enabling of the 48kHz
-     *       AADMAC interface in shared_aadmac_aud_enable. \BR
-     *
-     *       To start ARM2SP2_HQ_DL: ARM enables ARM2SP2_HQ_DL by
-     *                              VP_COMMAND_SET_ARM2SP2_HQ_DL.
-     *       To resume ARM2SP2_HQ_DL: ARM enables ARM2SP2_HQ_DL by
-     *                              VP_COMMAND_SET_ARM2SP2_HQ_DL with arg1=1.
-     *
-     *       To control shared_Arm2SP2_InBuf[]: DSP interrupts ARM
-     *       with VP_STATUS_ARM2SP2_HQ_DL_EMPTY( shared_ARM2SP2_HQ_DL_done_flag,
-     *       shared_ARM2SP2_HQ_DL_InBuf_out, ARM2SP2_HQ_DL_flag )
-     *       whenever finishing every 2/4 20ms data.
-     *       shared_ARM2SP2_HQ_DL_InBuf_out indicates the next index DSP will
-     *       read.\BR
-     * 
-     *       To stop ARM2SP2_HQ_DL:\BR
-     *       Quick stop: ARM disables ARM2SP2_HQ_DL using
-     *       VP_COMMAND_SET_ARM2SP2_HQ_DL (arg0=0).\BR
-     *       The ARM2SP2_HQ_DL will be stopped right away. There may be
-     *       un-finished PCM data in shared_Arm2SP2_InBuf[].\BR
-     * 
-     *       Finishing stop: After finishing filling the last speech frames of
-     *       PCM data, ARM set shared_ARM2SP2_HQ_DL_done_flag=1
-     *       to indicate the end of PCM data. DSP ISR finishes the last speech
-     *       frames and disables ARM2SP2_HQ_DL. DSP sends
-     *       VP_STATUS_ARM2SP2_HQ_DL_EMPTY and arg0=0. \BR
-     * 
-     *       To pause ARM2SP2_HQ_DL : ARM disables ARM2SP2_HQ_DL using
-     *       VP_COMMAND_SET_ARM2SP2_HQ_DL (arg0=0, arg1=1).
-     * 
-     * 
-     *              @param  UInt16 ARM2SP2_HQ_DL_flag \BR
-     *                      \htmlonly
-     *                      <pre>
-     *                             {
-     *                               bits14:12   - Number of frames of data
-     *                                             after which the DSP is
-     *                                             supposed to send the
-     *                                             VP_STATUS_ARM2SP2_HQ_DL_EMPTY
-     *                                             reply
-     *                                             (between 1 and 4 or 1 and 2)
-     *                               bit11:10    - reserved
-     *                               bit9        - DL_OVERWRITE_bit
-     *                                             1= overwrite ARM2SP2_HQ_DL
-     *                                                buffer to DL
-     *                                                (only when DL_MIX_bit=0)
-     *                               bit8        - DL_MIX_bit
-     *                                             1= mixing ARM2SP2_HQ_DL
-     *                                                buffer with DL
-     *                                                (regardless
-     *                                                DL_OVERWRITE_bit
-     *                                                setting)
-     *                               bit7        - 48kHz Mono/Stereo
-     *                                             [1/0] = [Mono/Stereo]
-     *                               bit6-1      - reserved
-     *                               bit0        - 48kHz DL PCM enable
-     *                                             [1/0] = [enable/disable]
-     *                             }
-     *                      </pre>
-     *                      \endhtmlonly
-     *              @param  UInt16 Reset_out_ptr_flag \BR
-     *                                        =0, reset output pointer -
-     *                                            shared_ARM2SP2_HQ_DL_InBuf_out
-     *                                            - of buffer
-     *                                            shared_Arm2SP2_InBuf[]
-     *                                            to 0. Used for new
-     *                                            ARM2SP2_HQ_DL session.\BR
-     *                                        =1, keep output pointer -
-     *                                            shared_ARM2SP2_HQ_DL_InBuf_out
-     *                                            - unchanged.
-     *                                            Used for PAUSE/RESUME the
-     *                                            same ARM2SP2_HQ_DL session.
-     * 
-     *  \see ARM2SP2_HQ_DL_interface, shared_Arm2SP2_InBuf,
-     *       shared_ARM2SP2_HQ_DL_InBuf_out, shared_ARM2SP2_HQ_DL_done_flag,
-     *       VP_STATUS_ARM2SP2_HQ_DL_EMPTY
+     *  Obsolete
      *
      */
- 	VP_COMMAND_SET_ARM2SP2_HQ_DL   		   // 0x26
+	VP_COMMAND_UNUSED,				/* 0x26 */
+	VP_COMMAND_ECHO_CANCELLATION,			/* 0x27	(cmd_action,
+							   mode ) */
+	VP_COMMAND_NOISE_SUPPRESSION,			/* 0x28	(cmd_action)*/
+	VP_COMMAND_ENABLE_DUAL_MIC,			/* 0x29 (enable)
+							   arg0=0 Disable,
+							   1 enable;*/
+	VP_COMMAND_SWITCH_AUDIO_PROFILE,		/* 0x2A
+							   arg0 = Is_spkr_mode,
+							   arg1 = 0, arg2=0;*/
+   /** \HR */
+   /** \par Module
+    *                    Audio
+    *  \par Command Code
+    *                    0x2B
+    *  \par Description
+    *       This command controls Downlink Noise Suppressor.
+    *
+    *              @param  0 - disable, 1 - enable
+    *
+    */
+	VP_COMMAND_DOWNLINK_NOISE_SUPPRESSION,	/* 0x2B
+						   (arg0: 0 - disable,
+						   1 - enable) */
+	VP_COMMAND_VOICE_FILTER_COEFS,		/* 0x2C */
+	VP_COMMAND_AUDIO_ENHANCEMENT_ENABLE,	/* 0x2D */
+   /** \HR */
+   /** \par Module
+    *                    Audio
+    *  \par Command Code
+    *                    0x2E
+    *  \par Description
+    *       This command configures the first 3 of the 10 sidetone
+    *       Double Biquad filter's parameters.
+    *
+    *              @param  UInt16 Coefficient 0
+    *              @param  UInt16 Coefficient 1
+    *              @param  UInt16 Coefficient 2
+    *
+    *  \see Software_Sidetone
+    */
+	VP_COMMAND_SIDETONE_COEFS_012,			/* 0x2E
+							   ( SIDETONE_FILTER
+							   Biquad filter
+							   coefs 0, 1 and 2 ) */
+   /** \HR */
+   /** \par Module
+    *                    Audio
+    *  \par Command Code
+    *                    0x2F
+    *  \par Description
+    *       This command configures the second 3 of the 10 sidetone Double
+    *       Biquad
+    *       filter's parameters.
+    *
+    *              @param  UInt16 Coefficient 3
+    *              @param  UInt16 Coefficient 4
+    *              @param  UInt16 Coefficient 5
+    *
+    *  \see Software_Sidetone
+    */
+	VP_COMMAND_SIDETONE_COEFS_345,			/* 0x2F
+							   ( SIDETONE_FILTER
+							   Biquad filter coefs
+							   3, 4 and 5 ) */
+   /** \HR */
+   /** \par Module
+    *                    Audio
+    *  \par Command Code
+    *                    0x30
+    *  \par Description
+    *       This command configures the third 3 of the 10 sidetone Double
+    *       Biquad filter's parameters.
+    *
+    *              @param  UInt16 Coefficient 6
+    *              @param  UInt16 Coefficient 7
+    *              @param  UInt16 Coefficient 8
+    *
+    *  \see Software_Sidetone
+    */
+	VP_COMMAND_SIDETONE_COEFS_678,			/* 0x30
+							   ( SIDETONE_FILTER
+							   Biquad filter coefs
+							   6, 7 and 8 ) */
+   /** \HR */
+   /** \par Module
+    *                    Audio
+    *  \par Command Code
+    *                    0x31
+    *  \par Description
+    *       This command configures the last (10th) sidetone Double Biquad
+    *       filter's parameter.
+    *
+    *              @param  UInt16 Coefficient 9
+    *
+    *  \see Software_Sidetone
+    */
+	VP_COMMAND_SIDETONE_COEFS_9,			/* 0x31
+							   ( SIDETONE_FILTER
+							   Biquad filter
+							   coef 9 ) */
+	VP_COMMAND_INIT_SIDETONE_EXPANDER		/* 0x32 */
+
 } VPCommand_t;                                 
 /**
  * @}
@@ -1689,283 +1676,157 @@ typedef enum
     *   \sa  DL_MainAMR_buf, UL_MainAMR_buf, VP_COMMAND_MAIN_AMR_RUN
     */    
     VP_STATUS_MAIN_AMR_DONE,					// 0x15		( report main AMR encoder done, TX frame type, AMR mode, dtx_enable )	
-	VP_STATUS_CNC_EMERGENCY_CALL,				// 0x16		(  )
-	VP_STATUS_CNC_DETECTED,						// 0x17		(  )
-	VP_STATUS_VOIP_DL_DONE,						// 0x18		(  )
-	VP_STATUS_AUDIO_STREAM_DATA_READY,			// 0x19 ( arg0 = shared_audio_stream_0_crtl, arg1 = shared_audio_stream_1_crtl, arg2 = audio_stream_buf_idx )
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1A
-	    *  \par Description
-	    *       This reply is sent by the DSP after the initializations to be done by COMMAND_AUDIO_ENABLE are complete.
-	    *
-	    *              @param  UInt16 Value of shared_aadmac_aud_enable used in the initialization.
-	    *              @param  None
-	    *              @param  None
-	    *              @param  None
-	    *
-	    *   \par Associated Command
-	    *        For every COMMAND_AUDIO_ENABLE command in the CP's command queue, an associated VP_STATUS_AUDIO_ENABLE_DONE reply
-	    *        would be sent in the vp_status queue.
-	    *   \sa  shared_aadmac_aud_enable, UCOMMAND_AUDIO_ENABLE
-	    */
-	VP_STATUS_AUDIO_ENABLE_DONE,                 // 0x1A ( )
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1B
-	    *  \par Description
-	    *       This reply is sent by the DSP to echo VP_COMMAND_PTT_ENABLE.
-	    *
-	    *              @param  UInt16 PTT_flag
-	    *              @param  UInt16 curr_int_rate_flag
-	    *              @param  UInt16 shared_voif_enable_flag (debugging)
-	    *              @param  None
-	    *
-	    */
-	VP_STATUS_PTT_STATUS,                 // 0x1B ( )
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1C
-	    *  \par Description
-	    *       This reply is sent by the DSP to indicate PTT UL frame is read and ask next frame.
-	    *
-	    *              @param  UInt16 PTT_UL_buffer_index
-	    *              @param  UInt16 PTT_flag
-	    *              @param  UInt16 curr_int_rate_flag
-	    *              @param  None
-	    *
-	    */
-	VP_STATUS_PTT_UL_FRAME_DONE,                 // 0x1C ( )
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1D
-	    *  \par Description
-	    *       This reply from the DSP lets the AP know that the DSP has
-	    *       enabled the external modem interface, and configured the
-	    *       AADMAC channels for UL and DL external modem paths The
-	    *       argument is the same as the one passed in the command.
-	    *
-        *              @param  UInt16 arg0 = 1: Enable\BR
-        *                                  = 0: Disable
- 	    *
-	    */
-	VP_STATUS_EXT_MODEM_CALL_DONE,               // 0x1D (0=disable, 1=Enable)
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1E
-	    *  \par Description
-	    *       This reply is part of the ARM2SP_HQ_DL interface for
-	    *       mixing/playing 48kHz to Downlink. \BR
-	    *       This reply is sent by the DSP whenever finishing every 2/4 20ms
-	    *       PCM frame.
-	    *       shared_ARM2SP_HQ_DL_InBuf_out indicates the next index DSP will
-	    *       read.
-	    *
-	    *              @param  UInt16 shared_ARM2SP_HQ_DL_done_flag - flag
-	    *                             indicating the end of transfer of data
-	    *              @param  UInt16 shared_ARM2SP_HQ_DL_InBuf_out - index
-	    *                             indicating next index DSP will read
-	    *                             from the shared_Arm2SP_InBuf[]
-	    *                             buffer.
-	    *              @param  UInt16 ARM2SP_HQ_DL_flag - if
-	    *                             shared_ARM2SP_HQ_DL_done_flag is set
-	    *                             then ARM2SP_HQ_DL_flag = 0 \BR
-	    *                             else send back ARM2SP_HQ_DL_flag
-	    *                             received in the
-	    *                             VP_COMMAND_SET_ARM2SP_HQ_DL command \BR
-	    *              \htmlonly
-	    *              <pre>
-	    *                             {
-	    *                               bits14:12   - Number of frames of data
-	    *                                             after which the DSP is
-	    *                                             supposed to send the
-	    *                                             VP_STATUS_ARM2SP_HQ_DL_EMPTY
-	    *                                             reply
-	    *                                             (between 1 and 4 or 1 and 2)
-	    *                               bit11:10    - reserved
-	    *                               bit9        - DL_OVERWRITE_bit
-	    *                                             1= overwrite ARM2SP_HQ_DL
-	    *                                                buffer to DL
-	    *                                                (only when DL_MIX_bit=0)
-	    *                               bit8        - DL_MIX_bit
-	    *                                             1= mixing ARM2SP_HQ_DL
-	    *                                                buffer with DL
-	    *                                                (regardless
-	    *                                                DL_OVERWRITE_bit
-	    *                                                setting)
-	    *                               bit7        - 48kHz Mono/Stereo
-	    *                                             [1/0] = [Mono/Stereo]
-	    *                               bit6-1      - reserved
-	    *                               bit0        - 48kHz DL PCM enable
-	    *                                             [1/0] = [enable/disable]
-	    *                             }
-	    *              </pre>
-	    *              \endhtmlonly
-	    *
-	    *
-	    *  \see ARM2SP_HQ_DL_interface, shared_Arm2SP_InBuf,
-	    *       shared_ARM2SP_HQ_DL_InBuf_out, shared_ARM2SP_HQ_DL_done_flag,
-	    *       VP_COMMAND_SET_ARM2SP_HQ_DL
-	    *
-	    */
-		VP_STATUS_ARM2SP_HQ_DL_EMPTY, 				// 0x1E
-	   /** \HR */
-	   /** \par Module
-	    *                    Audio
-	    *  \par Command Code
-	    *                    0x1F
-	    *  \par Description
-	    *       This reply is part of the ARM2SP2_HQ_DL interface for
-	    *       mixing/playing 48kHz to Downlink. \BR
-	    *       This reply is sent by the DSP whenever finishing every 2/4 20ms
-	    *       PCM frame.
-	    *       shared_ARM2SP2_HQ_DL_InBuf_out indicates the next index DSP will
-	    *       read.
-	    *
-	    *              @param  UInt16 shared_ARM2SP2_HQ_DL_done_flag - flag
-	    *                             indicating the end of transfer of data
-	    *              @param  UInt16 shared_ARM2SP2_HQ_DL_InBuf_out - index
-	    *                             indicating next index DSP will read
-	    *                             from the shared_Arm2SP2_InBuf[]
-	    *                             buffer.
-	    *              @param  UInt16 ARM2SP2_HQ_DL_flag - if
-	    *                             shared_ARM2SP2_HQ_DL_done_flag is set
-	    *                             then ARM2SP2_HQ_DL_flag = 0 \BR
-	    *                             else send back ARM2SP2_HQ_DL_flag
-	    *                             received in the
-	    *                             VP_COMMAND_SET_ARM2SP2_HQ_DL command \BR
-	    *              \htmlonly
-	    *              <pre>
-	    *                             {
-	    *                               bits14:12   - Number of frames of data
-	    *                                             after which the DSP is
-	    *                                             supposed to send the
-	    *                                             VP_STATUS_ARM2SP2_HQ_DL_EMPTY
-	    *                                             reply
-	    *                                             (between 1 and 4 or 1 and 2)
-	    *                               bit11:10    - reserved
-	    *                               bit9        - DL_OVERWRITE_bit
-	    *                                             1= overwrite ARM2SP2_HQ_DL
-	    *                                                buffer to DL
-	    *                                                (only when DL_MIX_bit=0)
-	    *                               bit8        - DL_MIX_bit
-	    *                                             1= mixing ARM2SP2_HQ_DL
-	    *                                                buffer with DL
-	    *                                                (regardless
-	    *                                                DL_OVERWRITE_bit
-	    *                                                setting)
-	    *                               bit7        - 48kHz Mono/Stereo
-	    *                                             [1/0] = [Mono/Stereo]
-	    *                               bit6-1      - reserved
-	    *                               bit0        - 48kHz DL PCM enable
-	    *                                             [1/0] = [enable/disable]
-	    *                             }
-	    *              </pre>
-	    *              \endhtmlonly
-	    *
-	    *
-	    *  \see ARM2SP2_HQ_DL_interface, shared_Arm2SP2_InBuf,
-	    *       shared_ARM2SP2_HQ_DL_InBuf_out, shared_ARM2SP2_HQ_DL_done_flag,
-	    *       VP_COMMAND_SET_ARM2SP2_HQ_DL
-	    *
-	    */
-		VP_STATUS_ARM2SP2_HQ_DL_EMPTY, 				// 0x1F
-		   /** \HR */
-		   /** \par Module
-		    *                    Audio
-		    *  \par Command Code
-		    *                    0x20
-		    *  \par Description
-		    *       This reply is part of the ARM2SP_HQ_DL interface for
-		    *       mixing/playing 48kHz to Downlink. \BR
-		    *       This reply is sent by the DSP after it finishes initializing
-		    *       the ARM2SP HQ DL interface.
-		    *
-		    *              @param  UInt16 ARM2SP_HQ_DL_flag received in the
-		    *                             VP_COMMAND_SET_ARM2SP_HQ_DL command \BR
-		    *              \htmlonly
-		    *              <pre>
-		    *                             {
-		    *                               bit15:10    - reserved
-		    *                               bit9        - DL_OVERWRITE_bit
-		    *                                             1= overwrite ARM2SP_HQ_DL
-		    *                                                buffer to DL
-		    *                                                (only when DL_MIX_bit=0)
-		    *                               bit8        - DL_MIX_bit
-		    *                                             1= mixing ARM2SP_HQ_DL
-		    *                                                buffer with DL
-		    *                                                (regardless
-		    *                                                DL_OVERWRITE_bit
-		    *                                                setting)
-		    *                               bit7        - 48kHz Mono/Stereo
-		    *                                             [0/1] = [Mono/Stereo]
-		    *                               bit6-1      - reserved
-		    *                               bit0        - 48kHz DL PCM enable
-		    *                                             [1/0] = [enable/disable]
-		    *                             }
-		    *              </pre>
-		    *              \endhtmlonly
-		    *
-		    *
-		    *  \see ARM2SP_HQ_DL_interface, shared_Arm2SP_InBuf,
-		    *       shared_ARM2SP_HQ_DL_InBuf_out, shared_ARM2SP_HQ_DL_done_flag,
-		    *       VP_COMMAND_SET_ARM2SP_HQ_DL
-		    *
-		    */
-			VP_STATUS_ARM2SP_HQ_DL_INIT_DONE, 				// 0x20
-		   /** \HR */
-		   /** \par Module
-		    *                    Audio
-		    *  \par Command Code
-		    *                    0x21
-		    *  \par Description
-		    *       This reply is part of the ARM2SP2_HQ_DL interface for
-		    *       mixing/playing 48kHz to Downlink. \BR
-		    *       This reply is sent by the DSP after it finishes initializing
-		    *       the ARM2SP2 HQ DL interface.
-		    *
-		    *              @param  UInt16 ARM2SP2_HQ_DL_flag received in the
-		    *                             VP_COMMAND_SET_ARM2SP2_HQ_DL command \BR
-		    *              \htmlonly
-		    *              <pre>
-		    *                             {
-		    *                               bit15:10    - reserved
-		    *                               bit9        - DL_OVERWRITE_bit
-		    *                                             1= overwrite ARM2SP2_HQ_DL
-		    *                                                buffer to DL
-		    *                                                (only when DL_MIX_bit=0)
-		    *                               bit8        - DL_MIX_bit
-		    *                                             1= mixing ARM2SP2_HQ_DL
-		    *                                                buffer with DL
-		    *                                                (regardless
-		    *                                                DL_OVERWRITE_bit
-		    *                                                setting)
-		    *                               bit7        - 48kHz Mono/Stereo
-		    *                                             [0/1] = [Mono/Stereo]
-		    *                               bit6-1      - reserved
-		    *                               bit0        - 48kHz DL PCM enable
-		    *                                             [1/0] = [enable/disable]
-		    *                             }
-		    *              </pre>
-		    *              \endhtmlonly
-		    *
-		    *
-		    *  \see ARM2SP2_HQ_DL_interface, shared_Arm2SP2_InBuf,
-		    *       shared_ARM2SP2_HQ_DL_InBuf_out, shared_ARM2SP2_HQ_DL_done_flag,
-		    *       VP_COMMAND_SET_ARM2SP2_HQ_DL
-		    *
-		    */
-			VP_STATUS_ARM2SP2_HQ_DL_INIT_DONE 				// 0x21
+	VP_STATUS_CNC_EMERGENCY_CALL,			/* 0x16	( ) */
+	VP_STATUS_CNC_DETECTED,				/* 0x17	( ) */
+	VP_STATUS_VOIP_DL_DONE,				/* 0x18	( ) */
+	VP_STATUS_AUDIO_STREAM_DATA_READY, /* 0x19
+					(arg0 = shared_audio_stream_0_crtl,
+					 arg1 = shared_audio_stream_1_crtl,
+					 arg2 = audio_stream_buf_idx) */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1A
+     *  \par Description
+     *       This reply is sent by the DSP after the initializations
+     *       to be done by COMMAND_AUDIO_ENABLE are complete.
+     *
+     *              @param  UInt16 Value of shared_aadmac_aud_enable used
+     *              in the initialization.
+     *              @param  None
+     *              @param  None
+     *              @param  None
+     *
+     *   \par Associated Command
+     *        For every COMMAND_AUDIO_ENABLE command in the CP's command
+     *        queue, an associated VP_STATUS_AUDIO_ENABLE_DONE reply
+     *        would be sent in the vp_status queue.
+     *   \sa  shared_aadmac_aud_enable, UCOMMAND_AUDIO_ENABLE
+     */
+	VP_STATUS_AUDIO_ENABLE_DONE,	/* 0x1A ( ) */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1B
+     *  \par Description
+     *       This reply is sent by the DSP to echo VP_COMMAND_PTT_ENABLE.
+     *
+     *              @param  UInt16 PTT_flag
+     *              @param  UInt16 curr_int_rate_flag
+     *              @param  UInt16 shared_voif_enable_flag (debugging)
+     *              @param  None
+     *
+     */
+	VP_STATUS_PTT_STATUS,	/* 0x1B ( ) */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1C
+     *  \par Description
+     *       This reply is sent by the DSP to indicate PTT UL frame is
+     *       read and ask next frame.
+     *
+     *              @param  UInt16 PTT_UL_buffer_index
+     *              @param  UInt16 PTT_flag
+     *              @param  UInt16 curr_int_rate_flag
+     *              @param  None
+     *
+     */
+	VP_STATUS_PTT_UL_FRAME_DONE,	/* 0x1C ( ) */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1D
+     *  \par Description
+     *       This reply from the DSP lets the AP know that the DSP has
+     *       enabled the external modem interface, and configured the
+     *       AADMAC channels for UL and DL external modem paths The
+     *       argument is the same as the one passed in the command.
+     *
+     *              @param  UInt16 arg0 = 1: Enable\BR
+     *                                  = 0: Disable
+     *
+     */
+	VP_STATUS_EXT_MODEM_CALL_DONE,	/* 0x1D (0=disable,
+						1=Enable) */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1E
+     *  \par Description
+     *                    UNUSED
+     */
+	VP_STATUS_ARM2SP_HQ_DL_UNUSED,		/* 0x1E */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x1F
+     *  \par Description
+     *
+     *  Obselete
+     *
+     */
+	VP_STATUS_UNUSED,			/* 0x1F */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x20
+     *  \par Description
+     *       This reply is part of the ARM2SP_HQ_DL interface for
+     *       mixing/playing 48kHz to Downlink. \BR
+     *       This reply is sent by the DSP after it finishes
+     *       initializing the ARM2SP HQ DL interface.
+     *
+     *              @param  UInt16 ARM2SP_HQ_DL_flag received in the
+     *                             VP_COMMAND_SET_ARM2SP_HQ_DL
+     *                             command \BR
+     *              \htmlonly
+     *              <pre>
+     *                             {
+     *                               bit15:10    - reserved
+     *                               bit9        - DL_OVERWRITE_bit
+     *                                             1= overwrite
+     *                                             ARM2SP_HQ_DL
+     *                                                buffer to DL
+     *                                                (only when DL_MIX_bit=0)
+     *                               bit8        - DL_MIX_bit
+     *                                             1= mixing ARM2SP_HQ_DL
+     *                                                buffer with DL
+     *                                                (regardless
+     *                                                DL_OVERWRITE_bit
+     *                                                setting)
+     *                               bit7        - 48kHz Mono/Stereo
+     *                                             [0/1] = [Mono/Stereo]
+     *                               bit6-1      - reserved
+     *                               bit0        - 48kHz DL PCM enable
+     *                                             [1/0] = [enable/disable]
+     *                             }
+     *              </pre>
+     *              \endhtmlonly
+     *
+     *
+     *  \see ARM2SP_HQ_DL_interface, shared_Arm2SP_HQ_DL_InBuf,
+     *       VP_COMMAND_SET_ARM2SP_HQ_DL
+     *
+     */
+	VP_STATUS_ARM2SP_HQ_DL_INIT_DONE,			/* 0x20 */
+    /** \HR */
+    /** \par Module
+     *                    Audio
+     *  \par Command Code
+     *                    0x21
+     *  \par Description
+     *  Unused
+     *
+     */
+	VP_STATUS_UNUSED_1					/* 0x21*/
 
 } VPStatus_t;
 /**
@@ -2067,155 +1928,17 @@ EXTERN VPStatQ_t vp_shared_statusq[ VP_STATUSQ_SIZE ]            AP_SHARED_SEC_C
  * @}
  */
 
-/** 
- * @addtogroup Shared_Audio_Buffers 
- * @{ */
-/** 
- * @addtogroup MM_VPU_Interface 
- *
- * The Multi-Media VPU Interface is used to do 16kHz record and playback in WB-AMR
- * format. This interface cannot do simulteneous record and playback.
- * It is meant to run only in idle mode. There is no uplink and/or downlink mixing
- * with a call data.
- *
- * \note As it stands the MM_VPU_RECORD interface can only be used for Recording and 
- * NOT for encoding of WB-AMR. \BR
- *
- * \note The MM_VPU_PLAYBACK interface can be used BOTH for WB-AMR decoding AND 
- * for Playback
- *
- * @{ */
-/** 
- * @addtogroup MM_VPU_RECORD
- *
- * The Voice codec is programmed to generate an Voice ISR
- * at 16Khz providing 320 PCM samples to DSP every 20 ms speech frame, using 
- * the COMMAND_AUDIO_ENABLE  command. \BR
- *
- * Recording of WB-AMR encoded data is started 
- * by setting the appropriate mode in the shared_WB_AMR_Ctrl_state variable and
- * by sending the COMMAND_MM_VPU_ENABLE command. \BR
- * 
- * Raw PCM samples from the microphone are directly copied to the a DSP internal 
- * memory buffer and then read back by
- * the encoder to process for the compression. \BR
- *
- * Compressed output bits are written back to the shared 
- * memory buffer shared_encoder_OutputBuffer for Flash or buffer storage. \BR
- *
- * When the encoder has completed encoding 4 20ms frames, the DSP sends an interrupt to
- * the ARM with the reply STATUS_PRAM_CODEC_DONE_RECORD, to go ahead and read the encoded
- * data.
- *
- * \see COMMAND_MM_VPU_ENABLE, COMMAND_AUDIO_ENABLE, COMMAND_AUDIO_CONNECT, 
- *      STATUS_PRAM_CODEC_DONE_RECORD, shared_WB_AMR_Ctrl_state, shared_encoder_OutputBuffer,
- *      shared_encodedSamples_buffer_in, shared_encodedSamples_buffer_out, COMMAND_MM_VPU_DISABLE
- *
- *  @{
- */
-/**
- *  @}
- */
-/** 
- * @addtogroup MM_VPU_PLAYBACK
- *
- * \section WB-AMR Encoding
- * This interface can be used to decode WB-AMR and playback (if needed). It can be also used to 
- * just do WB-AMR decoding with the output present 
- * in any of the three output shared memory buffers as selected by shared_WB_AMR_Ctrl_state. \BR
- *
- * Decoding of WB-AMR encoded data from an appropriate input shared memory buffer is started 
- * by setting the appropriate mode in the shared_WB_AMR_Ctrl_state variable and
- * by sending the COMMAND_MM_VPU_ENABLE command. Also, prior to sending the 
- * COMMAND_MM_VPU_ENABLE command, APE should set the shared_Inbuf_LOW_Sts_TH and 
- * shared_Outbuf_LOW_Sts_TH variables. \BR
- * 
- * \note These thresholds are currently not used in Athena. Currently these thresholds are
- * hard-coded in the code to 0x400 \BR
- *
- * DSP reads the input buffer (shared_decoder_InputBuffer) and runs the decoder to generate 
- * the synthesized speech to the output buffer, as selected by the shared_WB_AMR_Ctrl_state
- * variable. \BR
- *
- * If the amount of input encoded samples from the ARM in shared_decoder_InputBuffer,
- * becomes lower than the threshold shared_Inbuf_LOW_Sts_TH, the DSP sends a interrupt 
- * to the ARM with a status reply STATUS_PRAM_CODEC_INPUT_LOW, requesting the ARM to send
- * more downlink data. \BR
- *
- * If the amount of input encoded samples from the ARM in shared_decoder_InputBuffer
- * becomes lower than one frame's worth of samples, DSP sends an interrupt to the ARM 
- * with a status reply STATUS_PRAM_CODEC_INPUT_EMPTY, requesting the ARM to send
- * more downlink data immediately, and informing that under-flow is happening. \BR
- * 
- * If the amount of remaining space in the output PCM buffer (as selected by 
- * shared_WB_AMR_Ctrl_state variable) becomes lower than the threshold 
- * shared_Outbuf_LOW_Sts_TH, the DSP sends a interrupt 
- * to the ARM with a status reply STATUS_PRAM_CODEC_OUTPUT_LOW, requesting the ARM to slow
- * down in sending more downlink data. \BR
- *
- * If the amount of remaining space in the output PCM buffer (as selected by 
- * shared_WB_AMR_Ctrl_state variable) becomes lower than one frame's worth of samples,
- * DSP sends an interrupt to the ARM 
- * with a status reply STATUS_PRAM_CODEC_OUTPUT_FULL, requesting the ARM to stop
- * more downlink data immediately, and informing that over-flow is happening. \BR
- * 
- * When ARM was to complete the decoding process, it would set the appropriate Input Data Done Flag
- * (as selected by the shared_WB_AMR_Ctrl_state variable). The DSP stops any further decoding 
- * after it completes decoding the last frame of data and sends back a STATUS_PRAM_CODEC_DONEPLAY
- * reply to the ARM.
- *
- * \note Depending on the setting of shared_WB_AMR_Ctrl_state, the output buffers 
- * of MM_VPU_PLAYBACK overlap with the ones used by the NEWAUDFIFO interface.
- *
- * \see COMMAND_MM_VPU_ENABLE, shared_WB_AMR_Ctrl_state, COMMAND_MM_VPU_DISABLE,
- *      shared_decoder_InputBuffer, shared_NEWAUD_InBuf_in, shared_NEWAUD_InBuf_out, 
- *      shared_NEWAUD_InBuf_done_flag, shared_pram_codec_out0, shared_NEWAUD_OutBuf_in, 
- *      shared_NEWAUD_OutBuf_out, shared_newpr_codec_out0, shared_decoder_OutputBuffer,
- *      shared_encodedSamples_buffer_in, shared_encodedSamples_buffer_out, 
- *      shared_encodedSamples_done_flag, shared_decodedSamples_buffer_in,
- *      shared_decodedSamples_buffer_out,  shared_Inbuf_LOW_Sts_TH, 
- *      shared_Outbuf_LOW_Sts_TH, STATUS_PRAM_CODEC_INPUT_LOW, 
- *      STATUS_PRAM_CODEC_INPUT_EMPTY, STATUS_PRAM_CODEC_OUTPUT_LOW, STATUS_PRAM_CODEC_OUTPUT_FULL,
- *      STATUS_PRAM_CODEC_DONEPLAY
- *
- * \section Play-back
- * If in addition to decoding of WB-AMR, playback to the speaker is needed, 
- * in addition to sending the COMMAND_MM_VPU_ENABLE command, AP enable the Voice 
- * codec to generate a Voice audio at 16Khz using the COMMAND_AUDIO_ENABLE command. \BR 
- *
- * \note Unlike MM_VPU_RECORD, the playback Audio interrupts DO NOT need to come
- * at 16kHz frequency (even though the DAC is running at 16kHz). 
- *
- * \note From Athena Onwards, the MM_VPU_PLAYBACK no longer uses the NEWAUDFIFO 
- * interface for playback.
- *
- *  @{
- */
+/* This is an internal DSP buffer and not necessarily a shared buffer */
+EXTERN UInt16 ext_48khz_echo_ref[(IHF_48K_BUF_SIZE*2)+48]
+	AP_SHARED_SEC_GEN_AUDIO;
 
-/**
- * This buffer is part of the MM_VPU_PLAYBACK interface. It is filled by ARM with 
- * WB-AMR encoded speech for DSP to decode.
- *
- * \see shared_WB_AMR_Ctrl_state, shared_encodedSamples_buffer_in, 
- *      shared_encodedSamples_buffer_out, shared_NEWAUD_InBuf_in, 
- *      shared_NEWAUD_InBuf_out
- */
-EXTERN UInt16 shared_decoder_InputBuffer[AUDIO_SIZE_PER_PAGE] AP_SHARED_SEC_GEN_AUDIO;
-
-/**
- * This buffer is part of the MM_VPU_PLAYBACK interface. It is filled by the DSP with 
- * decoded PCM speech for ARM to take and play. \BR
- *
- * ARM can select this buffer to be filled by the DSP, using shared_WB_AMR_Ctrl_state.
- *
- * \see shared_WB_AMR_Ctrl_state, shared_decodedSamples_buffer_in, 
- *      shared_decodedSamples_buffer_out
- *
- */
-EXTERN UInt16 shared_decoder_OutputBuffer[1] AP_SHARED_SEC_GEN_AUDIO; // This buffer is not used and hence change to only 1 word - should be removed later on
- /**
- *  @}
- */
+/* Unused in DSP */
+EXTERN UInt16 shared_unused_0x1000[AUDIO_SIZE_PER_PAGE-
+	((IHF_48K_BUF_SIZE*2)+48)] AP_SHARED_SEC_GEN_AUDIO;
+/* Unused in DSP */
+/* This buffer is not used and hence change to only 1 word -
+ * should be removed later on */
+EXTERN UInt16 shared_unused_1[1] AP_SHARED_SEC_GEN_AUDIO;
 
 /**
  * \ingroup MM_VPU_RECORD
@@ -2436,7 +2159,45 @@ EXTERN UInt16 shared_usb_headset_audio_out_buf_48k1[960]     AP_SHARED_SEC_GEN_A
 /** 
  * @} 
  */
-EXTERN UInt16 shared_BTnbdinLR[2][640]					     AP_SHARED_SEC_GEN_AUDIO;
+EXTERN UInt16 shared_BTnbdinLR_unused[1]	AP_SHARED_SEC_GEN_AUDIO;
+
+/**
+ * @addtogroup ARM2SP_HQ_DL_Interface
+ *
+ * This interface is used for mixing/playing \Bold{48kHz Mono/Stereo PCM data
+ * to Downlink}.\BR
+ *
+ * \note This interface works in only one way - from ARM to DSP. \BR
+ *
+ * One use-case of this interface is to support S-barge-in feature where a
+ * music might be playing in the downlink using this interface and an
+ * uplink record/speech recognition happens at the same time, then this
+ * UL would get the benefit of echo cancellation of the music.
+ *
+ * To start ARM2SP_HQ_DL: ARM enables ARM2SP_HQ_DL by
+ * VP_COMMAND_SET_ARM2SP_HQ_DL.\BR
+ *
+ * Once the DSP completes the processing of this command it sends
+ * the VP_STATUS_ARM2SP_HQ_DL_INIT_DONE to the AP to indicate to it
+ * that the AADMAC channel is ready for transmission.
+ *
+ * To stop ARM2SP_HQ_DL:\BR
+ * Quick stop: ARM disables ARM2SP_HQ_DL using
+ * VP_COMMAND_SET_ARM2SP_HQ_DL (arg0=0).\BR
+ * \note The ARM2SP_HQ_DL will be stopped right away.
+ * There may be un-finished PCM data in shared_Arm2SP_HQ_DL_InBuf[].\BR
+ *
+ * \see shared_Arm2SP_HQ_DL_InBuf,
+ *      VP_COMMAND_SET_ARM2SP_HQ_DL,
+ *      VP_STATUS_ARM2SP_HQ_DL_INIT_DONE
+ *
+ * @{ */
+EXTERN UInt32 shared_Arm2SP_HQ_DL_InBuf[NUM_OF_48K_SAMP_PER_INT0_INT*2]
+	AP_SHARED_SEC_GEN_AUDIO;
+ /* @} */
+
+EXTERN UInt16 shared_BTnbdinLR_1_unused[
+	2*640-1-(NUM_OF_48K_SAMP_PER_INT0_INT*2*2)] AP_SHARED_SEC_GEN_AUDIO;
 /** 
  * @addtogroup VPU_Shared_Memory_Interface NOT_USED 
  *
@@ -2599,7 +2360,7 @@ EXTERN VR_Frame_AMR_WB_t AP_UL_MainAMR_buf    				   AP_SHARED_SEC_GEN_AUDIO; //
  * shared_Arm2SP_InBuf_out, Arm2SP_flag )
  *
  * \note The speech processing occurs at the rate specified by AP. If there is a mis-match 
- * between the rate set by the AP and ARM2SP\s rate, the Sample Rate Conversion occurs right at the start.
+ * between the rate set by the AP and ARM2SP\’s rate, the Sample Rate Conversion occurs right at the start.
  *
  * \note For the second instance of the ARM2SP, please read ARM2SP2 everywhere ARM2SP is written above.
  * 
@@ -2888,11 +2649,14 @@ EXTERN UInt16 shared_aadmac_aud_enable            									AP_SHARED_SEC_GEN_AUD
  * @{
  */
 /**
- * These buffers are used for transfer of mono data between DSP and AADMAC. 
+ * These buffers are used for transfer of mono data between DSP and AADMAC.
  *
  * \see COMMAND_48KHZ_SPEAKER_OUTPUT_ENABLE
  */
-EXTERN UInt32 shared_aud_out_buf_48k[2][IHF_48K_BUF_SIZE]                   AP_SHARED_SEC_GEN_AUDIO;
+EXTERN UInt16 shared_aud_out_buf_48k[2][IHF_48K_BUF_SIZE]
+	AP_SHARED_SEC_GEN_AUDIO;
+EXTERN UInt16 shared_aud_out_buf_48k_unused[2][IHF_48K_BUF_SIZE]
+	AP_SHARED_SEC_GEN_AUDIO;
 /**
  * @}
  */
@@ -2935,8 +2699,10 @@ EXTERN UInt32 shared_aadmac_sec_mic_high[NUM_OF_8K_SAMP_PER_INT0_INT*2]         
  * \note The order of the buffers below is important. First should be the low buffer followed by
  *       the high buffer.
  */
-EXTERN UInt32 shared_aadmac_spkr_low[NUM_OF_48K_SAMP_PER_INT0_INT]                   AP_SHARED_SEC_GEN_AUDIO;
-EXTERN UInt32 shared_aadmac_spkr_high[NUM_OF_48K_SAMP_PER_INT0_INT]                  AP_SHARED_SEC_GEN_AUDIO;
+EXTERN UInt32 shared_aadmac_spkr_low[NUM_OF_48K_SAMP_PER_INT0_INT]
+					AP_SHARED_SEC_GEN_AUDIO;
+EXTERN UInt32 shared_aadmac_spkr_high_unused[NUM_OF_48K_SAMP_PER_INT0_INT]
+					AP_SHARED_SEC_GEN_AUDIO;
 /**
  * @}
  */
@@ -3195,77 +2961,9 @@ EXTERN UInt32 shared_ext_dl_buf[2][ NUM_OF_EXT_MODEM_INTERF_SAMP_PER_INT/2]     
 #endif
 /**
  * @addtogroup ARM2SP_HQ_DL_interface
- *
- * This interface is used for mixing/playing \Bold{48kHz Mono/Stereo PCM data
- * to Downlink}.\BR
- *
- * This PCM data will be mixed after Downlink speech processing in the 48kHz
- * mode.
- *
- * \note This interface works in only one way - from ARM to DSP. \BR
- *
- * One use-case of this interface is to support S-barge-in feature where a
- * music might be playing in the downlink using this interface and an
- * uplink record/speech recognition happens at the same time, then this
- * UL would get the benefit of echo cancellation of the music.
- *
- * In this interface 2 or 4-speech frames worth of data is transferred at a
- * time from ARM to DSP in ping-pong buffers - i.e. ARM fills empty half of
- * shared_Arm2SP_InBuf[].
- *
- * When shared_ARM2SP_HQ_DL_InBuf_out=0, ARM fills next half number of words from
- * shared_Arm2SP_InBuf[half].
- * When shared_ARM2SP_HQ_DL_InBuf_out=half, ARM fills half number of words from
- * shared_Arm2SP_InBuf[0]. \BR
- *
- * To start ARM2SP_HQ_DL: ARM enables ARM2SP_HQ_DL by
- * VP_COMMAND_SET_ARM2SP_HQ_DL.\BR
- *
- * To resume ARM2SP_HQ_DL : ARM enables ARM2SP_HQ_DL by
- * VP_COMMAND_SET_ARM2SP_HQ_DL  with arg1=1.
- *
- * To control shared_Arm2SP_InBuf[]: DSP interrupts ARM with \BR
- * VP_STATUS_ARM2SP_HQ_DL_EMPTY( shared_ARM2SP_HQ_DL_done_flag, \BR
- *                               shared_ARM2SP_HQ_DL_InBuf_out, \BR
- *                               ARM2SP_HQ_DL_flag )\BR
- * whenever finishing every half PCM data. shared_ARM2SP_HQ_DL_InBuf_out
- * indicates the next index DSP will read.
- *
- * To stop ARM2SP_HQ_DL:\BR
- * Quick stop: ARM disables ARM2SP_HQ_DL using
- * VP_COMMAND_SET_ARM2SP_HQ_DL (arg0=0).\BR
- * \note The ARM2SP_HQ_DL will be stopped right away.
- * There may be un-finished PCM data in shared_Arm2SP_InBuf[].\BR
- *
- * Finishing stop: After finishing filling the last 2/4-speech frame PCM data,
- * ARM set shared_ARM2SP_HQ_DL_done_flag=1 to indicate the end of PCM data.
- * DSP ISR finishes the last 2/4-speech frames and disables ARM2SP_HQ_DL.
- * DSP sends VP_STATUS_ARM2SP_HQ_DL_EMPTY and arg0=0. \BR
- *
- * To pause ARM2SP_HQ_DL: ARM disables ARM2SP_HQ_DL using
- * VP_COMMAND_SET_ARM2SP_HQ_DL (arg0=0, arg1=1).
- *
- * \see shared_Arm2SP_InBuf, shared_ARM2SP_HQ_DL_InBuf_out,
- *      shared_ARM2SP_HQ_DL_done_flag, VP_COMMAND_SET_ARM2SP_HQ_DL,
- *      VP_STATUS_ARM2SP_HQ_DL_EMPTY,
- *
  * @{ */
-/**
- * This flag indicates the end of the transfer of data from the ARM to the
- * DSP. The transfer of data by ARM2SP_HQ_DL interface can be disabled by
- * setting shared_ARM2SP_HQ_DL_done_flag=1 after filling the
- * shared_Arm2SP_InBuf[] buffer.
- * DSP will disable the feature when it reaches the next 1/2-speech frame
- * boundary. */
-EXTERN UInt16    shared_ARM2SP_HQ_DL_done_flag                   					AP_SHARED_SEC_DIAGNOS;
-/**
- * This index indicates the next index DSP will read from the shared_Arm2SP_InBuf[]
- * buffer.
- *
- * \note This index is changed only by the DSP.
- *
- * */
-EXTERN UInt16    shared_ARM2SP_HQ_DL_InBuf_out                   					AP_SHARED_SEC_DIAGNOS;
+EXTERN UInt16 shared_ARM2SP_HQ_DL_done_flag_unused AP_SHARED_SEC_DIAGNOS;
+EXTERN UInt16 shared_ARM2SP_HQ_DL_InBuf_out_unused AP_SHARED_SEC_DIAGNOS;
 
 /**
  * The gain factor, shared_arm2speech_hq_call_gain_dl is applied on the 48kHz PCM data
@@ -3282,112 +2980,102 @@ EXTERN UInt16    shared_ARM2SP_HQ_DL_InBuf_out                   					AP_SHARED_
  * }
  *
  */
-EXTERN Int16	shared_arm2speech_hq_call_gain_dl[5]               					AP_SHARED_SEC_DIAGNOS;
+EXTERN Int16	shared_arm2speech_hq_call_gain_dl[5]	AP_SHARED_SEC_DIAGNOS;
 
 /** @} */
 
 /**
- * @addtogroup ARM2SP2_HQ_DL_interface
- *
- * This interface is used for mixing/playing \Bold{48kHz Mono/Stereo PCM data
- * to Downlink}.\BR
- *
- * This PCM data will be mixed after Downlink speech processing in the 48kHz
- * mode.
- *
- * \note This interface works in only one way - from ARM to DSP. \BR
- *
- * One use-case of this interface is to support S-barge-in feature where a
- * music might be playing in the downlink using this interface and an
- * uplink record/speech recognition happens at the same time, then this
- * UL would get the benefit of echo cancellation of the music.
- *
- * In this interface 2 or 4-speech frames worth of data is transferred at a
- * time from ARM to DSP in ping-pong buffers - i.e. ARM fills empty half of
- * shared_Arm2SP2_InBuf[].
- *
- * When shared_ARM2SP2_HQ_DL_InBuf_out=0, ARM fills next half number of words from
- * shared_Arm2SP2_InBuf[half].
- * When shared_ARM2SP2_HQ_DL_InBuf_out=half, ARM fills half number of words from
- * shared_Arm2SP2_InBuf[0]. \BR
- *
- * To start ARM2SP2_HQ_DL: ARM enables ARM2SP2_HQ_DL by
- * VP_COMMAND_SET_ARM2SP2_HQ_DL.\BR
- *
- * To resume ARM2SP2_HQ_DL : ARM enables ARM2SP2_HQ_DL by
- * VP_COMMAND_SET_ARM2SP2_HQ_DL  with arg1=1.
- *
- * To control shared_Arm2SP2_InBuf[]: DSP interrupts ARM with \BR
- * VP_STATUS_ARM2SP2_HQ_DL_EMPTY( shared_ARM2SP2_HQ_DL_done_flag, \BR
- *                               shared_ARM2SP2_HQ_DL_InBuf_out, \BR
- *                               ARM2SP2_HQ_DL_flag )\BR
- * whenever finishing every half PCM data. shared_ARM2SP2_HQ_DL_InBuf_out
- * indicates the next index DSP will read.
- *
- * To stop ARM2SP2_HQ_DL:\BR
- * Quick stop: ARM disables ARM2SP2_HQ_DL using
- * VP_COMMAND_SET_ARM2SP2_HQ_DL (arg0=0).\BR
- * \note The ARM2SP2_HQ_DL will be stopped right away.
- * There may be un-finished PCM data in shared_Arm2SP2_InBuf[].\BR
- *
- * Finishing stop: After finishing filling the last 2/4-speech frame PCM data,
- * ARM set shared_ARM2SP2_HQ_DL_done_flag=1 to indicate the end of PCM data.
- * DSP ISR finishes the last 2/4-speech frames and disables ARM2SP2_HQ_DL.
- * DSP sends VP_STATUS_ARM2SP2_HQ_DL_EMPTY and arg0=0. \BR
- *
- * To pause ARM2SP2_HQ_DL: ARM disables ARM2SP2_HQ_DL using
- * VP_COMMAND_SET_ARM2SP2_HQ_DL (arg0=0, arg1=1).
- *
- * \see shared_Arm2SP2_InBuf, shared_ARM2SP2_HQ_DL_InBuf_out,
- *      shared_ARM2SP2_HQ_DL_done_flag, VP_COMMAND_SET_ARM2SP2_HQ_DL,
- *      VP_STATUS_ARM2SP2_HQ_DL_EMPTY,
- *
- * @{ */
-/**
- * This flag indicates the end of the transfer of data from the ARM to the
- * DSP. The transfer of data by ARM2SP2_HQ_DL interface can be disabled by
- * setting shared_ARM2SP2_HQ_DL_done_flag=1 after filling the
- * shared_Arm2SP2_InBuf[] buffer.
- * DSP will disable the feature when it reaches the next 1/2-speech frame
- * boundary. */
-EXTERN UInt16    shared_ARM2SP2_HQ_DL_done_flag                   					AP_SHARED_SEC_DIAGNOS;
-/**
- * This index indicates the next index DSP will read from the shared_Arm2SP2_InBuf[]
- * buffer.
- *
- * \note This index is changed only by the DSP.
- *
- * */
-EXTERN UInt16    shared_ARM2SP2_HQ_DL_InBuf_out                   					AP_SHARED_SEC_DIAGNOS;
-
-/**
- * The gain factor, shared_arm2speech2_hq_call_gain_dl is applied on the 48kHz PCM data
- * on the downlink path.\BR
- *
- * This gain is a ramped gain in Q14 format as shown below (Q14 means 2.14 format).\BR
- *
- * {
- * -   Int16 Start_Gain_in_Q14,
- * -   Int16 Target_Gain_in_Q14,
- * -   Int16 Step_size_to_increment_or_decrement_the_Gain_in_Q14,  (<= 0 make Start_Gain_in_Q14 = Target_Gain_in_Q14)
- * -   Int16 Reserved,
- * -   Int16 Reserved \BR
- * }
- *
+ * Unused
  */
-EXTERN Int16	shared_arm2speech2_hq_call_gain_dl[5]               					AP_SHARED_SEC_DIAGNOS;
+EXTERN UInt16 shared_unused_arm2sp2_hq_dl AP_SHARED_SEC_DIAGNOS;
+/**
+ * Unused
+ * */
+EXTERN UInt16 shared_unused_arm2sp2_hq_dl_1 AP_SHARED_SEC_DIAGNOS;
 
-/** @} */
+/**
+ * Unused
+ */
+EXTERN Int16	shared_unused_arm2sp2_hq_dl_2[5]	AP_SHARED_SEC_DIAGNOS;
+
 /**
  * @}
  */
 
-EXTERN UInt32 NOT_USE_shared_memory_end                                     AP_SHARED_SEC_DIAGNOS;
+EXTERN UInt16 shared_dsp_supported_features AP_SHARED_SEC_DIAGNOS;
+EXTERN UInt16 shared_ap_supported_features AP_SHARED_SEC_DIAGNOS;
+
+EXTERN UInt32 NOT_USE_shared_memory_end AP_SHARED_SEC_DIAGNOS;
 
 #ifdef MSP
 } AP_SharedMem_t;
 #endif
 
+#ifdef MSP
+typedef struct {
+#endif
+
+EXTERN UInt32 scr_ram_Arm2SP_HQ_DL_InBuf[NUM_OF_48K_SAMP_PER_INT0_INT*2]
+	DSP_AP_SCRATCHMEM_SEC;	/* 2ms stereo music frames of 16-bit samples */
+
+/**
+ * @addtogroup HANDSET_AADMAC_BUFFERS
+ *
+ * This interface is used for receiving 8/16 KHz input data from AADMAC which
+ * then passed over to the regular hand-set.
+ *
+ * \see
+ * @{
+ */
+/**
+ * These buffers are used for getting mono data for primary mic from AADMAC.
+ *
+ * \see
+ *
+ * \note The order of the buffers below is important. First should be the low
+ * buffer followed by
+ * the high buffer.
+ */
+EXTERN UInt32 scr_ram_aadmac_pri_mic_low[NUM_OF_8K_SAMP_PER_INT0_INT*2]
+	DSP_AP_SCRATCHMEM_SEC;
+EXTERN UInt32 scr_ram_aadmac_pri_mic_high[NUM_OF_8K_SAMP_PER_INT0_INT*2]
+	DSP_AP_SCRATCHMEM_SEC;
+
+/**
+ * These buffers are used for getting mono data for primary mic from AADMAC.
+ *
+ * \see
+ *
+ * \note The order of the buffers below is important. First should be the low
+ * buffer followed by
+ * the high buffer.
+ */
+EXTERN UInt32 scr_ram_aadmac_sec_mic_low[NUM_OF_8K_SAMP_PER_INT0_INT*2]
+	DSP_AP_SCRATCHMEM_SEC;
+EXTERN UInt32 scr_ram_aadmac_sec_mic_high[NUM_OF_8K_SAMP_PER_INT0_INT*2]
+	DSP_AP_SCRATCHMEM_SEC;
+
+/**
+ * These buffers are used for sending mono data for speaker from AADMAC (all
+ * paths other than IHF).
+ *
+ * \see
+ *
+ * \note The order of the buffers below is important. First should be the low
+ * buffer followed by
+ * the high buffer.
+ */
+EXTERN UInt32 scr_ram_aadmac_spkr_low[NUM_OF_48K_SAMP_PER_INT0_INT]
+	DSP_AP_SCRATCHMEM_SEC;
+EXTERN UInt32 scr_ram_aadmac_spkr_high[NUM_OF_48K_SAMP_PER_INT0_INT]
+	DSP_AP_SCRATCHMEM_SEC;
+/**
+ * @}
+ */
+
+#ifdef MSP
+} Dsp_AP_ScratchMem_t;
+#endif
 
 //******************************************************************************
 // Function Prototypes

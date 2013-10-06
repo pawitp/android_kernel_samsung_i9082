@@ -83,6 +83,7 @@
 #include "dwc_otg_cil.h"
 #include "dwc_otg_adp.h"
 
+
 #define DWC_DRIVER_VERSION	"2.91a 18-FEB-2009"
 #define DWC_DRIVER_DESC		"HS OTG USB Controller driver"
 
@@ -662,6 +663,9 @@ static int dwc_otg_driver_remove(
 		iounmap(otg_dev->base);
 	dwc_free(otg_dev);
 
+	/* Free up container list */
+	DWC_CONTAINER_LIST_FREE();
+
 	/*
 	 * Clear the drvdata pointer.
 	 */
@@ -842,6 +846,9 @@ static int dwc_otg_driver_probe(
 		retval = -EINVAL;
 		goto err4;
 	}
+
+	/* Create a static list of work containers incase we fail to malloc */
+	DWC_CONTAINER_LIST_INIT(DWC_WORK_CONTAINER_SIZE);
 
 	/*
 	 * Validate parameter values.

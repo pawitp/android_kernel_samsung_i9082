@@ -513,7 +513,15 @@ static void __exit island_rtc_exit(void)
 	platform_driver_unregister(&island_rtcdrv);
 }
 
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+/*
+* Make sure rtc-island is regestered as RTC0,and rtc-pmu is RTC1,
+* then android will use RTC0 as alarm device.
+*/
+subsys_initcall(island_rtc_init);
+#else
 module_init(island_rtc_init);
+#endif
 module_exit(island_rtc_exit);
 
 MODULE_DESCRIPTION("Broadcom Island RTC Driver");

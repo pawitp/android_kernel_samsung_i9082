@@ -110,16 +110,7 @@ void vt_event_post(unsigned int event, unsigned int old, unsigned int new)
 		wake_up_interruptible(&vt_event_waitqueue);
 }
 
-/**
- *	vt_event_wait		-	wait for an event
- *	@vw: our event
- *
- *	Waits for an event to occur which completes our vt_event_wait
- *	structure. On return the structure has wv->done set to 1 for success
- *	or 0 if some event such as a signal ended the wait.
- */
-
-static void vt_event_wait(struct vt_event_wait *vw)
+static void __vt_event_queue(struct vt_event_wait *vw)
 {
 	unsigned long flags;
 	/* Prepare the event */
@@ -129,13 +120,40 @@ static void vt_event_wait(struct vt_event_wait *vw)
 	spin_lock_irqsave(&vt_event_lock, flags);
 	list_add(&vw->list, &vt_events);
 	spin_unlock_irqrestore(&vt_event_lock, flags);
+}
+
+static void __vt_event_wait(struct vt_event_wait *vw)
+{
 	/* Wait for it to pass */
 	wait_event_interruptible_tty(vt_event_waitqueue, vw->done);
+}
+
+static void __vt_event_dequeue(struct vt_event_wait *vw)
+{
+	unsigned long flags;
+
 	/* Dequeue it */
 	spin_lock_irqsave(&vt_event_lock, flags);
 	list_del(&vw->list);
 	spin_unlock_irqrestore(&vt_event_lock, flags);
 }
+
+/**
+ *	vt_event_wait		-	wait for an event
+ *	@vw: our event
+ *
+ *	Waits for an event to occur which completes our vt_event_wait
+ *	structure. On return the structure has wv->done set to 1 for success
+ *	or 0 if some event such as a signal ended the wait.
+ */
+static void vt_event_wait(struct vt_event_wait *vw)
+{
+	__vt_event_queue(vw);
+	__vt_event_wait(vw);
+	__vt_event_dequeue(vw);
+}
+
+/**
 
 /**
  *	vt_event_wait_ioctl	-	event ioctl handler
@@ -177,10 +195,14 @@ int vt_waitactive(int n)
 {
 	struct vt_event_wait vw;
 	do {
-		if (n == fg_console + 1)
-			break;
 		vw.event.event = VT_EVENT_SWITCH;
-		vt_event_wait(&vw);
+		__vt_event_queue(&vw);
+		if (n == fg_console + 1) {
+			__vt_event_dequeue(&vw);
+			break;
+		}
+		__vt_event_wait(&vw);
+		__vt_event_dequeue(&vw);
 		if (vw.done == 0)
 			return -EINTR;
 	} while (vw.event.newev != n);

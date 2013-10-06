@@ -21,13 +21,13 @@
 typedef struct {
 	VCHIQ_PLATFORM_DATA_T common;
 
-	/* 
-	 * When the shared memory is to be allocated from system memory 
+	/*
+	 * When the shared memory is to be allocated from system memory
 	 * (i.e. using dma_alloc_coherent), set sharedMemVirt/Phys
 	 * to zero.
-	 *  
-	 * When dedicated shared memory is available (i.e. bigsland uses the 160K 
-	 * SRAM), then set sharedMemVirt/Phys appropriately. 
+	 *
+	 * When dedicated shared memory is available (i.e. bigsland
+	 * uses the 160K SRAM), then set sharedMemVirt/Phys appropriately.
 	 */
 
 	void *sharedMemVirt;

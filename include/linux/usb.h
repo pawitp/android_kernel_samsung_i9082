@@ -1438,16 +1438,7 @@ extern int usb_driver_set_configuration(struct usb_device *udev, int config);
  * USB identifies 5 second timeouts, maybe more in a few cases, and a few
  * slow devices (like some MGE Ellipse UPSes) actually push that limit.
  */
-#ifdef CONFIG_USB_OTG
-/* REVISIT: In case device went away after bus reset,
- * get descriptor request would fail. In this case, we need
- * to detect this sooner and take corrective action. Change
- * this 5 seconds timout to 500ms for now as a temp workaround
- */
-#define USB_CTRL_GET_TIMEOUT	7000
-#else
-#define USB_CTRL_GET_TIMEOUT	7000
-#endif
+#define USB_CTRL_GET_TIMEOUT	7000 // increased to 7000 for some specific memory sticks
 #define USB_CTRL_SET_TIMEOUT	5000
 
 

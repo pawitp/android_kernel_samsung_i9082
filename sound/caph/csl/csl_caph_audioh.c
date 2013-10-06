@@ -413,12 +413,12 @@ void csl_caph_audioh_config(int path_id, void *p)
 	 * We're about to use path_id to index the array,
 	 * so it better be in bounds
 	 */
-	BUG_ON(path_id < 0);
+	BUG_ON(path_id <= AUDDRV_PATH_NONE);
 	BUG_ON(path_id >= AUDDRV_PATH_TOTAL);
 
-	if (path_id > 0 && path_id < AUDDRV_PATH_TOTAL)
-		if (path[path_id].started)
-			return;
+	if (path[path_id].started)
+		return;
+
 	aTrace
 	      (LOG_AUDIO_CSL,
 	       "csl_caph_audioh_config:: path %d sr %d bits %d chNum %d pack %d eanc %d:%d.\r\n",
@@ -796,7 +796,7 @@ CSL_CAPH_AUDIOH_BUFADDR_t csl_caph_audioh_get_fifo_addr(int path_id)
 // Return:
 //
 //===========================================================================*/
-void csl_caph_audioh_start(int path_id)
+void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev)
 {
 	UInt16 chnl_enable = 0x0;
 
@@ -901,7 +901,8 @@ void csl_caph_audioh_start(int path_id)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
+						clock_phase_rev);
 		micStatus |= 0x3;
 		break;
 
@@ -910,7 +911,8 @@ void csl_caph_audioh_start(int path_id)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
+						clock_phase_rev);
 		micStatus |= 0x1;
 		break;
 
@@ -919,7 +921,8 @@ void csl_caph_audioh_start(int path_id)
 		/* DMIC0CLK/DMIC0CQ can control both DMIC1 and DMIC2.*/
 		chal_audio_dmic1_pwrctrl(handle, TRUE);
 		/* Enable the digital microphone */
-		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable);
+		chal_audio_vinpath_digi_mic_enable(handle, chnl_enable,
+						clock_phase_rev);
 		micStatus |= 0x2;
 		break;
 
@@ -1816,7 +1819,7 @@ void csl_caph_audioh_sidetone_set_gain(UInt32 gain)
 
 void csl_caph_audioh_vinpath_digi_mic_enable(UInt16 ctrl)
 {
-	chal_audio_vinpath_digi_mic_enable(handle, ctrl);
+	chal_audio_vinpath_digi_mic_enable(handle, ctrl, 0);
 	return;
 }
 /*============================================================================

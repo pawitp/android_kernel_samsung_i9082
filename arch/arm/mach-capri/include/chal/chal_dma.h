@@ -383,7 +383,7 @@ extern "C" {
 *
 *  @note
 ******************************************************************************/
-	void chal_dma_shutdown_channel(CHAL_CHANNEL_HANDLE handle);
+	CHAL_DMA_STATUS_t chal_dma_shutdown_channel(CHAL_CHANNEL_HANDLE handle);
 
 /**
 *

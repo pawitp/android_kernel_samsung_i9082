@@ -43,6 +43,8 @@
 #define WFDSCRAPER_METADATA_IDR_WANTED \
 	WFDSCRAPER_METADATA('W', 'D', 'I', 'F')
 
+#define WFD_MR_STATE_IDLE               0
+#define WFD_MR_STATE_STARTED            1
 
 /* Type define used to create unique IOCTL number */
 #define WFD_MAGIC_TYPE                  'W'
@@ -58,7 +60,8 @@ enum wfd_cmd_e {
 	WFD_CMD_SET_AUDIO_DATA,
 	WFD_CMD_GET_AUDIO_DATA,
 	WFD_CMD_FLUSH_AUDIO_DATA,
-	WFD_CMD_SET_PROFILING_TS,
+	WFD_CMD_SET_MR_STATE,
+	WFD_CMD_GET_MR_STATE,
 	WFD_CMD_LAST		/* Do no delete */
 };
 
@@ -99,27 +102,8 @@ struct wfd_ioctl_audio_data {
 	unsigned int size;
 };
 
-/* WFD Profiling timestamp types */
-enum wfd_profiling_ts_type_e {
-	WFD_PROFILING_TS_HW_COMPOSER = 0,
-	WFD_PROFILING_TS_CODEC,
-	WFD_PROFILING_TS_MPEG2TS_WRITER,
-	WFD_PROFILING_TS_DRV_WRITE,
-	WFD_PROFILING_TS_DRV_READ,
-	WFD_PROFILING_TS_NETWORK_SEND,
-	WFD_PROFILING_TS_LAST	/* must be last */
-};
-
-/* WFD Profiling timestamp structure */
-struct wfd_profiling_ts {
-	unsigned int type;
-	unsigned long timestamp;
-};
-
-/* WFD Profiling structure passed in ioctl */
-struct wfd_ioctl_profiling_ts {
-	unsigned int num_ts;
-	struct wfd_profiling_ts *first;
+struct wfd_ioctl_mr_state {
+	unsigned int state;
 };
 
 /* IOCTL numbers */
@@ -149,9 +133,12 @@ struct wfd_ioctl_profiling_ts {
 	struct wfd_ioctl_audio_data)
 #define WFD_IOCTL_FLUSH_AUDIO_DATA \
 	_IO(WFD_MAGIC_TYPE, WFD_CMD_FLUSH_AUDIO_DATA)
-#define WFD_IOCTL_SET_PROFILING_TS \
-	_IOW(WFD_MAGIC_TYPE, WFD_CMD_SET_PROFILING_TS,\
-	struct wfd_ioctl_profiling_ts)
+#define WFD_IOCTL_GET_MR_STATE \
+	_IOR(WFD_MAGIC_TYPE, WFD_CMD_GET_MR_STATE,\
+	struct wfd_ioctl_mr_state)
+#define WFD_IOCTL_SET_MR_STATE \
+	_IOR(WFD_MAGIC_TYPE, WFD_CMD_SET_MR_STATE,\
+	struct wfd_ioctl_mr_state)
 
 /* ---- Variable Externs ------------------------------------------ */
 

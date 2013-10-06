@@ -42,7 +42,9 @@ enum usb_xceiv_events {
 	USB_EVENT_CHARGER,      /* usb dedicated charger */
 	USB_EVENT_ENUMERATED,   /* gadget driver enumerated */
 	USB_EVENT_SUSPEND_CORE,
-	USB_EVENT_WAKEUP_CORE
+	USB_EVENT_WAKEUP_CORE,
+	USB_EVENT_START_SOFT_DISCONNECT,
+	USB_EVENT_RESTORE_SOFT_DISCONNECT
 };
 
 struct otg_transceiver;
@@ -124,6 +126,9 @@ struct otg_transceiver {
 
 	/* Set OTG enable/disable in transceiver */
 	int	(*set_otg_enable)(struct otg_transceiver *otg, bool enable);
+
+	/* Check if ACA-C is detected */
+	bool (*is_rid_c)(struct otg_transceiver *otg);
 
 };
 

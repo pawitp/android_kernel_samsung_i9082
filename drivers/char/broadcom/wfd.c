@@ -33,9 +33,7 @@
 #include <linux/sched.h>
 #include <linux/wait.h>
 #include <linux/poll.h>
-#include <linux/ip.h>
-#include <linux/udp.h>
-#include <linux/netfilter_ipv4.h>
+#include <linux/slab.h>
 
 /* ---- Private Constants and Types -------------------------------------- */
 
@@ -53,9 +51,6 @@
 #define WFD_KNLLOG(...)
 #endif
 
-#define WFD_MAX_TS_PER_LIST 10000
-#define WFD_TS_DUMP_FILE "/tmp/wfd_profiling_timestamps.txt"
-
 /* ---- Private Function Prototypes -------------------------------------- */
 
 static int wfd_probe(struct platform_device *pdev);
@@ -66,20 +61,11 @@ static int wfd_release(struct inode *inode, struct file *file);
 static ssize_t wfd_read(struct file *file, char __user *buffer, size_t count,
 			loff_t *ppos);
 static int wfd_fsync(struct file *file, int datasync);
-static ssize_t wfd_write(struct file *file, const char __user *buffer,
+static ssize_t wfd_write(struct file *file, const char __user * buffer,
 			 size_t count, loff_t *ppos);
 static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 static unsigned int wfd_poll(struct file *file,
 			     struct poll_table_struct *poll_table);
-static unsigned int wfd_ts_lists_get_max_count(void);
-static int wfd_queue_ts(unsigned int type, unsigned long timestamp);
-static int wfd_prof_add_ts(unsigned int type, unsigned int count);
-static void wfd_prof_prepare_dump_file(void);
-static unsigned int wfd_prof_netfilter_hook(unsigned int hooknum,
-					    struct sk_buff *skb,
-					    const struct net_device *in,
-					    const struct net_device *out,
-					    int (*okfn) (struct sk_buff *));
 
 /* ---- Private Variables ------------------------------------------------- */
 
@@ -102,14 +88,6 @@ static const struct file_operations gfops = {
 	.poll = wfd_poll,
 };
 
-/* Net filter hook structure for profiling */
-static struct nf_hook_ops wfd_nf_ops = {
-	.hook = wfd_prof_netfilter_hook,
-	.pf = PF_INET,
-	.hooknum = NF_INET_POST_ROUTING,
-	.priority = NF_IP_PRI_LAST,
-};
-
 #define WFD_DATA_SIZE   188	/* size of MPEG2TS packet */
 struct wfd_data_block {
 	struct list_head wfd_list;
@@ -124,10 +102,8 @@ struct wfd_data_block {
 #define AUDIO_SAMPLE_SIZE       (AUDIO_SAMPLE_CHANNELS * AUDIO_SAMPLE_BYTES)
 struct wfd_audio_block {
 	struct list_head wfd_list;
-
-	char *data;
-	uint32_t size;
-
+	size_t size;
+	uint8_t data[WFD_AUDIO_SIZE];
 };
 
 struct wfd_stat_block {
@@ -147,16 +123,6 @@ struct wfd_audio_stat_block {
 	uint64_t wfd_rd_fail;
 };
 
-struct wfd_ts_block {
-	struct list_head list_head;
-	unsigned long timestamp;
-};
-
-struct wfd_ts_list {
-	unsigned int num_entries;
-	struct wfd_ts_block list;
-};
-
 enum wfd_state {
 	WFD_STATE_IDLE,
 	WFD_STATE_START,
@@ -172,34 +138,28 @@ static struct wfd_stat_block wfd_stat;
 static struct mutex wfd_queue_lock;
 static struct mutex wfd_audio_lock;
 static struct mutex wfd_partial_lock;
-static struct mutex wfd_prof_lock;
-struct wfd_ioctl_metadata wfd_metadata;
+struct wfd_ioctl_metadata wfd_metadata = {WFDSCRAPER_METADATA_STOP};
 struct wfd_ioctl_neg_config wfd_neg_config;
 struct wfd_ioctl_con_state wfd_con_state;
+struct wfd_ioctl_mr_state wfd_mr_state;
 static int wfd_refcount;
 
-static long wfd_prof_enabled;
-static long wfd_prof_max_ts = WFD_MAX_TS_PER_LIST;
 static enum wfd_state wfd_current_state = WFD_STATE_IDLE;
 
 static DECLARE_WAIT_QUEUE_HEAD(read_wq);
 static DECLARE_WAIT_QUEUE_HEAD(audio_wq);
+
+static struct kmem_cache *wfd_data_cache;
+static struct kmem_cache *wfd_audio_cache;
 
 /* audio frame count and start time */
 static uint64_t audio_frame_cnt;
 static struct timeval audio_start_time;
 
 static struct wfd_data_block *wfd_partial_block;
-static struct wfd_ts_list wfd_ts_lists[WFD_PROFILING_TS_LAST];
 
 static struct proc_dir_entry *wfd_proc_dir;
 static struct proc_dir_entry *wfd_info_proc_entry;
-static struct proc_dir_entry *wfd_prof_proc_dir;
-static struct proc_dir_entry *wfd_prof_enable_proc_entry;
-static struct proc_dir_entry *wfd_prof_dump_proc_entry;
-static struct proc_dir_entry *wfd_prof_counts_proc_entry;
-static struct proc_dir_entry *wfd_prof_max_ts_proc_entry;
-static struct proc_dir_entry *wfd_prof_add_ts_proc_entry;
 
 /* ---- Public Variables ------------------------------------------------- */
 
@@ -236,10 +196,7 @@ static void flush_audio()
 				     struct wfd_audio_block, wfd_list);
 		if (data) {
 			list_del(&(data->wfd_list));
-
-			kfree(data->data);
-			data->data = NULL;
-			kfree(data);
+			kmem_cache_free(wfd_audio_cache, data);
 			data = NULL;
 		}
 	}
@@ -260,7 +217,7 @@ static void flush_ts()
 	/* free the partial block */
 	mutex_lock(&wfd_partial_lock);
 	if (wfd_partial_block != NULL) {
-		kfree(wfd_partial_block);
+		kmem_cache_free(wfd_data_cache, wfd_partial_block);
 		wfd_partial_block = NULL;
 	}
 	mutex_unlock(&wfd_partial_lock);
@@ -271,9 +228,9 @@ static void flush_ts()
 		data =
 		    list_first_entry(&(wfd_data.wfd_list),
 				     struct wfd_data_block, wfd_list);
-		if (data) {
+		if (likely(data)) {
 			list_del(&(data->wfd_list));
-			kfree(data);
+			kmem_cache_free(wfd_data_cache, data);
 			data = NULL;
 		}
 	}
@@ -302,7 +259,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			rc = copy_from_user(&metadata,
 					    (void __user *)arg,
 					    sizeof(struct wfd_ioctl_metadata));
-			if (rc)
+			if (unlikely(rc))
 				return rc;
 
 			wfd_metadata.action = metadata.action;
@@ -322,7 +279,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				if (wfd_metadata.action ==
 				    WFDSCRAPER_METADATA_STOP) {
 					wfd_current_state = WFD_STATE_IDLE;
-				hdmi_set_wifi_hdmi(0);
+					hdmi_set_wifi_hdmi(0);
 				} else {
 					wfd_current_state = WFD_STATE_PAUSE;
 				}
@@ -356,7 +313,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		rc = copy_to_user((void __user *)arg,
 				  &wfd_metadata,
 				  sizeof(struct wfd_ioctl_metadata));
-		if (rc)
+		if (unlikely(rc))
 			return rc;
 
 		break;
@@ -369,7 +326,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					    (void __user *)arg,
 					    sizeof(struct
 						   wfd_ioctl_neg_config));
-			if (rc)
+			if (unlikely(rc))
 				return rc;
 
 			memcpy(&wfd_neg_config,
@@ -381,7 +338,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		rc = copy_to_user((void __user *)arg,
 				  &wfd_neg_config,
 				  sizeof(struct wfd_ioctl_neg_config));
-		if (rc)
+		if (unlikely(rc))
 			return rc;
 		break;
 
@@ -393,7 +350,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					    (void __user *)arg,
 					    sizeof(struct wfd_ioctl_con_state));
 
-			if (rc)
+			if (unlikely(rc))
 				return rc;
 
 			memcpy(&wfd_con_state,
@@ -406,88 +363,84 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				  &wfd_con_state,
 				  sizeof(struct wfd_ioctl_con_state));
 
-		if (rc)
+		if (unlikely(rc))
 			return rc;
 
 		break;
 
 	case WFD_CMD_SET_AUDIO_DATA:
-		if (wfd_current_state != WFD_STATE_PLAY)
-			return -EINVAL;
-		else {
-			struct wfd_ioctl_audio_data audio_data;
-			struct wfd_audio_block *data = NULL;
 
-			wfd_audio_stat.wfd_wt++;
+		switch (wfd_current_state) {
+		case WFD_STATE_PAUSE:
+			/* silently drop audio in pause state */
+			rc = 0;
+			break;
+		case WFD_STATE_PLAY:
+		    {
+				struct wfd_ioctl_audio_data audio_data;
+				struct wfd_audio_block *data = NULL;
 
-			rc = copy_from_user(&audio_data,
-					    (void __user *)arg,
-					    sizeof(struct
-						   wfd_ioctl_audio_data));
-			if (rc) {
-				wfd_audio_stat.wfd_wt_fail++;
-				printk(KERN_ERR
-				       "WFD: failed audio data ioctl, rc=%d",
-				       rc);
-				return rc;
-			}
+				wfd_audio_stat.wfd_wt++;
 
-			/* verify that the requested size is expected */
-			if (audio_data.size != WFD_AUDIO_SIZE) {
-				printk(KERN_ERR
-				       "WFD: unexpected audio set size. Expected=%d, got=%d",
-				       WFD_AUDIO_SIZE, audio_data.size);
-				return -EINVAL;
-			}
+				rc = copy_from_user(&audio_data,
+						    (void __user *)arg,
+						    sizeof(struct
+						    wfd_ioctl_audio_data));
+				if (unlikely(rc)) {
+					wfd_audio_stat.wfd_wt_fail++;
+					printk(KERN_ERR
+					       "WFD: failed audio data ioctl, rc=%d",
+					       rc);
+					return rc;
+				}
 
-			data =
-			    kzalloc(sizeof(struct wfd_data_block), GFP_KERNEL);
-			if (data == NULL) {
-				wfd_audio_stat.wfd_wt_fail++;
-				printk(KERN_ERR
-				       "WFD: failed alloc audio block");
-				return -ENOMEM;
-			}
+				/* verify that the requested size is expected */
+				if (unlikely(audio_data.size !=
+						WFD_AUDIO_SIZE)) {
+					printk(KERN_ERR
+					       "WFD: unexpected audio set size. Expected=%d, got=%d",
+					       WFD_AUDIO_SIZE, audio_data.size);
+					return -EINVAL;
+				}
 
-			/* allocate enough memory per the writer's request */
-			data->data =
-			    kzalloc(sizeof(unsigned char) * WFD_AUDIO_SIZE,
-				    GFP_KERNEL);
-			if (data->data == NULL) {
-				wfd_audio_stat.wfd_wt_fail++;
-				kfree(data);
-				printk(KERN_ERR
-				       "WFD: failed alloc audio data block");
-				return -ENOMEM;
-			}
+				data = kmem_cache_alloc(wfd_audio_cache,
+						GFP_KERNEL);
+				if (unlikely(data == NULL)) {
+					wfd_audio_stat.wfd_wt_fail++;
+					printk(KERN_ERR
+					       "WFD: failed alloc audio block");
+					return -ENOMEM;
+				}
+				data->size = WFD_AUDIO_SIZE;
 
-			data->size = WFD_AUDIO_SIZE;
-
-			rc = copy_from_user(data->data,
+				rc = copy_from_user(data->data,
 					    (void __user *)audio_data.data,
 					    data->size);
-			if (rc) {
-				wfd_audio_stat.wfd_wt_fail++;
+				if (unlikely(rc)) {
+					wfd_audio_stat.wfd_wt_fail++;
+					kmem_cache_free(wfd_audio_cache, data);
+					data = NULL;
 
-				kfree(data->data);
-				data->data = NULL;
-				kfree(data);
-				data = NULL;
+					printk(KERN_ERR
+					       "WFD: failed audio data->data ioctl, rc=%d",
+					       rc);
+					return rc;
+				}
 
-				printk(KERN_ERR
-				       "WFD: failed audio data->data ioctl, rc=%d",
-				       rc);
-				return rc;
-			}
+				mutex_lock(&wfd_audio_lock);
+				list_add_tail(&(data->wfd_list),
+					&(wfd_audio.wfd_list));
+				mutex_unlock(&wfd_audio_lock);
 
-			mutex_lock(&wfd_audio_lock);
-			list_add_tail(&(data->wfd_list), &(wfd_audio.wfd_list));
-			mutex_unlock(&wfd_audio_lock);
+				/* wake up the audio reader */
+				wake_up_interruptible(&audio_wq);
 
-			/* wake up the audio reader */
-			wake_up_interruptible(&audio_wq);
-
-			rc = 0;
+				rc = 0;
+				break;
+		    }
+		default:
+			rc = -EINVAL;
+			break;
 		}
 		break;
 
@@ -513,7 +466,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 					    (void __user *)arg,
 					    sizeof(struct
 						   wfd_ioctl_audio_data));
-			if (rc) {
+			if (unlikely(rc)) {
 				printk(KERN_ERR
 				       "WFD: failed copy audio data ioctl, rc=%d",
 				       rc);
@@ -522,7 +475,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			}
 
 			/* verify that the read size is expected */
-			if (audio_data.size != WFD_AUDIO_SIZE) {
+			if (unlikely(audio_data.size != WFD_AUDIO_SIZE)) {
 				printk(KERN_ERR
 				       "WFD: unexpected audio get size. Expected=%d, got=%d",
 				       WFD_AUDIO_SIZE, audio_data.size);
@@ -597,7 +550,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				    list_first_entry(&(wfd_audio.wfd_list),
 						     struct wfd_audio_block,
 						     wfd_list);
-				if (data) {
+				if (likely(data)) {
 					valid = 1;
 					list_del(&(data->wfd_list));
 				}
@@ -607,9 +560,8 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			if (valid) {
 				rc = copy_to_user((void __user *)
 						  audio_data.data, data->data,
-						  WFD_AUDIO_SIZE *
-						  sizeof(char));
-				if (rc) {
+						  WFD_AUDIO_SIZE);
+				if (unlikely(rc)) {
 					printk(KERN_ERR
 					       "WFD: failed read audio data ioctl, rc=%d",
 					       rc);
@@ -617,9 +569,7 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				} else
 					wfd_audio_stat.wfd_rd++;
 
-				kfree(data->data);
-				data->data = NULL;
-				kfree(data);
+				kmem_cache_free(wfd_audio_cache, data);
 				data = NULL;
 			} else {
 				rc = -EINVAL;
@@ -635,41 +585,30 @@ static long wfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		rc = 0;
 		break;
 
-	case WFD_CMD_SET_PROFILING_TS:
-
-		/* add a new profiling timestamp(s) */
+	case WFD_CMD_SET_MR_STATE:
 		{
-			struct wfd_ioctl_profiling_ts ctrl;
-			struct wfd_profiling_ts *ts_ptr;
-			struct wfd_profiling_ts ts;
+			struct wfd_ioctl_mr_state mr_state;
 
-			if (!wfd_prof_enabled)
-				return -EPERM;
+			rc = copy_from_user(&mr_state,
+				(void __user *)arg,
+				sizeof(struct wfd_ioctl_mr_state));
 
-			rc = copy_from_user(&ctrl, (void __user *)arg,
-					    sizeof(struct
-						   wfd_ioctl_profiling_ts));
-			if (rc)
+			if (unlikely(rc))
 				return rc;
 
-			ts_ptr = ctrl.first;
-			while (ctrl.num_ts--) {
-				rc = copy_from_user(&ts,
-						    (void __user *)ts_ptr,
-						    sizeof(struct
-							   wfd_profiling_ts));
-				if (rc)
-					break;
-				if (ts.type < WFD_PROFILING_TS_LAST)
-					rc = wfd_queue_ts(ts.type,
-							  ts.timestamp);
-				else {
-					rc = -EINVAL;
-					break;
-				}
-				ts_ptr++;
-			}
+			memcpy(&wfd_mr_state,
+				&mr_state, sizeof(struct wfd_ioctl_mr_state));
 		}
+		break;
+
+	case WFD_CMD_GET_MR_STATE:
+		rc = copy_to_user((void __user *) arg,
+				&wfd_mr_state,
+				sizeof(struct wfd_ioctl_mr_state));
+
+		if (unlikely(rc))
+			return rc;
+
 		break;
 
 	default:
@@ -754,7 +693,7 @@ static ssize_t wfd_dequeue_and_copy(char __user *buffer, size_t count)
 
 			/* no data is available, wait */
 			if (done)
-			break;
+				break;
 
 			wfd_flush_required = false;
 
@@ -769,7 +708,7 @@ static ssize_t wfd_dequeue_and_copy(char __user *buffer, size_t count)
 			if (list_empty(&(wfd_data.wfd_list))) {
 				wfd_flush_required = false;
 				break;
-		}
+			}
 
 			continue;
 		}
@@ -788,15 +727,12 @@ static ssize_t wfd_dequeue_and_copy(char __user *buffer, size_t count)
 				 */
 				done = 1;
 
-			kfree(data);
+			kmem_cache_free(wfd_data_cache, data);
 		} else {
-			kfree(data);
+			kmem_cache_free(wfd_data_cache, data);
 			wfd_stat.wfd_rd_fail++;
 			return -EFAULT;
 		}
-		if (wfd_prof_enabled)
-			wfd_prof_add_ts(WFD_PROFILING_TS_DRV_READ, 1);
-
 		data = NULL;
 	}
 
@@ -833,9 +769,19 @@ static ssize_t wfd_read(struct file *file,
 
 		while (list_empty(&(wfd_data.wfd_list))) {
 			if (wait_event_interruptible(read_wq,
-						     (!list_empty
-						      (&(wfd_data.wfd_list)))))
+							(!list_empty
+							(&(wfd_data.wfd_list))
+							|| wfd_flush_required))) {
 				return -ERESTARTSYS;
+			}
+
+			/* if list is empty here, then we simply return with
+			 * nothing read */
+			if (list_empty(&(wfd_data.wfd_list))) {
+				wfd_flush_required = false;
+				return 0;
+			}
+
 		}
 
 		read = wfd_dequeue_and_copy(buffer, count);
@@ -855,7 +801,7 @@ static ssize_t wfd_queue_and_copy(const char __user *buffer, size_t count)
 	 * (TS packet size) at a time
 	 */
 	while (num_data_blocks--) {
-		data = kzalloc(sizeof(struct wfd_data_block), GFP_KERNEL);
+		data = kmem_cache_alloc(wfd_data_cache, GFP_KERNEL);
 		if (unlikely(data == NULL)) {
 			wfd_stat.wfd_wt_fail++;
 			return -ENOMEM;
@@ -864,6 +810,7 @@ static ssize_t wfd_queue_and_copy(const char __user *buffer, size_t count)
 						  buffer,
 						  sizeof(data->data)) == 0)) {
 				data->size = sizeof(data->data);
+				data->eof = 0;
 				write += data->size;
 				buffer += data->size;
 
@@ -871,14 +818,10 @@ static ssize_t wfd_queue_and_copy(const char __user *buffer, size_t count)
 				list_add_tail(&(data->wfd_list),
 					      &(wfd_data.wfd_list));
 				mutex_unlock(&wfd_queue_lock);
-				if (wfd_prof_enabled)
-					wfd_prof_add_ts
-					    (WFD_PROFILING_TS_DRV_WRITE, 1);
-
 				wake_up_interruptible(&read_wq);
 			} else {
 				wfd_stat.wfd_wt_fail++;
-				kfree(data);
+				kmem_cache_free(wfd_data_cache, data);
 				return -EFAULT;
 			}
 		}
@@ -962,8 +905,7 @@ static ssize_t wfd_write(struct file *file,
 			 * Since less than a WFD data block is being
 			 * written, allocate a new partial block
 			 */
-			data = kzalloc(sizeof(struct wfd_data_block),
-				       GFP_KERNEL);
+			data = kmem_cache_alloc(wfd_data_cache, GFP_KERNEL);
 			if (unlikely(data == NULL)) {
 				mutex_unlock(&wfd_partial_lock);
 				wfd_stat.wfd_wt_fail++;
@@ -972,10 +914,11 @@ static ssize_t wfd_write(struct file *file,
 
 			if (likely(copy_from_user(&(data->data),
 						  buffer, count) == 0)) {
+				data->eof = 0;
 				data->size = count;
 				write = count;
 			} else {
-				kfree(data);
+				kmem_cache_free(wfd_data_cache, data);
 				mutex_unlock(&wfd_partial_lock);
 				wfd_stat.wfd_wt_fail++;
 				return -EFAULT;
@@ -1018,9 +961,6 @@ static ssize_t wfd_write(struct file *file,
 
 			wfd_partial_block = NULL;
 			mutex_unlock(&wfd_partial_lock);
-			if (wfd_prof_enabled)
-				wfd_prof_add_ts(WFD_PROFILING_TS_DRV_WRITE, 1);
-
 			wake_up_interruptible(&read_wq);
 		} else
 			mutex_unlock(&wfd_partial_lock);
@@ -1079,6 +1019,7 @@ static int wfd_info_proc_read(char *buf,
 		current_state = "PAUSE";
 		break;
 	default:
+		current_state = "UNKNOWN";
 		break;
 	}
 
@@ -1121,294 +1062,6 @@ static int wfd_info_proc_read(char *buf,
 
 /***************************************************************************/
 /**
-*  Proc read function to display counters for each of the timestamp types.
-*
-*/
-static int wfd_prof_counts_proc_read(char *buf,
-				     char **start,
-				     off_t offset, int count, int *eof,
-				     void *data)
-{
-	char *p = buf;
-	unsigned long hw_composer;
-	unsigned long codec;
-	unsigned long mpeg2ts_writer;
-	unsigned long driver_write;
-	unsigned long driver_read;
-	unsigned long net_send;
-
-	(void)start;
-	(void)count;
-	(void)data;
-
-	if (offset > 0) {
-		*eof = 1;
-		return 0;
-	}
-
-	mutex_lock(&wfd_prof_lock);
-	hw_composer = wfd_ts_lists[WFD_PROFILING_TS_HW_COMPOSER].num_entries;
-	codec = wfd_ts_lists[WFD_PROFILING_TS_CODEC].num_entries;
-	mpeg2ts_writer =
-	    wfd_ts_lists[WFD_PROFILING_TS_MPEG2TS_WRITER].num_entries;
-	driver_write = wfd_ts_lists[WFD_PROFILING_TS_DRV_WRITE].num_entries;
-	driver_read = wfd_ts_lists[WFD_PROFILING_TS_DRV_READ].num_entries;
-	net_send = wfd_ts_lists[WFD_PROFILING_TS_NETWORK_SEND].num_entries;
-	mutex_unlock(&wfd_prof_lock);
-
-	p += sprintf(p, "[HW Composer]       %lu\n", hw_composer);
-	p += sprintf(p, "[Codec]             %lu\n", codec);
-	p += sprintf(p, "[MPEG2TS Writer]    %lu\n", mpeg2ts_writer);
-	p += sprintf(p, "[WFD Driver Write]  %lu\n", driver_write);
-	p += sprintf(p, "[WFD Driver Read]   %lu\n", driver_read);
-	p += sprintf(p, "[Network Send]      %lu\n", net_send);
-
-	*eof = 1;
-	return p - buf;
-}
-
-/***************************************************************************/
-/**
-*  Proc read function to show whether profiling is enabled or not.
-*
-*/
-static int wfd_prof_enable_proc_read(char *buf, char **start,
-				     off_t offset, int count, int *eof,
-				     void *data)
-{
-	char *p = buf;
-
-	(void)start;
-	(void)count;
-	(void)data;
-
-	if (offset > 0) {
-		*eof = 1;
-		return 0;
-	}
-
-	p += sprintf(p, "%ld\n", wfd_prof_enabled);
-
-	*eof = 1;
-	return p - buf;
-}
-
-/***************************************************************************/
-/**
-*  Proc write function to control whether profiling is enabled or not.
-*  A value of '1' is used to enable profiling, and '0' to disable it.
-*
-*/
-static int wfd_prof_enable_proc_write(struct file *file,
-				      const char __user *buf,
-				      unsigned long count, void *data)
-{
-	char temp[3];
-	long enable;
-
-	(void)file;
-	(void)data;
-
-	if (count >= sizeof(temp))
-		return -EINVAL;
-
-	if (copy_from_user(temp, buf, count))
-		return -EFAULT;
-
-	temp[count] = '\0';
-
-	if (kstrtol(temp, 10, &enable))
-		return -EINVAL;
-
-	if ((enable != 1) && (enable != 0))
-		return -EINVAL;
-
-	if (enable != wfd_prof_enabled) {
-
-		if (enable && (wfd_ts_lists_get_max_count() != 0)) {
-			printk(KERN_ALERT "WFD: please dump existing"
-			       "timestamps before re-enabling profiling\n");
-			return -EINVAL;
-		}
-
-		wfd_prof_enabled = enable;
-
-		if (wfd_prof_enabled)
-			nf_register_hook(&wfd_nf_ops);
-		else
-			nf_unregister_hook(&wfd_nf_ops);
-	}
-
-	return count;
-}
-
-/***************************************************************************/
-/**
-*  Proc read function to show the max number of timestamps stored.
-*
-*/
-static int wfd_prof_max_ts_proc_read(char *buf, char **start,
-				     off_t offset, int count, int *eof,
-				     void *data)
-{
-	char *p = buf;
-
-	(void)start;
-	(void)count;
-	(void)data;
-
-	if (offset > 0) {
-		*eof = 1;
-		return 0;
-	}
-
-	p += sprintf(p, "%ld\n", wfd_prof_max_ts);
-
-	*eof = 1;
-	return p - buf;
-}
-
-/***************************************************************************/
-/**
-*  Proc write function to set the max number of timestamps that will be
-*  stored.
-*
-*/
-static int wfd_prof_max_ts_proc_write(struct file *file,
-				      const char __user *buf,
-				      unsigned long count, void *data)
-{
-	char temp[64];
-	long max_ts;
-
-	(void)file;
-	(void)data;
-
-	if (count >= sizeof(temp))
-		return -EINVAL;
-
-	if (wfd_prof_enabled) {
-		printk(KERN_ALERT "WFD: please disable profiling before"
-		       "changing this value\n");
-		return -EINVAL;
-	}
-
-	if (copy_from_user(temp, buf, count))
-		return -EFAULT;
-
-	temp[count] = '\0';
-
-	if (kstrtol(temp, 10, &max_ts))
-		return -EINVAL;
-
-	wfd_prof_max_ts = max_ts;
-
-	return count;
-}
-
-/***************************************************************************/
-/**
-*  Proc write function to dump all of the collected timestamps to a file.
-*  A value of '1' is used to trigger the dump.
-*/
-static int wfd_prof_dump_proc_write(struct file *file, const char __user *buf,
-				    unsigned long count, void *data)
-{
-	char temp[3];
-	long dump;
-
-	(void)file;
-	(void)data;
-
-	if (count >= sizeof(temp))
-		return -EINVAL;
-
-	if (copy_from_user(temp, buf, count))
-		return -EFAULT;
-
-	temp[count] = '\0';
-
-	if (kstrtol(temp, 10, &dump))
-		return -EINVAL;
-
-	if (wfd_prof_enabled) {
-		printk(KERN_ALERT "WFD: please disable profiling first\n");
-		return -EINVAL;
-	}
-
-	if (dump == 1) {
-		printk(KERN_ALERT
-		       "WFD: starting dump of profiling timestamps ...\n");
-		wfd_prof_prepare_dump_file();
-		printk(KERN_ALERT "WFD: ... dump complete! Wrote to %s\n",
-		       WFD_TS_DUMP_FILE);
-	} else {
-		printk(KERN_ALERT "WFD: invalid dump value\n");
-		return -EINVAL;
-	}
-
-	return count;
-}
-
-/***************************************************************************/
-/**
-*  Proc write function to add a new timestamp.
-*  Written as a string with format: 'type,timestamp' e.g. '2,23043923'
-*
-*/
-static int wfd_prof_add_ts_proc_write(struct file *file,
-				      const char __user *buf,
-				      unsigned long count, void *data)
-{
-	char temp[64];
-	char *s;
-	long type;
-	long timestamp;
-
-	(void)file;
-	(void)data;
-
-	if (!wfd_prof_enabled)
-		return -EPERM;
-
-	if (count >= sizeof(temp))
-		return -EINVAL;
-
-	if (copy_from_user(temp, buf, count))
-		return -EFAULT;
-
-	temp[count] = '\0';
-
-	s = strstr(temp, ",");
-
-	if (!s)
-		goto bad_format;
-
-	*s++ = '\0';		/* replace comma will null char */
-
-	if (kstrtol(temp, 10, &type))
-		goto bad_format;
-
-	if (kstrtol(s, 10, &timestamp))
-		goto bad_format;
-
-	if (type >= WFD_PROFILING_TS_LAST) {
-		printk(KERN_ALERT "WFD: invalid timestamp type %ld\n", type);
-		return -EINVAL;
-	}
-
-	wfd_queue_ts(type, timestamp);
-
-	return count;
-
-bad_format:
-	printk(KERN_ALERT
-	       "WFD: bad string format, unable to add new timestamp\n");
-	return -EINVAL;
-}
-
-/***************************************************************************/
-/**
 *  Create all procfs entries for WFD driver
 *
 */
@@ -1418,10 +1071,6 @@ static int wfd_create_proc_entries(void)
 	if (!wfd_proc_dir)
 		goto proc_dir_fail;
 
-	wfd_prof_proc_dir = proc_mkdir("profiling", wfd_proc_dir);
-	if (!wfd_prof_proc_dir)
-		goto prof_proc_dir_fail;
-
 	/* WFD driver info proc entry */
 	wfd_info_proc_entry = create_proc_entry("info", 0660, wfd_proc_dir);
 	if (!wfd_info_proc_entry)
@@ -1430,66 +1079,9 @@ static int wfd_create_proc_entries(void)
 	wfd_info_proc_entry->read_proc = wfd_info_proc_read;
 	wfd_info_proc_entry->write_proc = NULL;
 
-	/* Profiling enable proc entry */
-	wfd_prof_enable_proc_entry =
-	    create_proc_entry("enable", 0660, wfd_prof_proc_dir);
-	if (!wfd_prof_enable_proc_entry)
-		goto prof_enable_proc_fail;
-
-	wfd_prof_enable_proc_entry->read_proc = wfd_prof_enable_proc_read;
-	wfd_prof_enable_proc_entry->write_proc = wfd_prof_enable_proc_write;
-
-	/* Profiling timetstamp dump proc entry */
-	wfd_prof_dump_proc_entry =
-	    create_proc_entry("dump", 0660, wfd_prof_proc_dir);
-	if (!wfd_prof_dump_proc_entry)
-		goto prof_dump_proc_fail;
-
-	wfd_prof_dump_proc_entry->read_proc = NULL;
-	wfd_prof_dump_proc_entry->write_proc = wfd_prof_dump_proc_write;
-
-	/* Profiling counts proc entry */
-	wfd_prof_counts_proc_entry =
-	    create_proc_entry("counts", 0660, wfd_prof_proc_dir);
-	if (!wfd_prof_counts_proc_entry)
-		goto prof_counts_proc_fail;
-
-	wfd_prof_counts_proc_entry->read_proc = wfd_prof_counts_proc_read;
-	wfd_prof_counts_proc_entry->write_proc = NULL;
-
-	/* Profiling max timestamps proc entry */
-	wfd_prof_max_ts_proc_entry =
-	    create_proc_entry("max_ts", 0660, wfd_prof_proc_dir);
-	if (!wfd_prof_max_ts_proc_entry)
-		goto prof_max_ts_proc_fail;
-
-	wfd_prof_max_ts_proc_entry->read_proc = wfd_prof_max_ts_proc_read;
-	wfd_prof_max_ts_proc_entry->write_proc = wfd_prof_max_ts_proc_write;
-
-	/* Profiling add timestamp proc entry */
-	wfd_prof_add_ts_proc_entry =
-	    create_proc_entry("add_ts", 0660, wfd_prof_proc_dir);
-	if (!wfd_prof_add_ts_proc_entry)
-		goto prof_add_ts_proc_fail;
-
-	wfd_prof_add_ts_proc_entry->read_proc = NULL;
-	wfd_prof_add_ts_proc_entry->write_proc = wfd_prof_add_ts_proc_write;
-
 	return 0;
 
-prof_add_ts_proc_fail:
-	remove_proc_entry(wfd_prof_max_ts_proc_entry->name, wfd_prof_proc_dir);
-prof_max_ts_proc_fail:
-	remove_proc_entry(wfd_prof_counts_proc_entry->name, wfd_prof_proc_dir);
-prof_counts_proc_fail:
-	remove_proc_entry(wfd_prof_dump_proc_entry->name, wfd_prof_proc_dir);
-prof_dump_proc_fail:
-	remove_proc_entry(wfd_prof_enable_proc_entry->name, wfd_prof_proc_dir);
-prof_enable_proc_fail:
-	remove_proc_entry(wfd_info_proc_entry->name, wfd_prof_proc_dir);
 info_proc_fail:
-	remove_proc_entry(wfd_prof_proc_dir->name, wfd_proc_dir);
-prof_proc_dir_fail:
 	remove_proc_entry(wfd_proc_dir->name, NULL);
 proc_dir_fail:
 	return -EFAULT;
@@ -1502,60 +1094,8 @@ proc_dir_fail:
 */
 static void wfd_remove_proc_entries(void)
 {
-	remove_proc_entry(wfd_prof_max_ts_proc_entry->name, wfd_prof_proc_dir);
-	remove_proc_entry(wfd_prof_counts_proc_entry->name, wfd_prof_proc_dir);
-	remove_proc_entry(wfd_prof_dump_proc_entry->name, wfd_prof_proc_dir);
-	remove_proc_entry(wfd_prof_enable_proc_entry->name, wfd_prof_proc_dir);
-	remove_proc_entry(wfd_info_proc_entry->name, wfd_prof_proc_dir);
-	remove_proc_entry(wfd_prof_proc_dir->name, wfd_proc_dir);
+	remove_proc_entry(wfd_info_proc_entry->name, wfd_proc_dir);
 	remove_proc_entry(wfd_proc_dir->name, NULL);
-}
-
-/***************************************************************************/
-/**
-*  Netfilter hook used for WFD profiling. The final timestamp for each TS
-*  packet is added when the RTP packet is sent to the p2p interface.
-*/
-static unsigned int wfd_prof_netfilter_hook(unsigned int hooknum,
-					    struct sk_buff *skb,
-					    const struct net_device *in,
-					    const struct net_device *out,
-					    int (*okfn) (struct sk_buff *))
-{
-	struct iphdr *ip_header;
-
-	if (unlikely(!skb || !out))
-		return NF_ACCEPT;
-
-	ip_header = ip_hdr(skb);
-
-	/* verify transport type is UDP */
-	if (ip_header->protocol == IPPROTO_UDP) {
-
-		/* verify this is a P2P interface */
-		if (strstr(out->name, "p2p")) {
-			struct udphdr *udp_header = udp_hdr(skb);
-			u8 *rtp_header = (u8 *)(udp_header + 1);
-
-			/* verify that this is an RTP packet */
-			if ((rtp_header[0]) == 0x80 && (rtp_header[1] == 33)) {
-				/*
-				 * Determine the number of MPEG2 TS packets
-				 * since there can be more than one per RTP
-				 * packet. Subtract the UDP header (8 bytes)
-				 * and the RTP header (12 bytes) to
-				 * determine the payload length.
-				 */
-				int num_ts =
-				    ((ntohs(udp_header->len) - 8 -
-				      12) / WFD_DATA_SIZE);
-
-				wfd_prof_add_ts(WFD_PROFILING_TS_NETWORK_SEND,
-						num_ts);
-			}
-		}
-	}
-	return NF_ACCEPT;
 }
 
 /***************************************************************************/
@@ -1565,7 +1105,6 @@ static unsigned int wfd_prof_netfilter_hook(unsigned int hooknum,
 static int wfd_probe(struct platform_device *pdev)
 {
 	int err = 0;
-	int i;
 
 	gDriverMajor = register_chrdev(0, WFD_DEVICE_NAME, &gfops);
 	if (gDriverMajor < 0) {
@@ -1598,23 +1137,38 @@ static int wfd_probe(struct platform_device *pdev)
 		goto err_device_destroy;
 	}
 
+	wfd_data_cache = kmem_cache_create("wfd_data",
+						sizeof(struct wfd_data_block),
+						0, 0, NULL);
+
+	if (!wfd_data_cache)
+		goto err_remove_proc;
+
+	wfd_audio_cache = kmem_cache_create("wfd_audio",
+						sizeof(struct wfd_audio_block),
+						0, 0, NULL);
+
+	if (!wfd_audio_cache)
+		goto err_remove_kmem_cache;
+
 	memset(&wfd_stat, 0, sizeof(wfd_stat));
 	memset(&wfd_neg_config, 0, sizeof(wfd_neg_config));
 	memset(&wfd_con_state, 0, sizeof(wfd_con_state));
+	memset(&wfd_mr_state, 0, sizeof(wfd_mr_state));
 
 	INIT_LIST_HEAD(&(wfd_data.wfd_list));
 	INIT_LIST_HEAD(&(wfd_audio.wfd_list));
 	mutex_init(&wfd_queue_lock);
 	mutex_init(&wfd_partial_lock);
 	mutex_init(&wfd_audio_lock);
-	mutex_init(&wfd_prof_lock);
-
-	for (i = 0; i < (sizeof(wfd_ts_lists) / sizeof(wfd_ts_lists[0])); i++)
-		INIT_LIST_HEAD(&(wfd_ts_lists[i].list.list_head));
 
 	printk(KERN_INFO "WiFi Display - \'WFD\' driver...\n");
 	return 0;
 
+err_remove_kmem_cache:
+	kmem_cache_destroy(wfd_data_cache);
+err_remove_proc:
+	wfd_remove_proc_entries();
 err_device_destroy:
 #ifdef CONFIG_SYSFS
 	device_destroy(wfd_class, MKDEV(gDriverMajor, 0));
@@ -1634,8 +1188,8 @@ error_cleanup:
 */
 static int wfd_remove(struct platform_device *pdev)
 {
-	unsigned int i;
-	struct wfd_ts_block *ts_block;
+	flush_audio();
+	flush_ts();
 
 	wfd_remove_proc_entries();
 #ifdef CONFIG_SYSFS
@@ -1643,31 +1197,18 @@ static int wfd_remove(struct platform_device *pdev)
 	class_destroy(wfd_class);
 #endif
 
-	wfd_prof_enabled = 0;
-
-	/* drain any remaining profiling timestamps */
-	mutex_lock(&wfd_prof_lock);
-	for (i = 0; i < WFD_PROFILING_TS_LAST; i++) {
-		while (!list_empty(&(wfd_ts_lists[i].list.list_head))) {
-			ts_block =
-			    list_first_entry
-			    (&(wfd_ts_lists[i].list.list_head),
-			     struct wfd_ts_block, list_head);
-			if (likely(ts_block)) {
-				list_del(&(ts_block->list_head));
-				kfree(ts_block);
-			}
-		}
-		wfd_ts_lists[i].num_entries = 0;
-	}
-	mutex_unlock(&wfd_prof_lock);
-
 	unregister_chrdev(gDriverMajor, "wfd");
+
+	/* caches are emptied as part of flush_audio / flush_ts */
+	if (wfd_data_cache)
+		kmem_cache_destroy(wfd_data_cache);
+
+	if (wfd_audio_cache)
+		kmem_cache_destroy(wfd_audio_cache);
 
 	mutex_destroy(&wfd_queue_lock);
 	mutex_destroy(&wfd_audio_lock);
 	mutex_destroy(&wfd_partial_lock);
-	mutex_destroy(&wfd_prof_lock);
 
 	return 0;
 }
@@ -1681,235 +1222,6 @@ static struct platform_driver wfd_driver = {
 	.probe = wfd_probe,
 	.remove = wfd_remove,
 };
-
-/***************************************************************************/
-/**
-*  Allocate and queue up a timestamp of a particular type.
-*
-*  @return
-*     ==0            Success
-*     -ve            Error code
-*/
-static int wfd_queue_ts(unsigned int type, unsigned long timestamp)
-{
-	struct wfd_ts_block *ts_block;
-
-	ts_block = kzalloc(sizeof(struct wfd_ts_block), GFP_KERNEL);
-	if (unlikely(ts_block == NULL))
-		return -ENOMEM;
-
-	ts_block->timestamp = timestamp;
-
-	mutex_lock(&wfd_prof_lock);
-	if (wfd_ts_lists[type].num_entries < wfd_prof_max_ts) {
-		list_add_tail(&(ts_block->list_head),
-			      &(wfd_ts_lists[type].list.list_head));
-		wfd_ts_lists[type].num_entries++;
-	} else
-		kfree(ts_block);
-
-	mutex_unlock(&wfd_prof_lock);
-
-	return 0;
-}
-
-/***************************************************************************/
-/**
-*  Dequeue and free a timestamp of a particular type.
-*
-*  @return
-*     ==0            Success
-*     -ve            Error code
-*/
-static int wfd_dequeue_ts(unsigned int type, unsigned long *timestamp)
-{
-	struct wfd_ts_block *ts_block = NULL;
-	int ret = -EINVAL;
-
-	mutex_lock(&wfd_prof_lock);
-	if (!list_empty(&(wfd_ts_lists[type].list.list_head))) {
-
-		ts_block =
-		    list_first_entry(&(wfd_ts_lists[type].list.list_head),
-				     struct wfd_ts_block, list_head);
-		if (likely(ts_block)) {
-			list_del(&(ts_block->list_head));
-			wfd_ts_lists[type].num_entries--;
-			*timestamp = ts_block->timestamp;
-			kfree(ts_block);
-			ret = 0;
-		}
-	}
-	mutex_unlock(&wfd_prof_lock);
-
-	return ret;
-}
-
-/***************************************************************************/
-/**
-*  Add a new timestamp(s) of a particular type.
-*
-*  @return
-*     ==0            Success
-*     -ve            Error code
-*/
-static int wfd_prof_add_ts(unsigned int type, unsigned int count)
-{
-	struct timeval tv;
-	unsigned long ts;
-	unsigned int ret = -EINVAL;
-
-	if (!wfd_prof_enabled)
-		return -EPERM;
-
-	do_gettimeofday(&tv);
-	ts = (tv.tv_sec * 1000000) + tv.tv_usec;
-
-	while (count--) {
-		ret = wfd_queue_ts(type, ts);
-		if (unlikely(ret))
-			break;
-	}
-
-	return ret;
-}
-
-/***************************************************************************/
-/**
-*  Get the number of timestamps of a particular type / in a particular list.
-*
-*  @return
-*     >=0            Number of timestamps
-*/
-static unsigned int wfd_ts_list_get_count(unsigned int type)
-{
-	unsigned int count;
-
-	mutex_lock(&wfd_prof_lock);
-	count = wfd_ts_lists[type].num_entries;
-	mutex_unlock(&wfd_prof_lock);
-
-	return count;
-}
-
-/***************************************************************************/
-/**
-*  Get the max number of timestamps of all types.
-*
-*  @return
-*     >=0            Number of timestamps
-*/
-static unsigned int wfd_ts_lists_get_max_count(void)
-{
-	int i;
-	int count;
-	int max = 0;
-
-	for (i = 0; i < WFD_PROFILING_TS_LAST; i++) {
-		count = wfd_ts_list_get_count(i);
-		if (count > max)
-			max = count;
-	}
-
-	return max;
-}
-
-/***************************************************************************/
-/**
-*  Create and open the file used to dump timestamps.
-*
-*/
-static struct file *wfd_prof_dump_file_open(const char *filename)
-{
-	struct file *filep;
-	mm_segment_t old_fs = get_fs();
-
-	set_fs(KERNEL_DS);
-	filep = filp_open(filename, O_TRUNC | O_WRONLY | O_CREAT, 0644);
-	set_fs(old_fs);
-
-	return filep;
-}
-
-/***************************************************************************/
-/**
-*  Close the file used to dump timestamps.
-*
-*/
-static void wfd_prof_dump_file_close(struct file *filep)
-{
-	mm_segment_t old_fs = get_fs();
-
-	set_fs(KERNEL_DS);
-	filp_close(filep, current->files);
-	set_fs(old_fs);
-}
-
-/***************************************************************************/
-/**
-*  Write to the file used to dump timestamps.
-*
-*/
-static void wfd_prof_dump_file_write(struct file *filep, char *str)
-{
-	mm_segment_t old_fs = get_fs();
-
-	set_fs(KERNEL_DS);
-	filep->f_op->write(filep, str, strlen(str), &filep->f_pos);
-	set_fs(old_fs);
-}
-
-/***************************************************************************/
-/**
-*  Creates a CSV (comma separated values) format file with the timestamps.
-*  Missing timestamps are listed as 'x'.
-*
-*/
-static void wfd_prof_prepare_dump_file(void)
-{
-	struct file *filep;
-	unsigned int num_ts;
-	unsigned int i;
-	unsigned int j;
-	unsigned int offset;
-	unsigned long ts;
-	char buf[256];
-
-	filep = wfd_prof_dump_file_open(WFD_TS_DUMP_FILE);
-
-	if (!filep)
-		return;
-
-	/*
-	 * Determine the max number of timestamps in all
-	 * of the lists
-	 */
-	num_ts = wfd_ts_lists_get_max_count();
-
-	/*
-	 * Look through all of the timestamp types and
-	 * store the timestamps for a single TS packet on
-	 * one line.
-	 */
-	for (i = 0; i < num_ts; i++, offset = 0) {
-		offset += sprintf(&buf[offset], "%u, ", i);
-		for (j = 0; j < WFD_PROFILING_TS_LAST; j++) {
-			if (0 > wfd_dequeue_ts(j, &ts))
-				ts = 0;
-			if (!ts)
-				offset += sprintf(&buf[offset], "x");
-			else
-				offset += sprintf(&buf[offset], "%lu", ts);
-			if (j != WFD_PROFILING_TS_LAST - 1)
-				offset += sprintf(&buf[offset], ", ");
-			else
-				offset += sprintf(&buf[offset], "\n");
-		}
-		wfd_prof_dump_file_write(filep, buf);
-	}
-
-	wfd_prof_dump_file_close(filep);
-}
 
 static int __init wfd_init(void)
 {

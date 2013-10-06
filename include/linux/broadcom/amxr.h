@@ -16,11 +16,11 @@
 *  @file    amxr.h
 *
 *****************************************************************************/
-#if !defined( AMXR_H )
+#if !defined(AMXR_H)
 #define AMXR_H
 
 /* ---- Include Files ---------------------------------------------------- */
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
@@ -40,15 +40,15 @@ typedef void *AMXR_PORT_ID;
 *  Samples are expected to 16-bits wide.
 */
 typedef struct amxr_port_info {
-	char name[32];		/* Name string */
-	int dst_hz;		/* Current destination sampling frequency in Hz */
-	int dst_chans;		/* Number of channels, i.e. mono = 1 */
-	int dst_bytes;		/* destination period size in bytes */
-	int dst_cnxs;		/* Number of destination connections */
-	int src_hz;		/* Current source sampling frequency in Hz */
-	int src_chans;		/* Number of channels, i.e. mono = 1 */
-	int src_bytes;		/* Source period size in bytes */
-	int src_cnxs;		/* Number of source connections */
+	char name[32];	/* Name string */
+	int dst_hz;	/* Current destination sampling frequency in Hz */
+	int dst_chans;	/* Number of channels, i.e. mono = 1 */
+	int dst_bytes;	/* destination period size in bytes */
+	int dst_cnxs;	/* Number of destination connections */
+	int src_hz;	/* Current source sampling frequency in Hz */
+	int src_chans;	/* Number of channels, i.e. mono = 1 */
+	int src_bytes;	/* Source period size in bytes */
+	int src_cnxs;	/* Number of source connections */
 } AMXR_PORT_INFO;
 
 /* Audio mixer general information */
@@ -60,10 +60,14 @@ typedef struct amxr_info {
 
 /* Connection types */
 typedef enum amxr_connect_type {
-	AMXR_CONNECT_STRAIGHT_THROUGH,	/* No interleave and de-interleave needed */
-	AMXR_CONNECT_EXTRACT_AND_DEPOSIT,	/* Extract and deposit single sub-channel */
-	AMXR_CONNECT_MULTI_TO_MONO_CONVERT,	/* Convert multi-channels into single mono channel by averaging */
-	AMXR_CONNECT_MONO_TO_MULT_DUPLICATE,	/* Duplicate mono channel into multi-channel output */
+	AMXR_CONNECT_STRAIGHT_THROUGH,
+	/* No interleave and de-interleave needed */
+	AMXR_CONNECT_EXTRACT_AND_DEPOSIT,
+	/* Extract and deposit single sub-channel */
+	AMXR_CONNECT_MULTI_TO_MONO_CONVERT,
+	/* Convert multi-channels into single mono channel by averaging */
+	AMXR_CONNECT_MONO_TO_MULT_DUPLICATE,
+	/* Duplicate mono channel into multi-channel output */
 } AMXR_CONNECT_TYPE;
 
 /**
@@ -71,11 +75,16 @@ typedef enum amxr_connect_type {
 *
 *     type        - (4 bits) connection type (AMXR_CONNECT_TYPE)
 *     src_chans   - (4 bits) number of source interleaved sub-channels
-*     src_idx     - (4 bits) source sub-channel index to operate on, only applicable to recomposition
+*     src_idx
+*     - (4 bits) source sub-channel index to operate on, only applicable to
+*       recomposition
 *     dst_chans   - (4 bits) number of destination interleaved sub-channels
-*     dst_idx     - (4 bits) destination sub-channel index to operate on, only applicable to recomposition
+*     dst_idx
+*     - (4 bits) destination sub-channel index to operate on, only applicable
+*       to recomposition
 *
-* | Reserved (31-20) | type (19-16) | src_chans (15-12) | src_idx (11-8) | dst_chans (7-4) | dst_idx (3-0) |
+* | Reserved (31-20) | type (19-16) | src_chans (15-12) | src_idx (11-8)
+* | dst_chans (7-4) | dst_idx (3-0) |
 *
 */
 typedef uint32_t AMXR_CONNECT_DESC;
@@ -93,29 +102,47 @@ typedef uint32_t AMXR_CONNECT_DESC;
 #define AMXR_CONNECT_DST_IDX_BMASK     0x00000f
 
 /* Helper macros to create connection descriptors */
-#define AMXR_CREATE_DESC( type, src_chans, src_idx, dst_chans, dst_idx ) \
-   ((((type) << AMXR_CONNECT_TYPE_SHIFT ) & AMXR_CONNECT_TYPE_BMASK) | \
-    (((src_chans) << AMXR_CONNECT_SRC_CHANS_SHIFT ) & AMXR_CONNECT_SRC_CHANS_BMASK) | \
-    (((src_idx) << AMXR_CONNECT_SRC_IDX_SHIFT ) & AMXR_CONNECT_SRC_IDX_BMASK) | \
-    (((dst_chans) << AMXR_CONNECT_DST_CHANS_SHIFT ) & AMXR_CONNECT_DST_CHANS_BMASK) | \
-    (((dst_idx) << AMXR_CONNECT_DST_IDX_SHIFT ) & AMXR_CONNECT_DST_IDX_BMASK))
+#define AMXR_CREATE_DESC(type, src_chans, src_idx, dst_chans, dst_idx) \
+   ((((type) << AMXR_CONNECT_TYPE_SHIFT) & AMXR_CONNECT_TYPE_BMASK) | \
+    (((src_chans) << AMXR_CONNECT_SRC_CHANS_SHIFT) & AMXR_CONNECT_SRC_CHANS_BMASK) | \
+    (((src_idx) << AMXR_CONNECT_SRC_IDX_SHIFT) & AMXR_CONNECT_SRC_IDX_BMASK) | \
+    (((dst_chans) << AMXR_CONNECT_DST_CHANS_SHIFT) & AMXR_CONNECT_DST_CHANS_BMASK) | \
+    (((dst_idx) << AMXR_CONNECT_DST_IDX_SHIFT) & AMXR_CONNECT_DST_IDX_BMASK))
 
 /* Helper macros to parse connection descriptor */
-#define AMXR_CONNECT_GET_TYPE(d)       (AMXR_CONNECT_TYPE)(((d) & AMXR_CONNECT_TYPE_BMASK) >> AMXR_CONNECT_TYPE_SHIFT)
-#define AMXR_CONNECT_GET_SRC_CHANS(d)  (((d) & AMXR_CONNECT_SRC_CHANS_BMASK) >> AMXR_CONNECT_SRC_CHANS_SHIFT)
-#define AMXR_CONNECT_GET_SRC_IDX(d)    (((d) & AMXR_CONNECT_SRC_IDX_BMASK) >> AMXR_CONNECT_SRC_IDX_SHIFT)
-#define AMXR_CONNECT_GET_DST_CHANS(d)  (((d) & AMXR_CONNECT_DST_CHANS_BMASK) >> AMXR_CONNECT_DST_CHANS_SHIFT)
-#define AMXR_CONNECT_GET_DST_IDX(d)    (((d) & AMXR_CONNECT_DST_IDX_BMASK) >> AMXR_CONNECT_DST_IDX_SHIFT)
+#define AMXR_CONNECT_GET_TYPE(d)\
+ (AMXR_CONNECT_TYPE)(((d) & AMXR_CONNECT_TYPE_BMASK) >> AMXR_CONNECT_TYPE_SHIFT)
+#define AMXR_CONNECT_GET_SRC_CHANS(d)\
+  (((d) & AMXR_CONNECT_SRC_CHANS_BMASK) >> AMXR_CONNECT_SRC_CHANS_SHIFT)
+#define AMXR_CONNECT_GET_SRC_IDX(d)\
+    (((d) & AMXR_CONNECT_SRC_IDX_BMASK) >> AMXR_CONNECT_SRC_IDX_SHIFT)
+#define AMXR_CONNECT_GET_DST_CHANS(d)\
+  (((d) & AMXR_CONNECT_DST_CHANS_BMASK) >> AMXR_CONNECT_DST_CHANS_SHIFT)
+#define AMXR_CONNECT_GET_DST_IDX(d)\
+    (((d) & AMXR_CONNECT_DST_IDX_BMASK) >> AMXR_CONNECT_DST_IDX_SHIFT)
 
-/* The following descriptors are defined for the common connection descriptors */
-#define AMXR_CONNECT_MONO2MONO       AMXR_CREATE_DESC( AMXR_CONNECT_STRAIGHT_THROUGH, 1, 0, 1, 0 )
-#define AMXR_CONNECT_STEREO2STEREO   AMXR_CREATE_DESC( AMXR_CONNECT_STRAIGHT_THROUGH, 2, 0, 2, 0 )
-#define AMXR_CONNECT_STEREOSPLITL    AMXR_CREATE_DESC( AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 2, 0, 1, 0 )	/* Left is always first sub-channel */
-#define AMXR_CONNECT_STEREOSPLITR    AMXR_CREATE_DESC( AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 2, 1, 1, 0 )	/* Right is always second sub-channel */
-#define AMXR_CONNECT_MONO2STEREOL    AMXR_CREATE_DESC( AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 1, 0, 2, 0 )	/* Left is always first sub-channel */
-#define AMXR_CONNECT_MONO2STEREOR    AMXR_CREATE_DESC( AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 1, 0, 2, 1 )	/* Right is always second sub-channel */
-#define AMXR_CONNECT_STEREO2MONO     AMXR_CREATE_DESC( AMXR_CONNECT_MULTI_TO_MONO_CONVERT, 2, 0, 1, 0 )
-#define AMXR_CONNECT_MONO2STEREO     AMXR_CREATE_DESC( AMXR_CONNECT_MONO_TO_MULT_DUPLICATE, 1, 0, 2, 0 )
+/* The following descriptors are defined for the common connection
+ descriptors */
+#define AMXR_CONNECT_MONO2MONO\
+       AMXR_CREATE_DESC(AMXR_CONNECT_STRAIGHT_THROUGH, 1, 0, 1, 0)
+#define AMXR_CONNECT_STEREO2STEREO\
+   AMXR_CREATE_DESC(AMXR_CONNECT_STRAIGHT_THROUGH, 2, 0, 2, 0)
+#define AMXR_CONNECT_STEREOSPLITL\
+    AMXR_CREATE_DESC(AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 2, 0, 1, 0)
+	/* Left is always first sub-channel */
+#define AMXR_CONNECT_STEREOSPLITR\
+    AMXR_CREATE_DESC(AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 2, 1, 1, 0)
+	/* Right is always second sub-channel */
+#define AMXR_CONNECT_MONO2STEREOL\
+    AMXR_CREATE_DESC(AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 1, 0, 2, 0)
+	/* Left is always first sub-channel */
+#define AMXR_CONNECT_MONO2STEREOR\
+    AMXR_CREATE_DESC(AMXR_CONNECT_EXTRACT_AND_DEPOSIT, 1, 0, 2, 1)
+	/* Right is always second sub-channel */
+#define AMXR_CONNECT_STEREO2MONO\
+     AMXR_CREATE_DESC(AMXR_CONNECT_MULTI_TO_MONO_CONVERT, 2, 0, 1, 0)
+#define AMXR_CONNECT_MONO2STEREO\
+     AMXR_CREATE_DESC(AMXR_CONNECT_MONO_TO_MULT_DUPLICATE, 1, 0, 2, 0)
 
 /* A port's connection information */
 typedef struct amxr_port_cnxinfo {
@@ -136,7 +163,7 @@ typedef struct amxr_cnxs {
 /* Mixer client handle */
 typedef int AMXR_HDL;
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /* MakeDefs: Off */
 
@@ -160,7 +187,7 @@ typedef void (*AMXR_RESAMP_FNC) (int16_t *insamp,
 				    /**< (i) Interpolation factor */
 				 int decimfac
 				    /**< (i) Decimation factor */
-    );
+);
 
 typedef void (*AMXR_ADD_FNC) (int16_t *dstp,
 				    /**< (o) Ptr to vector sum */
@@ -170,7 +197,7 @@ typedef void (*AMXR_ADD_FNC) (int16_t *dstp,
 				    /**< (i) Ptr to vector summand 2 */
 			      int numsamp
 				    /**< (i) Number of samples to add */
-    );
+);
 
 typedef void (*AMXR_MPYQ16_FNC) (int16_t *dstp,
 				    /**< (o) Ptr to output samples */
@@ -179,8 +206,8 @@ typedef void (*AMXR_MPYQ16_FNC) (int16_t *dstp,
 				 int numsamp,
 				    /**< (i) Number of samples to add */
 				 uint16_t q16gain
-				    /**< (i) Q16 linear gain value to multiply with */
-    );
+			    /**< (i) Q16 linear gain value to multiply with */
+);
 
 typedef void (*AMXR_MACQ16_FNC) (int16_t *dstp,
 				    /**< (o) Ptr to output samples */
@@ -189,8 +216,8 @@ typedef void (*AMXR_MACQ16_FNC) (int16_t *dstp,
 				 int numsamp,
 				    /**< (i) Number of samples to add */
 				 uint16_t q16gain
-				    /**< (i) Q16 linear gain value to multiply with */
-    );
+			    /**< (i) Q16 linear gain value to multiply with */
+);
 
 /* MakeDefs: On */
 
@@ -204,7 +231,7 @@ typedef void (*AMXR_MACQ16_FNC) (int16_t *dstp,
 extern "C" {
 #endif
 
-#if !defined( SWIG ) && !defined( MAKEDEFS )
+#if !defined(SWIG) && !defined(MAKEDEFS)
 
 /* Forward prototypes */
 	int amxrDisconnect(AMXR_HDL hdl, AMXR_PORT_ID src_port,
@@ -223,8 +250,8 @@ extern "C" {
 
 /***************************************************************************/
 /**
-*  Frees client handle and performs related cleanup. However, it is 
-*  responsibility of the application to delete connections it created 
+*  Frees client handle and performs related cleanup. However, it is
+*  responsibility of the application to delete connections it created
 *  because they are not automatically deleted by this API call.
 *
 *  @return
@@ -248,7 +275,7 @@ extern "C" {
 				    /**< (i) Mixer client handle */
 				const char *name,
 				    /**< (i) Name of port */
-				AMXR_PORT_ID * id
+				AMXR_PORT_ID *id
 				    /**< (o) Ptr to store found port ID */
 	    );
 
@@ -286,9 +313,9 @@ extern "C" {
 		AMXR_PORT_ID port;
 		int err;
 		 err = amxrQueryPortByName(hdl, name, &port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrGetPortInfo(hdl, port, info);
 	}
 
@@ -352,13 +379,13 @@ extern "C" {
 		AMXR_PORT_ID src_port, dst_port;
 		int err;
 		err = amxrQueryPortByName(hdl, src_name, &src_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, dst_name, &dst_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrSetCnxLoss(hdl, src_port, dst_port, desc, db);
 	}
 
@@ -372,15 +399,15 @@ extern "C" {
 *     -ve         Other errors
 */
 	int amxrGetCnxLoss(AMXR_HDL hdl,
-				    /**< (i) client handle */
+			    /**< (i) client handle */
 			   AMXR_PORT_ID src_port,
-				    /**< (i) source port id */
+			    /**< (i) source port id */
 			   AMXR_PORT_ID dst_port,
-				    /**< (i) destination port id */
+			    /**< (i) destination port id */
 			   AMXR_CONNECT_DESC desc,
-				    /**< (i) Connection descriptor */
+			    /**< (i) Connection descriptor */
 			   unsigned int *db
-				    /**< (o) Pointer to store attenuation amount */
+			    /**< (o) Pointer to store attenuation amount */
 	    );
 
 /***************************************************************************/
@@ -393,26 +420,26 @@ extern "C" {
 *     -ve         Other errors
 */
 	static inline int amxrGetCnxLossByName(AMXR_HDL hdl,
-				    /**< (i) client handle */
-					       const char *src_name,
-				    /**< (i) source port name */
-					       const char *dst_name,
-				    /**< (i) destination port name */
-					       AMXR_CONNECT_DESC desc,
-				    /**< (i) Connection descriptor */
-					       unsigned int *db
-				    /**< (o) Pointer to store attenuation amount */
+			    /**< (i) client handle */
+				       const char *src_name,
+			    /**< (i) source port name */
+				       const char *dst_name,
+			    /**< (i) destination port name */
+				       AMXR_CONNECT_DESC desc,
+			    /**< (i) Connection descriptor */
+				       unsigned int *db
+			    /**< (o) Pointer to store attenuation amount */
 	    ) {
 		AMXR_PORT_ID src_port, dst_port;
 		int err;
 		err = amxrQueryPortByName(hdl, src_name, &src_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, dst_name, &dst_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrGetCnxLoss(hdl, src_port, dst_port, desc, db);
 	}
 
@@ -454,13 +481,13 @@ extern "C" {
 		AMXR_PORT_ID src_port, dst_port;
 		int err;
 		err = amxrQueryPortByName(hdl, src_name, &src_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, dst_name, &dst_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrConnect(hdl, src_port, dst_port, desc);
 	}
 
@@ -534,13 +561,13 @@ extern "C" {
 		AMXR_PORT_ID port1, port2;
 		int err;
 		err = amxrQueryPortByName(hdl, port1_name, &port1);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, port2_name, &port2);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrConnectAll(hdl, port1, port2, desc);
 	}
 
@@ -579,13 +606,13 @@ extern "C" {
 		AMXR_PORT_ID src_port, dst_port;
 		int err;
 		err = amxrQueryPortByName(hdl, src_name, &src_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, dst_name, &dst_port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrDisconnect(hdl, src_port, dst_port);
 	}
 
@@ -606,9 +633,9 @@ extern "C" {
 	    ) {
 		int err;
 		err = amxrDisconnect(hdl, port1, port2);
-		if (!err) {
+		if (!err)
 			err = amxrDisconnect(hdl, port2, port1);
-		}
+
 		return err;
 	}
 
@@ -630,13 +657,13 @@ extern "C" {
 		AMXR_PORT_ID port1, port2;
 		int err;
 		err = amxrQueryPortByName(hdl, port1_name, &port1);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		err = amxrQueryPortByName(hdl, port2_name, &port2);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrDisconnectAll(hdl, port1, port2);
 	}
 
@@ -662,7 +689,7 @@ extern "C" {
 /***************************************************************************/
 /**
 *  Query the connection list by source port that is specified by name
-*  string. All destination ports connected to the specified source port 
+*  string. All destination ports connected to the specified source port
 *  will be returned.
 *
 *  @return
@@ -681,9 +708,9 @@ extern "C" {
 		AMXR_PORT_ID port;
 		int err;
 		err = amxrQueryPortByName(hdl, port_name, &port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrGetCnxListBySrc(hdl, port, cnxlist, maxlen);
 	}
 
@@ -708,8 +735,8 @@ extern "C" {
 
 /***************************************************************************/
 /**
-*  Query the connection list by destination port that is specified by 
-*  name string. All source ports connected to the specified destination 
+*  Query the connection list by destination port that is specified by
+*  name string. All source ports connected to the specified destination
 *  port will be returned.
 *
 *  @return
@@ -728,9 +755,9 @@ extern "C" {
 		AMXR_PORT_ID port;
 		int err;
 		err = amxrQueryPortByName(hdl, port_name, &port);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return amxrGetCnxListByDst(hdl, port, cnxlist, maxlen);
 	}
 
@@ -738,7 +765,7 @@ extern "C" {
 }
 #endif
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 /***************************************************************************/
 /**
 *  Queries for name string by Port ID
@@ -752,7 +779,7 @@ int amxrQueryNameById(AMXR_PORT_ID id,
 				    /**< (i) Port ID */
 		      const char **name
 				    /**< (o) Name of port */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -766,23 +793,23 @@ int amxrQueryNameById(AMXR_PORT_ID id,
 *     This routine runs in an ATOMIC context!
 */
 void amxrElapsedTime(int elapsed_usec
-				    /**< (i) Amount of time elapsed since last call in usec */
-    );
+		    /**< (i) Amount of time elapsed since last call in usec */
+);
 
 /***************************************************************************/
 /**
 *  This routine services all connections to and from a particular port
-*  that are at "irregular" sampling frequencies, which are defined as not 
+*  that are at "irregular" sampling frequencies, which are defined as not
 *  a multiple of 8.
-*  
+*
 *  @remarks
-*     Typically, this routine is called by HAL Audio, which is clocked 
+*     Typically, this routine is called by HAL Audio, which is clocked
 *     by hardware.
 *
 *     This routine runs in an ATOMIC context!
 */
-void amxrServiceUnsyncPort(AMXR_PORT_ID id	/*<< (i) Port ID of port to service */
-    );
+void amxrServiceUnsyncPort(AMXR_PORT_ID id/*<< (i) Port ID of port to service */
+);
 
 #endif /* __KERNEL__ */
 

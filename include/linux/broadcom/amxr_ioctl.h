@@ -18,12 +18,12 @@
 *  @brief   Audio Mixer User IOCTL API definitions
 *
 *****************************************************************************/
-#if !defined( AMXR_IOCTL_H )
+#if !defined(AMXR_IOCTL_H)
 #define AMXR_IOCTL_H
 
 /* ---- Include Files ---------------------------------------------------- */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
@@ -94,15 +94,23 @@ struct amxr_ioctl_get_cnxlist {
 };
 
 /* IOCTL numbers */
-#define AMXR_IOCTL_QUERY_PORT    _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_QUERY_PORT, struct amxr_ioctl_queryport )
-#define AMXR_IOCTL_GET_PORT_INFO _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_GET_PORT_INFO, struct amxr_ioctl_queryportinfo )
-#define AMXR_IOCTL_GET_INFO      _IO( AMXR_MAGIC_TYPE, AMXR_CMD_GET_INFO )
-#define AMXR_IOCTL_SET_CNX_LOSS  _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_SET_CNX_LOSS, struct amxr_ioctl_setcnxloss )
-#define AMXR_IOCTL_GET_CNX_LOSS  _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNX_LOSS, struct amxr_ioctl_getcnxloss )
-#define AMXR_IOCTL_CONNECT       _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_CONNECT, struct amxr_ioctl_connect )
-#define AMXR_IOCTL_DISCONNECT    _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_DISCONNECT, struct amxr_ioctl_disconnect )
-#define AMXR_IOCTL_GET_CNXLIST_BY_SRC _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNXLIST_BY_SRC, struct amxr_ioctl_get_cnxlist )
-#define AMXR_IOCTL_GET_CNXLIST_BY_DST _IOR( AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNXLIST_BY_DST, struct amxr_ioctl_get_cnxlist )
+#define AMXR_IOCTL_QUERY_PORT\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_QUERY_PORT, struct amxr_ioctl_queryport)
+#define AMXR_IOCTL_GET_PORT_INFO\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_GET_PORT_INFO, struct amxr_ioctl_queryportinfo)
+#define AMXR_IOCTL_GET_INFO      _IO(AMXR_MAGIC_TYPE, AMXR_CMD_GET_INFO)
+#define AMXR_IOCTL_SET_CNX_LOSS\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_SET_CNX_LOSS, struct amxr_ioctl_setcnxloss)
+#define AMXR_IOCTL_GET_CNX_LOSS\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNX_LOSS, struct amxr_ioctl_getcnxloss)
+#define AMXR_IOCTL_CONNECT\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_CONNECT, struct amxr_ioctl_connect)
+#define AMXR_IOCTL_DISCONNECT\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_DISCONNECT, struct amxr_ioctl_disconnect)
+#define AMXR_IOCTL_GET_CNXLIST_BY_SRC\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNXLIST_BY_SRC, struct amxr_ioctl_get_cnxlist)
+#define AMXR_IOCTL_GET_CNXLIST_BY_DST\
+ _IOR(AMXR_MAGIC_TYPE, AMXR_CMD_GET_CNXLIST_BY_DST, struct amxr_ioctl_get_cnxlist)
 
 /* ---- Variable Externs ------------------------------------------ */
 

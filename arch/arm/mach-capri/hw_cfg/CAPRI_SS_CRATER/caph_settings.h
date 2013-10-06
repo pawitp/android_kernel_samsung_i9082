@@ -15,6 +15,7 @@
 #ifndef CAPH_SETTINGS_H
 #define CAPH_SETTINGS_H
 
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)	
 #define HW_CFG_CAPH \
 { \
 	.aud_ctrl_plat_cfg = \
@@ -23,8 +24,23 @@
 		{ \
 			.ihf_ext_amp_gpio = 95, \
 			.dock_aud_route_gpio = 93, \
+			.mic_sel_aud_route_gpio = 186, \
 		} \
 	} \
 };
-
+#else
+#define HW_CFG_CAPH \
+{ \
+	.aud_ctrl_plat_cfg = \
+	{ \
+		.ext_aud_plat_cfg = \
+		{ \
+			.ihf_ext_amp_gpio = 95, \
+			.dock_aud_route_gpio = 134, \
+			.mode_sel_aud_route_gpio = 157, \
+			.bt_sel_aud_route_gpio = 156, \			
+		} \
+	} \
+};
+#endif
 #endif /* CAPH_SETTINGS_H */

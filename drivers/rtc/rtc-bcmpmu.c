@@ -31,7 +31,7 @@
 #endif
 extern void rtc_sysfs_add_device(struct rtc_device *rtc);
 
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)
 #define SEC_YEAR_BASE 			13  /* 2013 */
 #else
 #define SEC_YEAR_BASE 			12  /* 2012 */

@@ -1570,6 +1570,23 @@ struct cfg80211_ops {
  * @WIPHY_FLAG_MESH_AUTH: The device supports mesh authentication by routing
  *	auth frames to userspace. See @NL80211_MESH_SETUP_USERSPACE_AUTH.
  * @WIPHY_FLAG_SUPPORTS_SCHED_SCAN: The device supports scheduled scans.
+ * @WIPHY_FLAG_SUPPORTS_FW_ROAM: The device supports roaming feature in the
+ *	firmware.
+ * @WIPHY_FLAG_AP_UAPSD: The device supports uapsd on AP.
+ * @WIPHY_FLAG_SUPPORTS_TDLS: The device supports TDLS (802.11z) operation.
+ * @WIPHY_FLAG_TDLS_EXTERNAL_SETUP: The device does not handle TDLS (802.11z)
+ *	link setup/discovery operations internally. Setup, discovery and
+ *	teardown packets should be sent through the @NL80211_CMD_TDLS_MGMT
+ *	command. When this flag is not set, @NL80211_CMD_TDLS_OPER should be
+ *	used for asking the driver/firmware to perform a TDLS operation.
+ * @WIPHY_FLAG_HAVE_AP_SME: device integrates AP SME
+ * @WIPHY_FLAG_REPORTS_OBSS: the device will report beacons from other BSSes
+ *	when there are virtual interfaces in AP mode by calling
+ *	cfg80211_report_obss_beacon().
+ * @WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD: When operating as an AP, the device
+ *	responds to probe-requests in hardware.
+ * @WIPHY_FLAG_OFFCHAN_TX: Device supports direct off-channel TX.
+ * @WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL: Device supports remain-on-channel call.
  */
 enum wiphy_flags {
 	WIPHY_FLAG_CUSTOM_REGULATORY		= BIT(0),
@@ -1584,6 +1601,15 @@ enum wiphy_flags {
 	WIPHY_FLAG_MESH_AUTH			= BIT(10),
 	WIPHY_FLAG_SUPPORTS_SCHED_SCAN		= BIT(11),
 	WIPHY_FLAG_ENFORCE_COMBINATIONS		= BIT(12),
+	WIPHY_FLAG_SUPPORTS_FW_ROAM		= BIT(13),
+	WIPHY_FLAG_AP_UAPSD			= BIT(14),
+	WIPHY_FLAG_SUPPORTS_TDLS		= BIT(15),
+	WIPHY_FLAG_TDLS_EXTERNAL_SETUP		= BIT(16),
+	WIPHY_FLAG_HAVE_AP_SME			= BIT(17),
+	WIPHY_FLAG_REPORTS_OBSS			= BIT(18),
+	WIPHY_FLAG_AP_PROBE_RESP_OFFLOAD	= BIT(19),
+	WIPHY_FLAG_OFFCHAN_TX			= BIT(20),
+	WIPHY_FLAG_HAS_REMAIN_ON_CHANNEL	= BIT(21),
 };
 
 /**
@@ -1781,6 +1807,8 @@ struct wiphy_wowlan_support {
  *	may request, if implemented.
  *
  * @wowlan: WoWLAN support information
+ *
+ * @ap_sme_capa: AP SME capabilities, flags from &enum nl80211_ap_sme_features.
  */
 struct wiphy {
 	/* assign these fields before you register the wiphy */
@@ -1803,6 +1831,8 @@ struct wiphy {
 	u16 interface_modes;
 
 	u32 flags;
+
+	u32 ap_sme_capa;
 
 	enum cfg80211_signal_type signal_type;
 
@@ -2053,6 +2083,8 @@ struct wireless_dev {
 	int ps_timeout;
 
 	int beacon_interval;
+
+	u32 ap_unexpected_nlpid;
 
 #ifdef CONFIG_CFG80211_WEXT
 	/* wext data */

@@ -3,5 +3,6 @@
 #
 
 #  Object files in subdirectories
+obj-$(CONFIG_YAS_532_ENABLE)		+= yas532/
+obj-$(CONFIG_SENSORS_CORE)		+= sensors_core.o
 
-obj-$(CONFIG_SENSORS_CORE)	+=core/

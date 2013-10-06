@@ -154,6 +154,7 @@ static Boolean enable156MClk = FALSE;
 static Boolean enable2P4MClk = FALSE;
 static struct clk *clkIDCAPH[MAX_CAPH_CLOCK_NUM] = {NULL, NULL, NULL, NULL};
 static struct clk *clkIDSSP[MAX_SSP_CLOCK_NUM] = {NULL, NULL, NULL};
+static int audio_tuning_flag;
 enum SSP_CLK_ID {
 	CLK_SSP3_AUDIO, /* KHUB_SSP3_AUDIO_CLK */
 	CLK_SSP4_AUDIO, /* KHUB_SSP4_AUDIO_CLK */
@@ -201,8 +202,6 @@ static CHAL_HANDLE lp_handle;
 static int en_lpbk_pcm, en_lpbk_i2s;
 static int rec_pre_call;
 static int dsp_path;
-/* the default ref mic used for dual mic operation (hardware dependent) */
-static CSL_CAPH_DEVICE_e dualmic_NoiseRefMic = CSL_CAPH_DEV_DIGI_MIC_L;
 
 static CAPH_BLOCK_t caph_block_list[LIST_NUM][MAX_PATH_LEN] = {
 	/*the order must match CAPH_LIST_t*/
@@ -584,12 +583,13 @@ static int csl_caph_obtain_arm2sp(void)
 	}
 
 	if (i >= VORENDER_ARM2SP_INSTANCE_TOTAL) {
+		aError("%s: all arm2spCfg have been used!\n", __func__);
 		audio_xassert(0, i);
 		i = -1;
 	}
 #endif
-	aTrace(LOG_AUDIO_CSL, "%s:: instance %d count %d\n",
-		__func__, i, arm2spCfg[i].count);
+	aTrace(LOG_AUDIO_CSL, "%s:: instance %d count[0] %d\n",
+		__func__, i, arm2spCfg[0].count);
 
 	return i;
 }
@@ -637,7 +637,7 @@ static void csl_caph_start_arm2sp(unsigned int i)
 static void csl_caph_release_arm2sp(unsigned int i)
 {
 	ARM2SP_CONFIG_t *p_arm2sp;
-
+	aTrace(LOG_AUDIO_CSL, "csl_caph_release_arm2sp %d\n", i);
 	if (i >= VORENDER_ARM2SP_INSTANCE_TOTAL) {
 		audio_xassert(0, i);
 		return;
@@ -739,7 +739,7 @@ void csl_caph_enable_adcpath_by_dsp(UInt16 enabled_path)
 			/* csl_caph_dma_clear_intr(dma_ch, CSL_CAPH_DSP); */
 			csl_caph_dma_enable_intr(dma_ch, CSL_CAPH_DSP);
 			csl_pcm_start_rx(pcmHandleSSP, CSL_PCM_CHAN_RX0);
-			csl_caph_switch_enable_clock(enabled_path);
+			csl_caph_switch_enable_clock(1);
 		} else {
 			csl_pcm_stop_rx(pcmHandleSSP, CSL_PCM_CHAN_RX0);
 			csl_caph_dma_clear_intr(dma_ch, CSL_CAPH_DSP);
@@ -1279,7 +1279,7 @@ static void csl_caph_obtain_blocks
 			"caph dsp spk buf@ %p\r\n", path->pBuf);
 #endif
 		} else if (path->sink[sinkNo] == CSL_CAPH_DEV_DSP) {
-			if (path->source == dualmic_NoiseRefMic) {
+			if (path->secMic == TRUE) {
 				dmaCH = CSL_CAPH_DMA_CH14;
 #if defined(ENABLE_DMA_VOICE)
 			path->pBuf = (void *)
@@ -1367,7 +1367,7 @@ static void csl_caph_obtain_blocks
 			aTrace(LOG_AUDIO_CSL,
 				"caph dsp spk cfifo# 0x%x\r\n", fifo);
 		} else if (path->sink[sinkNo] == CSL_CAPH_DEV_DSP) {
-			if (path->source == dualmic_NoiseRefMic) {
+			if (path->secMic == TRUE) {
 				fifo = csl_caph_cfifo_get_fifo_by_dma
 					(CSL_CAPH_DMA_CH14);
 				aTrace(LOG_AUDIO_CSL,
@@ -1419,7 +1419,7 @@ static void csl_caph_obtain_blocks
 		  Must use adjacent SW channels for MICs and SRCs.
 		*/
 		if (path->sink[0] == CSL_CAPH_DEV_DSP) {
-			if (path->source == dualmic_NoiseRefMic) {
+			if (path->secMic == TRUE) {
 				if (blockIdx == 0)
 					sw = CSL_CAPH_SWITCH_CH14;
 				else
@@ -1477,7 +1477,7 @@ static void csl_caph_obtain_blocks
 			srcmIn = CSL_CAPH_SRCM_MONO_CH1;
 			csl_caph_srcmixer_set_inchnl_status(srcmIn);
 		} else if (path->sink[sinkNo] == CSL_CAPH_DEV_DSP) {
-			if (path->source == dualmic_NoiseRefMic) {
+			if (path->secMic == TRUE) {
 				srcmIn = CSL_CAPH_SRCM_MONO_CH2;
 				csl_caph_srcmixer_set_inchnl_status(srcmIn);
 			} else {
@@ -1557,7 +1557,7 @@ static void csl_caph_obtain_blocks
 			srcmIn = CSL_CAPH_SRCM_MONO_CH1;
 			csl_caph_srcmixer_set_inchnl_status(srcmIn);
 		} else if (path->sink[sinkNo] == CSL_CAPH_DEV_DSP) {
-			if (path->source == dualmic_NoiseRefMic) {
+			if (path->secMic == TRUE) {
 				srcmIn = CSL_CAPH_SRCM_MONO_CH2;
 				csl_caph_srcmixer_set_inchnl_status(srcmIn);
 			} else {
@@ -1689,7 +1689,8 @@ static void csl_caph_hwctrl_remove_blocks(CSL_CAPH_PathID pathID,
 	if ((path->source == CSL_CAPH_DEV_MEMORY &&
 		path->sink[sinkNo] == CSL_CAPH_DEV_DSP_throughMEM) ||
 		(path->source == CSL_CAPH_DEV_FM_RADIO &&
-		 path->sink[sinkNo] == CSL_CAPH_DEV_DSP_throughMEM)) {
+		   path->sink[sinkNo] == CSL_CAPH_DEV_DSP_throughMEM) ||
+		(path->arm2sp_path && path->sinkCount == 1)) {
 		csl_caph_release_arm2sp(path->arm2sp_instance);
 	}
 #endif
@@ -1938,14 +1939,18 @@ static void csl_caph_config_dma(CSL_CAPH_PathID
 		if (path->source == CSL_CAPH_DEV_MEMORY && !blockPathIdx) {
 			CSL_CAPH_Render_Drv_t *auddrv;
 			auddrv = GetRenderDriverByType(path->streamID);
-			dmaCfg.n_dma_buf = auddrv->numBlocks;
-			dmaCfg.dma_buf_size = auddrv->blockSize;
+			if (auddrv) {
+				dmaCfg.n_dma_buf = auddrv->numBlocks;
+				dmaCfg.dma_buf_size = auddrv->blockSize;
+			}
 		} else if (path->sink[sinkNo] == CSL_CAPH_DEV_MEMORY &&
 			blockPathIdx) {
 			CSL_CAPH_Capture_Drv_t *auddrv;
 			auddrv = GetCaptureDriverByType(path->streamID);
-			dmaCfg.n_dma_buf = auddrv->numBlocks;
-			dmaCfg.dma_buf_size = auddrv->blockSize;
+			if (auddrv) {
+				dmaCfg.n_dma_buf = auddrv->numBlocks;
+				dmaCfg.dma_buf_size = auddrv->blockSize;
+			}
 		}
 	}
 
@@ -2172,6 +2177,32 @@ static void csl_caph_config_sw
 						fmHandleSSP);
 		} else {
 			audio_xassert(0, pathID);
+		}
+	}
+
+	/*To avoid rare BT call error when AP is busy, or all logs enabled,
+	  use internal trigger*/
+	if ((path->sink[0] == CSL_CAPH_DEV_DSP &&
+	     path->source == CSL_CAPH_DEV_BT_MIC) ||
+	    (path->source == CSL_CAPH_DEV_DSP &&
+	     path->sink[0] == CSL_CAPH_DEV_BT_SPKR)) {
+		int tmpSr;
+
+		if (path->source == CSL_CAPH_DEV_DSP)
+			tmpSr = path->src_sampleRate;
+		else
+			tmpSr = path->snk_sampleRate;
+
+		if (tmpSr == AUDIO_SAMPLING_RATE_8000) {
+			if (path->bitPerSample == 16)
+				swCfg->trigger = CAPH_4KHZ;
+			else
+				swCfg->trigger = CAPH_8KHZ;
+		} else {
+			if (path->bitPerSample == 16)
+				swCfg->trigger = CAPH_8KHZ;
+			else
+				swCfg->trigger = CAPH_16KHZ;
 		}
 	}
 
@@ -2662,11 +2693,12 @@ static void csl_caph_start_blocks
 
 	/*start the new sink*/
 	if (path->audiohPath[sinkNo+1])
-		csl_caph_audioh_start(path->audiohPath[sinkNo+1]);
+		csl_caph_audioh_start(path->audiohPath[sinkNo+1], 0);
 
 	/*first sink, start the source also.*/
 	if (path->sinkCount == 1 && path->audiohPath[0])
-		csl_caph_audioh_start(path->audiohPath[0]);
+		csl_caph_audioh_start(path->audiohPath[0],
+						path->micClockPhaseRev);
 
 	/*have to start dma in the end?*/
 	/*ihf call, dsp starts dma.*/
@@ -2770,7 +2802,7 @@ static void csl_ssp_ControlHWClock(Boolean enable,
 {
 	Boolean ssp3 = FALSE;
 	Boolean ssp4 = FALSE;
-	Boolean ssp6 = FALSE;
+	/*Boolean ssp6 = FALSE;*/
 
 	/* BT and FM use case can either use SSP3/SSP4.
 	 * This can be configured at run time by the user
@@ -2797,8 +2829,8 @@ static void csl_ssp_ControlHWClock(Boolean enable,
 			ssp4 = TRUE;
 	}
 	aTrace(LOG_AUDIO_CSL, "csl_ssp_ControlHWClock: enable = %d,"
-			"ssp3 = %d, ssp4 = %d, ssp6=%d\r\n",
-			enable, ssp3, ssp4, ssp6);
+			"ssp3 = %d, ssp4 = %d\n",
+			enable, ssp3, ssp4);
 	if (ssp3) {
 		clkIDSSP[CLK_SSP3_AUDIO] = clk_get(NULL, "ssp3_audio_clk");
 		if (IS_ERR_OR_NULL(clkIDSSP[CLK_SSP3_AUDIO])) {
@@ -2816,6 +2848,7 @@ static void csl_ssp_ControlHWClock(Boolean enable,
 			clk_disable(clkIDSSP[CLK_SSP3_AUDIO]);
 	}
 #if !defined(CONFIG_ARCH_ISLAND)
+#if 0
 	if (ssp4) {
 		clkIDSSP[CLK_SSP4_AUDIO] = clk_get(NULL, "ssp4_audio_clk");
 		if (IS_ERR_OR_NULL(clkIDSSP[CLK_SSP4_AUDIO])) {
@@ -2835,7 +2868,8 @@ static void csl_ssp_ControlHWClock(Boolean enable,
 		}
 	}
 #endif
-
+#endif
+#if 0
 	if (ssp6) {
 		clkIDSSP[CLK_SSP6_AUDIO] = clk_get(NULL, "ssp6_audio_clk");
 		if (IS_ERR_OR_NULL(clkIDSSP[CLK_SSP6_AUDIO])) {
@@ -2852,10 +2886,11 @@ static void csl_ssp_ControlHWClock(Boolean enable,
 		} else if (!enable && clkIDSSP[CLK_SSP6_AUDIO]->use_cnt)
 			clk_disable(clkIDSSP[CLK_SSP6_AUDIO]);
 	}
+#endif
 }
 
 /* For digi-mic clock and power control*/
-static void csl_ControlHWClock_2p4m(Boolean enable)
+void csl_ControlHWClock_2p4m(Boolean enable)
 {
 	if (enable && !enable2P4MClk) {
 		/* use DMIC*/
@@ -2894,7 +2929,7 @@ static void csl_ControlHWClock_2p4m(Boolean enable)
 }
 
 /* For eanc clock control*/
-static void csl_ControlHWClock_156m(Boolean enable)
+void csl_ControlHWClock_156m(Boolean enable)
 {
 	if (enable && !enable156MClk) {
 		if (clkIDCAPH[CLK_156M] == NULL)
@@ -2922,7 +2957,7 @@ static void csl_ControlHWClock_156m(Boolean enable)
  */
 void csl_caph_ControlHWClock(Boolean enable)
 {
-	int ret = 0;
+	/*int ret = 0;*/
 	if (enable == TRUE) {
 		if (sClkCurEnabled == FALSE) {
 			sClkCurEnabled = TRUE;
@@ -3034,7 +3069,9 @@ static CSL_CAPH_PathID csl_caph_hwctrl_AddPathInTable(
 				config.snk_sampleRate;
 			HWConfig_Table[i].chnlNum = config.chnlNum;
 			HWConfig_Table[i].bitPerSample = config.bitPerSample;
-
+			HWConfig_Table[i].secMic = config.secMic;
+			HWConfig_Table[i].micClockPhaseRev =
+				config.micClockPhaseRev;
 			return (CSL_CAPH_PathID)(i + 1);
 		}
 	}
@@ -4097,6 +4134,38 @@ CSL_CAPH_PathID csl_caph_hwctrl_StartPath(CSL_CAPH_PathID pathID)
 	/*enable mixer input channel last to avoid src junk*/
 	csl_caph_srcmixer_enable_input(path->srcmRoute[0][0].inChnl, 1);
 
+	/* 44.1K ARM2SP, It is possible that mixer gain will be
+	muted in mixing case. So, set the mixer gain after
+	enabling mixer input.
+	*/
+	if (path->arm2sp_path == LIST_DMA_MIX_DMA) {
+#ifdef CONFIG_AUDIO_S2
+		/* set to -6 dB, where SRC CH5 L
+		and R are mixed in case of stereo to
+		mono */
+		csl_srcmixer_setMixInGain(
+			  path->srcmRoute[0][0].inChnl,
+			  path->srcmRoute[0][0].outChnl,
+			  -600, -600);
+		csl_srcmixer_setMixBitSel(
+			path->srcmRoute[0][0].outChnl, 4, 4);
+		csl_srcmixer_setMixOutGain(
+			path->srcmRoute[0][0].outChnl, 0, 0);
+#else
+		/* set to 0dB where SRC
+		CH5 L and R are not mixed L to EP
+		and R to IHF */
+		csl_srcmixer_setMixInGain(
+			  path->srcmRoute[0][0].inChnl,
+			  path->srcmRoute[0][0].outChnl,
+			  0, 0);
+		csl_srcmixer_setMixBitSel(
+			path->srcmRoute[0][0].outChnl, 4, 4);
+		csl_srcmixer_setMixOutGain(
+			path->srcmRoute[0][0].outChnl, 0, 0);
+#endif
+	}
+
 	return path->pathID;
 }
 
@@ -4223,7 +4292,7 @@ Result_t csl_caph_hwctrl_DisablePath(CSL_CAPH_HWCTRL_CONFIG_t config)
 	csl_caph_hwctrl_RemovePathInTable(path->pathID);
 
 	/*shutdown all audio clock if no audio activity, at last*/
-	if (csl_caph_hwctrl_allPathsDisabled() == TRUE) {
+	if ((csl_caph_hwctrl_allPathsDisabled() == TRUE) && (!csl_caph_TuningFlag())) {
 		csl_ControlHWClock_2p4m(FALSE);
 		csl_ControlHWClock_156m(FALSE);
 		csl_caph_ControlHWClock(FALSE);
@@ -4779,7 +4848,7 @@ static void csl_caph_audio_dac_loopback_control(int dacmask, Boolean enable)
 		audiohCfg.sample_pack = DATA_UNPACKED;
 		audiohCfg.sample_mode = 1;
 		csl_caph_audioh_config(audiohPath, (void *)&audiohCfg);
-		csl_caph_audioh_start(audiohPath);
+		csl_caph_audioh_start(audiohPath, 0);
 		/* Enable soft slope, set linear gain (linear gain step/0x100
 		will be the target gain step incremental) */
 		/*chal_audio_stpath_set_sofslope(lp_handle, 1, 1, 0x100);*/
@@ -5071,34 +5140,6 @@ void csl_caph_hwctrl_SetBTMode(int mode)
 
 /****************************************************************************
 *
-*  Function Name: csl_caph_hwctrl_GetDualMic_NoiseRefMic
-*
-*  Description: Get the noise ref mic for dual mic operation
-*
-****************************************************************************/
-CSL_CAPH_DEVICE_e csl_caph_hwctrl_GetDualMic_NoiseRefMic(void)
-{
-	aTrace(LOG_AUDIO_CSL, "%s dualmic_NoiseRefMic=0x%x\r\n",
-		__func__, dualmic_NoiseRefMic);
-	return dualmic_NoiseRefMic;
-}
-
-/****************************************************************************
-*
-*  Function Name: csl_caph_hwctrl_SetDualMic_NoiseRefMic
-*
-*  Description: Set the noise ref mic for dual mic operation
-*
-****************************************************************************/
-void csl_caph_hwctrl_SetDualMic_NoiseRefMic(CSL_CAPH_DEVICE_e dev)
-{
-	aTrace(LOG_AUDIO_CSL, "%s dualmic_NoiseRefMic=0x%x\r\n",
-		__func__, dev);
-	dualmic_NoiseRefMic = dev;
-}
-
-/****************************************************************************
-*
 *  Function Name: csl_caph_hwctrl_obtainMixerOutChannelSink
 *
 *  Description: get mixer out channel sink IHF or EP, whichever is available
@@ -5178,8 +5219,7 @@ void csl_caph_hwctrl_ConfigSSP(CSL_SSP_PORT_e port, CSL_SSP_BUS_e bus,
 	}
 
 	if (!bClk)
-	csl_caph_ControlHWClock(TRUE);
-		
+		csl_caph_ControlHWClock(TRUE);
 	if (bus == CSL_SSP_I2S) {
 		if (fmHandleSSP && fmHandleSSP != pcmHandleSSP)
 			csl_i2s_deinit(fmHandleSSP); /*deinit only if other
@@ -5244,8 +5284,7 @@ void csl_caph_hwctrl_ConfigSSP(CSL_SSP_PORT_e port, CSL_SSP_BUS_e bus,
 		fmHandleSSP = pcmHandleSSP;
 	}
 	if (!bClk)
-	csl_caph_ControlHWClock(FALSE);
-		
+		csl_caph_ControlHWClock(FALSE);
 	aTrace(LOG_AUDIO_CSL, "csl_caph_hwctrl_ConfigSSP::"
 			       "new fmHandleSSP %p, pcmHandleSSP %p.\r\n",
 			       fmHandleSSP, pcmHandleSSP);
@@ -5678,8 +5717,6 @@ void csl_caph_hwctrl_SetLongDma(CSL_CAPH_PathID pathID)
 	if (pathID == 0)
 		return;
 	path = &HWConfig_Table[pathID - 1];
-	if (path->size < 0x10000)
-		return;
 
 	dmaCH1 =  path->dma[0][0];
 	/*only dma1 and dma2 support buffer of >= 64kb*/
@@ -5878,4 +5915,24 @@ int csl_caph_FindPathWithSink(CSL_CAPH_DEVICE_e sink, int skip_path)
 int csl_caph_hwctrl_aadmac_autogate_status(void)
 {
 	return csl_caph_dma_autogate_status();
+}
+
+/****************************************************************************
+*
+*  Description: Set tuning flag, flag info is sent from CP audio
+*
+*****************************************************************************/
+void csl_caph_SetTuningFlag(int flag)
+{
+	audio_tuning_flag = flag;
+}
+
+/****************************************************************************
+*
+*  Description: Get tuning flag
+*
+*****************************************************************************/
+int csl_caph_TuningFlag(void)
+{
+	return audio_tuning_flag;
 }

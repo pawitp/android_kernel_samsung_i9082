@@ -42,6 +42,8 @@
 #include "csl_dsp_caph_control_api.h"
 #include "audio_trace.h"
 
+extern Dsp_AP_ScratchMem_t *DSPDRV_GetPhysicalScratchMemoryAddress(void);
+
 /*****************************************************************************/
 /**
 *
@@ -61,22 +63,59 @@ UInt32 *csl_dsp_caph_control_get_aadmac_buf_base_addr(
 {
 	UInt32 *base_addr;
 	AP_SharedMem_t *ap_shared_mem_ptr;
-	ap_shared_mem_ptr = DSPDRV_GetPhysicalSharedMemoryAddress();
+	Dsp_AP_ScratchMem_t *dsp_scratch_mem_ptr;
 
-	switch (aadmac_audio_connection) {
-	case DSP_AADMAC_PRI_MIC_EN:
-		base_addr = &(ap_shared_mem_ptr->shared_aadmac_pri_mic_low[0]);
-		break;
-	case DSP_AADMAC_SEC_MIC_EN:
-		base_addr = &(ap_shared_mem_ptr->shared_aadmac_sec_mic_low[0]);
-		break;
-	case DSP_AADMAC_SPKR_EN:
-		base_addr = &(ap_shared_mem_ptr->shared_aadmac_spkr_low[0]);
-		break;
-	default:
-		/* Assert */
-		assert(0);
-		break;
+	if (((vp_shared_mem->shared_dsp_supported_features
+			& SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BITF)
+			== SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BITF) &&
+		((vp_shared_mem->shared_ap_supported_features
+			& SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BITF)
+			== SUPP_FEAT_AADMAC_BUF_SCRATCH_MEM_BITF)) {
+		dsp_scratch_mem_ptr = DSPDRV_GetPhysicalScratchMemoryAddress();
+
+
+		switch (aadmac_audio_connection) {
+		case DSP_AADMAC_PRI_MIC_EN:
+			base_addr = &(
+			dsp_scratch_mem_ptr->scr_ram_aadmac_pri_mic_low[0]);
+			/*base_addr = (UInt32 *)(0x34051980);*/
+			break;
+		case DSP_AADMAC_SEC_MIC_EN:
+			base_addr = &(
+			dsp_scratch_mem_ptr->scr_ram_aadmac_sec_mic_low[0]);
+			/*base_addr = (UInt32 *)(0x34051a00);*/
+			break;
+		case DSP_AADMAC_SPKR_EN:
+			base_addr = &(
+			dsp_scratch_mem_ptr->scr_ram_aadmac_spkr_low[0]);
+			/*base_addr = (UInt32 *)(0x34051a80);*/
+			break;
+		default:
+			/* Assert */
+			assert(0);
+			break;
+		}
+	} else {
+		ap_shared_mem_ptr = DSPDRV_GetPhysicalSharedMemoryAddress();
+
+		switch (aadmac_audio_connection) {
+		case DSP_AADMAC_PRI_MIC_EN:
+			base_addr = &(
+			ap_shared_mem_ptr->shared_aadmac_pri_mic_low[0]);
+			break;
+		case DSP_AADMAC_SEC_MIC_EN:
+			base_addr = &(
+			ap_shared_mem_ptr->shared_aadmac_sec_mic_low[0]);
+			break;
+		case DSP_AADMAC_SPKR_EN:
+			base_addr = &(
+			ap_shared_mem_ptr->shared_aadmac_spkr_low[0]);
+			break;
+		default:
+			/* Assert */
+			assert(0);
+			break;
+		}
 	}
 
 	return base_addr;

@@ -28,6 +28,7 @@
 #include <linux/cpumask.h>
 #include <linux/syscalls.h>
 #include <linux/mfd/bcm590xx/core.h>
+#include <linux/mfd/bcmpmu.h>
 
 #include <asm/io.h>
 #include <asm/mach/map.h>
@@ -51,6 +52,9 @@ static void poweroff(void)
 	bcm590xx_shutdown();
 #endif
 
+#ifdef CONFIG_MFD_BCMPMU
+	bcmpmu_client_power_off();
+#endif
 	while (1) ;
 }
 
@@ -277,20 +281,13 @@ static void __init timer_init(void)
 
 	/*
 	 * IMPORTANT:
-	 * If we have to use slave-timer as system timer, two modifications are required
-	 * 1) modify the name of timer as, gpt_setup.name = "slave-timer";
+	 * If we have to use aon-timer as system timer, 3 modifications are required
+	 * 1) modify the name of timer as, gpt_setup.name = "aon-timer";
 	 * 2) By default when the clock manager comes up it disables most of
-	 *    the clock. So if we switch to slave-timer we should prevent the
+	 *    the clock. So if we switch to aon-timer we should prevent the
 	 *    clock manager from doing this. So, modify plat-kona/include/mach/clock.h
+	 * 3) make sure the CLOCK_TICK_RATE is set to the correct rate
 	 *
-	 * By default aon-timer as system timer the following is the config
-	 * #define BCM2165x_CLK_TIMERS_FLAGS     (TYPE_PERI_CLK | SW_GATE | DISABLE_ON_INIT)
-	 * #define BCM2165x_CLK_HUB_TIMER_FLAGS  (TYPE_PERI_CLK | SW_GATE)
-	 *
-	 * change it as follows to use slave timer as system timer
-	 *
-	 * #define BCM2165x_CLK_TIMERS_FLAGS     (TYPE_PERI_CLK | SW_GATE)
-	 * #define BCM2165x_CLK_HUB_TIMER_FLAGS  (TYPE_PERI_CLK | SW_GATE | DISABLE_ON_INIT)
 	 */
 	gpt_setup.name = "aon-timer";
 	gpt_setup.ch_num = 0;

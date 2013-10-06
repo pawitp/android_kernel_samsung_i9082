@@ -47,15 +47,17 @@ static struct otg_transceiver *local_otg_xceiver;
 static int bcmpmu_otg_xceiv_set_vbus(struct otg_transceiver *otg, bool enabled)
 {
 	struct bcmpmu_otg_xceiv_data *xceiv_data = dev_get_drvdata(otg->dev);
-	bool id_gnd;
+	bool id_gnd, aca_a;
 	int stat;
 
-	if (xceiv_data)
+	if (xceiv_data) {
 		id_gnd = bcmpmu_otg_xceiv_check_id_gnd(xceiv_data);
+		aca_a = bcmpmu_otg_xceiv_check_id_rid_a(xceiv_data);
+	}
 	else
 		return -EINVAL;
 
-	if (id_gnd) {
+	if (id_gnd || aca_a) {
 		/* The order of these operations has temporarily been
 		 * swapped due to overcurrent issue caused by slow I2C
 		 * operations. I2C operations take >200ms to complete */
@@ -278,6 +280,19 @@ static void bcmpmu_otg_xceiv_wakeup_core(void)
 			xceiver.notifier, USB_EVENT_WAKEUP_CORE, NULL);
 }
 
+static bool bcmpmu_otg_xceiv_is_rid_c(struct otg_transceiver *otg)
+{
+	struct bcmpmu_otg_xceiv_data *xceiv_data;
+
+	if (!otg)
+		return 0;
+
+	xceiv_data = dev_get_drvdata(otg->dev);
+	if (!xceiv_data)
+		return 0;
+
+	return xceiv_data->is_rid_c;
+}
 
 static int bcmpmu_otg_xceiv_set_suspend(struct otg_transceiver *otg, int suspend)
 {
@@ -325,6 +340,7 @@ static int bcmpmu_otg_xceiv_vbus_notif_handler(struct notifier_block *nb,
 		return -EINVAL;
 
 	bcmpmu_usb_get(xceiv_data->bcmpmu, BCMPMU_USB_CTRL_GET_VBUS_STATUS, &vbus_status);
+
 	queue_work(xceiv_data->bcm_otg_work_queue, vbus_status ? &xceiv_data->bcm_otg_vbus_valid_work : &xceiv_data->bcm_otg_vbus_a_invalid_work);
 
 	return 0;
@@ -346,18 +362,61 @@ static int bcmpmu_otg_xceiv_vbus_invalid_notif_handler(
 	return 0;
 }
 
-
 static int bcmpmu_otg_xceiv_chg_detection_notif_handler(struct notifier_block *nb, unsigned long value, void *data)
 {
 	struct bcmpmu_otg_xceiv_data *xceiv_data =
 		container_of(nb, struct bcmpmu_otg_xceiv_data,
 			     bcm_otg_chg_detection_notifier);
 	bool usb_charger_type = false;
+	static int bc_detect;
 
 	if (!xceiv_data || !data)
 		return -EINVAL;
 
-	usb_charger_type = *(unsigned int*)data ? true : false;
+	switch (*(unsigned int *)data) {
+	case PMU_USB_TYPE_NONE:
+		atomic_notifier_call_chain(
+			&xceiv_data->otg_xceiver.
+			xceiver.notifier,
+			USB_EVENT_RESTORE_SOFT_DISCONNECT, NULL);
+		usb_charger_type = 0;
+		break;
+	case PMU_BC_DETECTION_START:
+		/* Only do this once so we pass OTG compliance tests */
+		if (!bc_detect) {
+			dev_info(xceiv_data->dev,
+				"BC Detection starting.\n");
+			atomic_notifier_call_chain(
+				&xceiv_data->otg_xceiver.
+				xceiver.notifier,
+				USB_EVENT_START_SOFT_DISCONNECT, NULL);
+			bc_detect = 1;
+		}
+		break;
+	case PMU_USB_TYPE_SDP:
+		dev_info(xceiv_data->dev, "SDP Detected.\n");
+		atomic_notifier_call_chain(
+			&xceiv_data->otg_xceiver.
+			xceiver.notifier,
+			USB_EVENT_RESTORE_SOFT_DISCONNECT,
+			NULL);
+		usb_charger_type = 1;
+		break;
+	case PMU_USB_TYPE_CDP:
+	case PMU_USB_TYPE_ACA:
+		usb_charger_type = 1;
+		break;
+	case PMU_USB_TYPE_DCP:
+		dev_info(xceiv_data->dev, "DCP Detected.\n");
+		atomic_notifier_call_chain(
+			&xceiv_data->otg_xceiver.
+			xceiver.notifier,
+			USB_EVENT_RESTORE_SOFT_DISCONNECT,
+			NULL);
+	default:
+		usb_charger_type = 1;
+		break;
+	}
 
 	if (usb_charger_type)
 		queue_work(xceiv_data->bcm_otg_work_queue, &xceiv_data->bcm_otg_chg_detect_work);
@@ -404,6 +463,7 @@ static int bcmpmu_otg_xceiv_set_peripheral(struct otg_transceiver *otg,
 			bcmpmu_otg_xceiv_do_srp(xceiv_data);
 		} else {
 			int data;
+
 			bcmpmu_usb_get(xceiv_data->bcmpmu, BCMPMU_USB_CTRL_GET_USB_TYPE, &data);
 			if ((data != PMU_USB_TYPE_SDP) &&
 				    (data != PMU_USB_TYPE_CDP)) {
@@ -418,6 +478,9 @@ static int bcmpmu_otg_xceiv_set_peripheral(struct otg_transceiver *otg,
 		/* Come up connected  */
 		bcm_hsotgctrl_phy_set_non_driving(false);
 	}
+
+	/* Notify BC Detection is allowed now */
+	bcmpmu_usb_set(xceiv_data->bcmpmu, BCMPMU_USB_CTRL_ALLOW_BC_DETECT, 1);
 
 	return status;
 }
@@ -610,6 +673,15 @@ static void bcmpmu_otg_xceiv_vbus_invalid_handler(
 	struct bcmpmu_otg_xceiv_data *xceiv_data =
 		container_of(work, struct bcmpmu_otg_xceiv_data,
 			     bcm_otg_vbus_invalid_work);
+	if (xceiv_data->is_rid_b) {
+		dev_info(xceiv_data->dev, "ACA-B Disconnect\n");
+		xceiv_data->is_rid_b = 0;
+		atomic_notifier_call_chain(&xceiv_data->otg_xceiver.
+			xceiver.notifier,
+			USB_EVENT_RESTORE_SOFT_DISCONNECT,
+			NULL);
+
+	}
 	dev_info(xceiv_data->dev, "Vbus invalid\n");
 }
 
@@ -620,7 +692,10 @@ static void bcmpmu_otg_xceiv_vbus_valid_handler(struct work_struct *work)
 			     bcm_otg_vbus_valid_work);
 	/* dev_info(xceiv_data->dev, "Vbus valid\n"); */
 
+
+#if !defined(CONFIG_USB_SWITCH_TSU6721)
 	fsa9485_vbus_check(1);
+#endif
 
 #ifdef CONFIG_USB_OTG
 	del_timer_sync(&xceiv_data->otg_xceiver.srp_failure_timer);
@@ -633,16 +708,20 @@ static void bcmpmu_otg_xceiv_vbus_a_invalid_handler(struct work_struct *work)
 	struct bcmpmu_otg_xceiv_data *xceiv_data =
 	    container_of(work, struct bcmpmu_otg_xceiv_data,
 			 bcm_otg_vbus_a_invalid_work);
+
 	int bcm_hsotgctrl_status;
 
 	/* dev_info(xceiv_data->dev, "A session invalid\n"); */
-
+#if !defined(CONFIG_USB_SWITCH_TSU6721)
 	fsa9485_vbus_check(0);
+#endif
+	bcm_hsotgctrl_status = bcm_hsotgctrl_get_clk_count();
 
-	if ( !(bcm_hsotgctrl_status = bcm_hsotgctrl_get_clk_count()) )
+	if (!bcm_hsotgctrl_status)
 		bcm_hsotgctrl_en_clock(true);
-	else if (-ENODEV == bcm_hsotgctrl_status || -EIO == bcm_hsotgctrl_status ) 
-		return ;
+	else if (-ENODEV == bcm_hsotgctrl_status ||
+		-EIO == bcm_hsotgctrl_status)
+		return;
 
 	/* Inform the core of session invalid level  */
 	bcm_hsotgctrl_phy_set_vbus_stat(false);
@@ -760,6 +839,9 @@ static void bcmpmu_otg_xceiv_id_change_handler(struct work_struct *work)
 		BCMPMU_USB_CTRL_GET_ID_VALUE,
 		&new_id);
 
+	pr_info("new_id=%d, pre_id=%d\n", new_id,
+			xceiv_data->prev_otg_id);
+
 	if (xceiv_data->otg_enabled) {
 		/* Stop any stale ADP probe/sense attempts */
 		bcm_otg_do_adp_probe(xceiv_data, false);
@@ -768,13 +850,30 @@ static void bcmpmu_otg_xceiv_id_change_handler(struct work_struct *work)
 		/* Use n and n-1 comparison method */
 		bcmpmu_usb_set(xceiv_data->bcmpmu,
 			BCMPMU_USB_CTRL_SET_ADP_COMP_METHOD, 1);
+	} else {
+		if ((new_id != PMU_USB_ID_GROUND) &&
+			(new_id != PMU_USB_ID_FLOAT)) {
+			dev_info(xceiv_data->dev,
+				"id not supported\n");
+			return;
+		}
 	}
 
-	if ((xceiv_data->prev_otg_id != new_id) ||
+	if (new_id == PMU_USB_ID_RID_B) {
+		dev_info(xceiv_data->dev, "Charger Detect RID_B for ACA-B\n");
+		xceiv_data->is_rid_b = 1;
+		atomic_notifier_call_chain(&xceiv_data->otg_xceiver.
+			xceiver.notifier,
+			USB_EVENT_START_SOFT_DISCONNECT,
+			NULL);
+	}
+	else if ((xceiv_data->prev_otg_id != new_id) ||
 		    xceiv_data->otg_enabled) {
 		id_gnd = bcmpmu_otg_xceiv_check_id_gnd(xceiv_data);
 		id_rid_a = bcmpmu_otg_xceiv_check_id_rid_a(xceiv_data);
-		id_rid_c = bcmpmu_otg_xceiv_check_id_rid_c(xceiv_data);
+		/* Store the value so it can be queried during isr */
+		id_rid_c = xceiv_data->is_rid_c =
+			bcmpmu_otg_xceiv_check_id_rid_c(xceiv_data);
 
 		bcm_hsotgctrl_phy_set_id_stat(!(id_gnd || id_rid_a));
 
@@ -794,6 +893,7 @@ static void bcmpmu_otg_xceiv_chg_detect_handler(struct work_struct *work)
 			 bcm_otg_chg_detect_work);
 
 	dev_info(xceiv_data->dev, "Charger detect event\n");
+
 
 	/* Read and save USB charger type */
 	bcmpmu_usb_get(xceiv_data->bcmpmu,
@@ -929,6 +1029,9 @@ static int __devinit bcmpmu_otg_xceiv_probe(struct platform_device *pdev)
 		bcmpmu_otg_xceiv_set_otg_enable;
 	xceiv_data->otg_xceiver.xceiver.set_suspend =
 		bcmpmu_otg_xceiv_set_suspend;
+
+	xceiv_data->otg_xceiver.xceiver.is_rid_c =
+		bcmpmu_otg_xceiv_is_rid_c;
 
 	ATOMIC_INIT_NOTIFIER_HEAD(&xceiv_data->otg_xceiver.xceiver.notifier);
 

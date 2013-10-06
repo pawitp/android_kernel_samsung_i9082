@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/csl_types.h
+*	@file	include/linux/broadcom/csl_types.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -18,13 +18,13 @@
 /*   TOOLSET: */
 /*   HISTORY: */
 /*   DATE       AUTHOR           DESCRIPTION */
-/* **************************************************************************** */
+/* ************************************************************************** */
 /* !
     *//* ! \file   csl_common.h */
 /* ! \brief  chip support library adaption to Windows Mobile */
 /* ! \brief */
 /* !
-    *//* **************************************************************************** */
+*//* ************************************************************************ */
 
 #ifndef CSL_TYPES_H
 #define CSL_TYPES_H

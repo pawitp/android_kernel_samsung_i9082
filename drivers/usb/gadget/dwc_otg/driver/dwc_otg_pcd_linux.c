@@ -388,11 +388,12 @@ static int ep_queue(struct usb_ep *usb_ep, struct usb_request *usb_req,
 	usb_req->actual = 0;
 
 	ep = ep_from_handle(pcd, usb_ep);
-	if (ep == NULL) {
-		is_isoc_ep = 0;
+	if (!ep) {
+		DWC_ERROR("bad endpoint\n");
+		return -EINVAL;
 	}
-	else
-		is_isoc_ep = (ep->dwc_ep.type == DWC_OTG_EP_TYPE_ISOC) ? 1 : 0;
+
+	is_isoc_ep = (ep->dwc_ep.type == DWC_OTG_EP_TYPE_ISOC) ? 1 : 0;
 
 #ifdef DWC_UTE_PER_IO
 
@@ -444,10 +445,6 @@ static int ep_queue(struct usb_ep *usb_ep, struct usb_request *usb_req,
 
 #endif
 #endif
-	if (!ep) {
-		DWC_ERROR("bad endpoint\n");
-		return -EINVAL;
-	}
 	retval = dwc_otg_pcd_ep_queue(pcd, usb_ep, usb_req->buf, usb_req->dma,
 				      usb_req->length, usb_req->zero, usb_req,
 				      gfp_flags == GFP_ATOMIC ? 1 : 0);
@@ -824,6 +821,20 @@ static int set_selfpowered(struct usb_gadget *gadget, int is_selfpowered)
 	return 0;
 }
 
+static bool pcd_is_rid_c(struct usb_gadget *gadget)
+{
+	struct gadget_wrapper *d;
+
+	DWC_DEBUGPL(DBG_PCDV, "%s(%p)\n", __func__, gadget);
+
+	if (gadget == 0)
+		return 0;
+	else
+		d = container_of(gadget, struct gadget_wrapper, gadget);
+	return d->pcd->core_if->xceiver->is_rid_c(
+		d->pcd->core_if->xceiver);
+}
+
 static const struct usb_gadget_ops dwc_otg_pcd_ops = {
 	.get_frame = get_frame_number,
 	.vbus_draw = vbus_draw,
@@ -836,6 +847,7 @@ static const struct usb_gadget_ops dwc_otg_pcd_ops = {
 #ifdef CONFIG_USB_PCD_SETTINGS
 	.pcd_start_clean = pcd_start_clean,
 #endif
+	.is_rid_c = pcd_is_rid_c,
 };
 
 static int _setup(dwc_otg_pcd_t * pcd, uint8_t * bytes)

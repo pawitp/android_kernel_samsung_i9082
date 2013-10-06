@@ -380,11 +380,17 @@ static SSPI_hw_status_t SSPI_hw_i2s_init(CSL_HANDLE handle,
 	sample_len = MAX(config->rx_delay_bits + config->rx_len,
 			config->tx_len + config->tx_prepad_bits +
 			config->tx_postpad_bits);
+#if 0
 	chal_sspi_set_clk_src_select(handle, SSPI_CLK_SRC_AUDIOCLK);
 
 	div = SSP_I2S_SAMPLE_RATE / config->sampleRate;
 	chal_sspi_set_clk_divider(handle, SSPI_CLK_REF_DIVIDER,
 			(div) ? div - 1 : 0);
+#else  /* use caph clock */
+	chal_sspi_set_clk_divider(handle, SSPI_CLK_REF_DIVIDER, 0);
+	chal_sspi_set_clk_src_select(handle, SSPI_CLK_SRC_CAPHCLK);
+	chal_sspi_set_caph_clk(handle, config->sampleRate, sample_len * 2);
+#endif
 
 	set_fifo_pack(handle, SSPI_FIFO_ID_RX0,
 			config->rx_len, config->rx_pack);

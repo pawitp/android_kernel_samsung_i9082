@@ -30,10 +30,18 @@
 #include <mach/kona_timer.h>
 #include <linux/broadcom/wd-tapper.h>
 
+static int timer_rate = 1;
+
+/* Seconds to ticks conversion */
+#define sec_to_ticks(x) ((x)*timer_rate)
+#define ticks_to_sec(x) ((x)/timer_rate)
+
 static DEFINE_SPINLOCK(tapper_lock);
 
+#ifdef CONFIG_SEC_CHARGING_FEATURE
 #define LOWVOLTAGE   3500
 #define VERYLOWVOLTAGE   3400
+#endif
 
 extern int spa_get_batt_voltage_extern(void);
 
@@ -85,6 +93,7 @@ int wd_tapper_callback(void *dev)
 	return 0;
 }
 
+#ifdef CONFIG_SEC_CHARGING_FEATURE
 static int get_wd_tapper_count(struct platform_device *pdev)
 {
    int voltage = 0;
@@ -108,6 +117,7 @@ static int get_wd_tapper_count(struct platform_device *pdev)
       return  sec_to_ticks(pltfm_data->count);
    }
 }
+#endif
 
 /**
  * wd_tapper_start - Function where the timer is started on suspend
@@ -116,13 +126,18 @@ static int get_wd_tapper_count(struct platform_device *pdev)
  */
 static int wd_tapper_start(struct platform_device *pdev, pm_message_t state)
 {
+#ifdef CONFIG_SEC_CHARGING_FEATURE
 	wd_tapper_data->count = get_wd_tapper_count(pdev);
+#endif
 	pr_debug("%s(%d)\n", __func__, wd_tapper_data->count);
+	preempt_disable();
 	if (kona_timer_set_match_start
 	    (wd_tapper_data->kt, wd_tapper_data->count) < 0) {
 		pr_err("kona_timer_set_match_start returned error \r\n");
+		preempt_enable();	
 		return -1;
 	}
+	preempt_enable();	
 	return 0;
 }
 
@@ -165,15 +180,6 @@ static int __devinit wd_tapper_pltfm_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	/* Get the time out period */
-	wd_tapper_data->count = get_wd_tapper_count(pdev);
-	wd_tapper_data->def_count = wd_tapper_data->count;
-
-	if (wd_tapper_data->count == 0) {
-		dev_err(&pdev->dev, "count value set is 0 - INVALID\n");
-		goto out;
-	}
-
 	/* Get the channel number */
 	ch_num = pltfm_data->ch_num;
 	if (ch_num > 3) {
@@ -182,15 +188,25 @@ static int __devinit wd_tapper_pltfm_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	if (pltfm_data->name == NULL) {
-		dev_err(&pdev->dev, "Timer name passed is NULL.\n");
-		goto out;
-	}
-
 	/* Request the timer context */
 	wd_tapper_data->kt = kona_timer_request(pltfm_data->name, ch_num);
 	if (wd_tapper_data->kt == NULL) {
 		dev_err(&pdev->dev, "kona_timer_request returned error \r\n");
+		goto out;
+	}
+
+	timer_rate = kona_timer_module_get_rate(pltfm_data->name);
+	if (timer_rate <= 0) {
+		dev_err(&pdev->dev, "kona_timer_module_get_rate error \r\n");
+		goto out;
+	}
+
+	/* Get the time out period */
+	wd_tapper_data->count = sec_to_ticks(pltfm_data->count);
+	wd_tapper_data->def_count = wd_tapper_data->count;
+
+	if (wd_tapper_data->count == 0) {
+		dev_err(&pdev->dev, "count value set is 0 - INVALID\n");
 		goto out;
 	}
 
@@ -206,7 +222,8 @@ static int __devinit wd_tapper_pltfm_probe(struct platform_device *pdev)
 		goto out;
 	}
 
-	dev_info(&pdev->dev, "Probe Success\n");
+	dev_info(&pdev->dev, "Probe Success, rate=%d count=%u\n",
+		timer_rate, wd_tapper_data->count);
 	return 0;
 out:
 	dev_err(&pdev->dev, "Probe failed\n");

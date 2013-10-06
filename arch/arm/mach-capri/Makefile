@@ -25,9 +25,14 @@ obj-$(CONFIG_MAP_DMA_MMAP) += dma_mmap.o dump-mem.o
 obj-$(CONFIG_MAP_DMA_TEST) += dma-test.o
 obj-$(CONFIG_IPC) += chal/
 obj-$(CONFIG_MACH_CAPRI_CUSTOM_BOARDS_SUPPORT) += custom_boards/
-#obj-$(CONFIG_MFD_BCMPMU) += board-bcm59056.o
+#obj-$(CONFIG_MFD_BCM59056) += board-bcm59056.o
+#obj-$(CONFIG_MFD_BCM59054) += board-bcm59054.o
 obj-$(CONFIG_MACH_CAPRI_SS_S2VE) += board-bcm59056-s2ve.o
-obj-$(CONFIG_MACH_CAPRI_SS_CRATER) += board-bcm59056-crater.o
+obj-$(CONFIG_MACH_CAPRI_SS_CRATER_REV02) += board-bcm59056-crater.o
+obj-$(CONFIG_MACH_CAPRI_SS_CRATER_REV02a) += board-bcm59056-crater.o
+obj-$(CONFIG_MACH_CAPRI_SS_CRATER_REV03) += board-bcm59054.o
+obj-$(CONFIG_MACH_CAPRI_SS_CRATER_REV03A) += board-bcm59054.o
+obj-$(CONFIG_MACH_CAPRI_SS_CRATER_REV06) += board-bcm59054.o
 obj-$(CONFIG_MACH_CAPRI_SS_BAFFIN) += board-bcm59056-baffin.o
 obj-$(CONFIG_MACH_CAPRI_SS_BAFFINSS) += board-bcm59056-baffinss.o
 obj-$(CONFIG_MACH_CAPRI_SS_ARUBA) += board-bcm59056-aruba.o
@@ -43,6 +48,7 @@ obj-$(CONFIG_MAP_SSASW) += ssasw.o
 obj-$(CONFIG_KONA_SECURE_MONITOR_CALL) += sec_api.o
 
 CFLAGS_board-bcm59056.o += -Iarch/arm/mach-capri/hw_cfg
+CFLAGS_board-bcm59054.o += -Iarch/arm/mach-capri/hw_cfg
 CFLAGS_board-bcm59056-s2ve.o += -Iarch/arm/mach-capri/hw_cfg
 CFLAGS_board-bcm59056-crater.o += -Iarch/arm/mach-capri/hw_cfg
 CFLAGS_board-bcm59056-baffin.o += -Iarch/arm/mach-capri/hw_cfg
@@ -53,6 +59,8 @@ CFLAGS_board_base.o += -Iarch/arm/mach-capri/hw_cfg/BASE
 
 obj-$(CONFIG_SEC_MODEM_BAFFIN_TD)           += board-baffin-td-modems.o board-baffin-spi.o
 obj-$(CONFIG_SEC_MODEM_BAFFINSS_TD)           += board-baffinss-td-modems.o board-baffinss-spi.o
+obj-$(CONFIG_SEC_MODEM_CRATER_TD)           += board-crater-td-modems.o board-crater-spi.o
+
 
 obj-$(CONFIG_MACH_CAPRI_FPGA) += board_fpga.o pinmux_fpga.o
 CFLAGS_board_fpga.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_FPGA \
@@ -91,6 +99,8 @@ CFLAGS_board_m500.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_M500 \
 
 obj-$(CONFIG_MACH_CAPRI_A01) += board_A01.o pinmux_stone.o board-capri-wifi.o
 CFLAGS_board-bcm59056.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
+-Iarch/arm/mach-capri/hw_cfg/BASE
+CFLAGS_board-bcm59054.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
 -Iarch/arm/mach-capri/hw_cfg/BASE
 CFLAGS_board_A01.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
 -Iarch/arm/mach-capri/hw_cfg/BASE \
@@ -132,6 +142,25 @@ CFLAGS_board_ray.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_RAY \
 -Idrivers/videocore/host_support/include \
 -Idrivers/videocore/interface/vceb/host \
 -Idrivers/videocore/interface/vceb/host/linux
+
+obj-$(CONFIG_MACH_CAPRI_GARNET) += board_garnet.o pinmux_garnet.o board-capri-wifi.o
+CFLAGS_board_garnet.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_GARNET \
+-Iarch/arm/mach-capri/hw_cfg/BASE \
+-Idrivers/videocore/host_support/include \
+-Idrivers/videocore/interface/vceb/host \
+-Idrivers/videocore/interface/vceb/host/linux
+
+obj-$(CONFIG_MACH_CAPRI_MEA) += board_mea.o pinmux_stone.o board-capri-wifi.o
+CFLAGS_board-bcm59056.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
+-Iarch/arm/mach-capri/hw_cfg/BASE
+CFLAGS_board-bcm59054.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
+-Iarch/arm/mach-capri/hw_cfg/BASE
+CFLAGS_board_A01.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
+-Iarch/arm/mach-capri/hw_cfg/BASE \
+-Idrivers/videocore/host_support/include \
+-Idrivers/videocore/interface/vceb/host \
+-Idrivers/videocore/interface/vceb/host/linux
+
 obj-$(CONFIG_KONA_CPU_PM_HANDLER) += capri_pm.o capri_wfi.o capri_pm_dbg.o bmodem_sleep.o
 obj-$(CONFIG_KONA_PROFILER) += capri_profiler.o
 
@@ -146,6 +175,11 @@ CFLAGS_board_tablet.o += -Iarch/arm/mach-capri/hw_cfg/CAPRI_TABLET \
 -Idrivers/videocore/host_support/include \
 -Idrivers/videocore/interface/vceb/host \
 -Idrivers/videocore/interface/vceb/host/linux
+
+obj-$(CONFIG_CAPRI_SYSEMI_DDR3) += capri_pm_ddr3.o capri_pm_ddr3_sram.o
+ifneq ($(call as-instr,.arch_extension sec,+sec),)
+AFLAGS_capri_pm_ddr3_sram.o += -DREQUIRES_SEC
+endif
 
 ifneq ($(call as-instr,.arch_extension sec,+sec),)
 CFLAGS_sec_api.o += -DREQUIRES_SEC

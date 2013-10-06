@@ -1292,9 +1292,9 @@ static int pl330_probe(struct platform_device *pdev)
 
 	/* Get the clock struct */
 	pd->clk = clk_get(NULL, DMAC_MUX_APB_BUS_CLK_NAME_STR);
-	if (pd->clk == NULL) {
+	if (IS_ERR(pd->clk)) {
 		dev_err(&pdev->dev, "clk_get failed\n");
-		ret = -ENOENT;
+		ret = PTR_ERR(pd->clk);
 		goto probe_err4;
 	}
 

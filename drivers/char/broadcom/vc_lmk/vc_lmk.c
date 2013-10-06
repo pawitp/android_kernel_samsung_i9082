@@ -207,12 +207,12 @@ static long vc_lmk_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 				if (process->pid == vc_lmk_kill_pid.pid)
 					found = process;
 			}
-			read_unlock(&tasklist_lock);
 
 			if (found != NULL) {
 				force_sig(SIGKILL, found);
 				vc_lmk_killed_proc++;
 			}
+			read_unlock(&tasklist_lock);
 			break;
 		}
 

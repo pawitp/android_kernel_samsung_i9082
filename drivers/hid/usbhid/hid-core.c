@@ -1156,7 +1156,7 @@ static int usbhid_probe(struct usb_interface *intf, const struct usb_device_id *
 	size_t len;
 	int ret;
 
-	printk("USBD][%s] Probe USB HID (if=%d)\n",__func__,
+	dbg_hid("HID probe called for ifnum %d\n",
 			intf->altsetting->desc.bInterfaceNumber);
 
 	for (n = 0; n < interface->desc.bNumEndpoints; n++)

@@ -121,7 +121,9 @@ Result_t RPC_SendMsg(RPC_InternalMsg_t *rpcMsg)
 
 	bufHandle = RPC_PACKET_AllocateBuffer(rpcInterfaceType, maxPktSize, 0);
 	if (!bufHandle) {
-		xassert(0, rpcMsg->rootMsg.msgId);
+		/* Ignore allocation failures when the CP is resetting */
+		if (!RPC_IsCPResetting())
+			xassert(0, rpcMsg->rootMsg.msgId);
 		return RESULT_ERROR;
 	}
 

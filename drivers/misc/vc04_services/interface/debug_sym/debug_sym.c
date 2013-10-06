@@ -139,8 +139,8 @@ int OpenVideoCoreMemoryFile(const char *filename,
 	 */
 
 	if ((newHandle->vcSymbolTableOffset - newHandle->vcMemLoad) >
-	    (4 * 1024 * 1024)) {
-		ERR("newHandle->vcSymbolTableOffset (%d) > 4Mb\n",
+	    (8 * 1024 * 1024)) {
+		ERR("newHandle->vcSymbolTableOffset (%d) > 8Mb\n",
 		    newHandle->vcSymbolTableOffset);
 		rc = -EIO;
 		goto err_exit;

@@ -26,7 +26,7 @@
 // ---- Constants and Types ----------------------------------
 
 #define BCMBT_VREG_GPIO		98	/* BT_REG_ON */
-#define BCMBT_RESET_GPIO	-1	/* unused */
+#define BCMBT_RESET_GPIO	95	/* BT_RST */
 #define BCMBT_AUX0_GPIO		-1	/* unused */
 #define BCMBT_AUX1_GPIO		-1	/* unused */
 

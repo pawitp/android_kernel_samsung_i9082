@@ -337,7 +337,6 @@ static struct bcmpmu_platform_data bcmpmu_plat_data = {
 	.eoc_cal_map_len = ARRAY_SIZE(eoc_cal_map),
 	.chrgr_curr_lmt = &chrgr_curr_lmt[0],	
 	.support_hw_eoc = 0,
-	.support_fg = 1,
 	.support_chrg_maint = 1,
 	.chrg_resume_lvl = 4100,
 	.fg_support_tc = 1,

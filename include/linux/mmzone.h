@@ -140,6 +140,16 @@ enum zone_stat_item {
 	NUMA_LOCAL,		/* allocation from local node */
 	NUMA_OTHER,		/* allocation from other node */
 #endif
+#ifdef CONFIG_CMA
+	NR_FREE_CMA_PAGES,
+	NR_LRU_CMA_BASE,
+	NR_CMA_INACTIVE_ANON = NR_LRU_CMA_BASE,
+	NR_CMA_ACTIVE_ANON,
+	NR_CMA_INACTIVE_FILE,
+	NR_CMA_ACTIVE_FILE,
+	NR_CMA_UNEVICTABLE,
+	NR_CONTIG_PAGES,
+#endif
 	NR_ANON_TRANSPARENT_HUGEPAGES,
 	NR_VM_ZONE_STAT_ITEMS };
 
@@ -164,6 +174,19 @@ enum lru_list {
 	LRU_UNEVICTABLE,
 	NR_LRU_LISTS
 };
+
+#ifdef CONFIG_CMA
+#define LRU_CMA_BASE	(NR_LRU_LISTS)
+enum lru_cma_lists {
+	LRU_CMA_INACTIVE_ANON = LRU_CMA_BASE,
+	LRU_CMA_ACTIVE_ANON = LRU_CMA_BASE + LRU_ACTIVE,
+	LRU_CMA_INACTIVE_FILE = LRU_CMA_BASE + LRU_FILE,
+	LRU_CMA_ACTIVE_FILE = LRU_CMA_BASE + LRU_FILE + LRU_ACTIVE,
+	NR_LRU_LISTS_CMA,
+};
+#else
+#define NR_LRU_LISTS_CMA	(NR_LRU_LISTS)
+#endif /* ! CONFIG_CMA */
 
 #define for_each_lru(l) for (l = 0; l < NR_LRU_LISTS; l++)
 
@@ -348,6 +371,13 @@ struct zone {
 	 * process to make sure that the system is not starved.
 	 */
 	unsigned long		min_cma_pages;
+	/* This tells us how many free MIGRATE_CMA pages exist on the free
+	 * list per-order. This will help us determine the watermark checks
+	 * so the reclaim happens faster if we are running out of
+	 * non-MIGRATE_CMA pages that kernel needs
+	 */
+	unsigned long		nr_cma_free[MAX_ORDER];
+
 #endif
 	struct free_area	free_area[MAX_ORDER];
 

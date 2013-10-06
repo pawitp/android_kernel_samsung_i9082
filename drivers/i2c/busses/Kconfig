@@ -898,6 +898,14 @@ config CAPRI_BSC3_PAD_CTRL_MODE
 	 Enable this option to control the pad setup of BSC3 SCL and SDA pins
 	 based on I2C transactions
 
+config CAPRI_BSC1_PAD_CTRL_MODE
+	boolean "Control BSC1 pads based on I2C transactions"
+	depends on ARCH_KONA && I2C_BSC
+	default n
+	help
+	 Enable this option to control the pad setup of BSC1 SCL and SDA pins
+	 based on I2C transactions
+
 config I2C_BRCM_SSPI
 	tristate "BRCM SSPI-based I2C"
 	depends on ARCH_KONA

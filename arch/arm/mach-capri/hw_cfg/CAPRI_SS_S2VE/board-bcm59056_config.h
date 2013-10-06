@@ -680,8 +680,8 @@ struct bcmpmu_regulator_init_data bcm59056_regulators[BCMPMU_REGULATOR_MAX] = {
 		BCMPMU_REGULATOR_AUDLDO, &bcm59056_audldo_data, 0xff, 0
 	},
 	[BCMPMU_REGULATOR_MICLDO] = {
-		BCMPMU_REGULATOR_MICLDO, &bcm59056_micldo_data, 0xAA, 0
-	},
+				     BCMPMU_REGULATOR_MICLDO,
+				     &bcm59056_micldo_data, 0xAA, 1},
 	[BCMPMU_REGULATOR_MMCLDO1] = {
 		BCMPMU_REGULATOR_MMCLDO1, &bcm59056_mmcldo1_data, 0x02, BCMPMU_REGL_OFF_IN_DSM
 	},
@@ -692,8 +692,8 @@ struct bcmpmu_regulator_init_data bcm59056_regulators[BCMPMU_REGULATOR_MAX] = {
 		BCMPMU_REGULATOR_SIMLDO, &bcm59056_simldo_data, 0xAA, BCMPMU_REGL_LPM_IN_DSM
 	},
 	[BCMPMU_REGULATOR_SIM2LDO] = {
-		BCMPMU_REGULATOR_SIM2LDO, &bcm59056_sim2ldo_data, 0x02, 0
-	},
+				      BCMPMU_REGULATOR_SIM2LDO,
+				      &bcm59056_sim2ldo_data, 0x00, 1},
 	[BCMPMU_REGULATOR_HDMILDO] = {
 		BCMPMU_REGULATOR_HDMILDO, &bcm59056_hdmildo_data, 0x02, 0
 	},

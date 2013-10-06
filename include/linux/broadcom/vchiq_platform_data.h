@@ -16,12 +16,14 @@
 #define VCHIQ_PLATFORM_DATA_H_
 
 /*
- * A pointer to the following structure needs to be stored in the platform_device's
- * dev.platform_data member.
+ * A pointer to the following structure needs to be stored in the
+ * platform_device's dev.platform_data member.
  *
- * The instance name is used to associate the vchiq instance with a vceb instance.
+ * The instance name is used to associate the vchiq instance with a vceb
+ * instance.
  *
- *  The instance_name can be NULL or the empty string. In this situation, the proc entries
+ *  The instance_name can be NULL or the empty string. In this situation,
+ *  the proc entries
  *  will be created as before
  *
  *      /proc/vc/vchiq_control

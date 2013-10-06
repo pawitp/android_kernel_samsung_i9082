@@ -627,6 +627,11 @@ extern dwc_workq_t *DWC_WORKQ_ALLOC(char *name);
 /** Free a workq.  All work must be completed before being freed. */
 extern void DWC_WORKQ_FREE(dwc_workq_t *workq);
 #define dwc_workq_free DWC_WORKQ_FREE
+
+#define DWC_WORK_CONTAINER_SIZE 10
+extern void DWC_CONTAINER_LIST_INIT(int size);
+extern void DWC_CONTAINER_LIST_FREE(void);
+
 /** Schedule a callback on the workq, passing in data.  The function will be
  * scheduled at some later time. */
 extern void DWC_WORKQ_SCHEDULE(dwc_workq_t *workq, dwc_work_callback_t work_cb, void *data, char *format, ...)

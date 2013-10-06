@@ -4,7 +4,7 @@
 * Unless you and Broadcom execute a separate written software license
 * agreement governing use of this software, this software is licensed to you
 * under the terms of the GNU General Public License version 2, available at
-* http://www.broadcom.com/licenses/GPLv2.php (the "GPL"). 
+* http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
 *
 * Notwithstanding the above, under no circumstances may you combine this
 * software in any way with any other Broadcom software provided under a
@@ -15,9 +15,9 @@
 #ifndef BATTERY_BQ24616_H
 #define BATTERY_BQ24616_H
 
-// defines GPIOs used for battery operations
+/* defines GPIOs used for battery operations*/
 struct battery_bq24616_cfg {
-	/* Output GPIO: controls battery power output. 
+	/* Output GPIO: controls battery power output.
 	   HIGH = letting power through, LOW = cutting power off. */
 	int gpio_ctl_pwr;
 

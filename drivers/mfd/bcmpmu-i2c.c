@@ -353,8 +353,7 @@ static int i2c_try_read_write(struct bcmpmu *bcmpmu, int trans_type,
 						clientaddr,
 						&temp);
 				if (err == 0) {
-					if ((temp & map.mask) ==
-						bcmpmu->pmu_rev) {
+					if (temp & map.mask) {
 						/**
 						 * OK: Now we can try
 						 * to read the register
@@ -694,12 +693,9 @@ static int bcmpmu_i2c_probe(struct i2c_client *i2c,
 
 	pdata = (struct bcmpmu_platform_data *)i2c->dev.platform_data;
 	if(pdata == NULL){
-		printk(KERN_INFO "%s: invalid platform_data. \n", __func__);
+		printk(KERN_INFO "%s: invalid platform_data.\n", __func__);
 		return -ENODEV;
 	}
-
-	printk(KERN_INFO "%s called\n", __func__);
-
 	bcmpmu = kzalloc(sizeof(struct bcmpmu), GFP_KERNEL);
 	if (bcmpmu == NULL) {
 		printk(KERN_ERR "%s: failed to alloc mem.\n", __func__);

@@ -22,6 +22,7 @@ int AMI_SearchOffset(void *handle);
 int AMI_WriteOffset(void *handle, u8 offset[3]);
 int AMI_ReadOffset(void *handle, u8 offset[3]);
 int AMI_SetSoftIron(void *handle, s16 si[9]);
+int AMI_GetSoftIron(void *handle, s16 si[9]);
 int AMI_SetDirection(void *handle, s16 dir, s16 polarity);
 int AMI_GetDirection(void *handle, s16 *dir, s16 *polarity);
 
@@ -39,3 +40,4 @@ int AMI_i2c_send_w(void *i2c_handle, u8 cmd, u16 buf);
 int AMI_i2c_recv_w(void *i2c_handle, u8 cmd, u16 *buf);
 
 #endif
+

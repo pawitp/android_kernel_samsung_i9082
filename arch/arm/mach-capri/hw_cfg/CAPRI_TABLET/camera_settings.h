@@ -12,16 +12,17 @@
 * consent.
 *****************************************************************************/
 
-#if !defined( CAMERA_SETTINGS_H )
-#define  CAMERA_SETTINGS_H
+#if !defined(CAMERA_SETTINGS_H)
+#define CAMERA_SETTINGS_H
 
-#define  HW_CFG_CAMERA_GPIO \
-  {  8, 0, 1, "CAM1_PWDN"},	\
-  {  9, 0, 0, "CAM1_RST"},		\
-  { 10, 0, 0, "CAM2_RST"},		\
-  { 11, 0, 0, "CAM2_PWDN"},	\
-  {104, 0, 0, "CAM_FLASH_EN1"},  \
-  {108, 0, 0, "CAM_FLASH_TRIG"}, \
-  {176, 0, 0, "CAM2_REG_ON"}  \
+#define HW_CFG_CAMERA_GPIO { \
+	{  8, 0, 0, "CAM1_PWDN"}, \
+	{  9, 0, 0, "CAM1_RST"}, \
+	{ 10, 0, 0, "CAM2_RST"}, \
+	{ 11, 0, 0, "CAM2_PWDN"}, \
+	{104, 0, 0, "CAM_FLASH_EN1"}, \
+	{108, 0, 0, "CAM_FLASH_TRIG"}, \
+	{176, 0, 0, "CAM2_REG_ON"} \
+}
 
 #endif   /* CAMERA_SETTINGS_H */

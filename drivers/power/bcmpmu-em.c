@@ -22,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/workqueue.h>
 #include <linux/fs.h>
+#include <linux/miscdevice.h>
 #include <linux/uaccess.h>
 #include <linux/poll.h>
 #include <linux/power_supply.h>
@@ -55,8 +56,10 @@ static int debug_mask = BCMPMU_PRINT_ERROR |
 #define POLLRATE_HIGHBAT	60000
 #define POLLRATE_POLL		50
 #define POLLRATE_POLL_INIT	20
+#define POLLRATE_POLL_FORCE	10
 #define POLLRATE_IDLE_INIT	160
-#define POLLRATE_IDLE		500
+#define POLLRATE_IDLE_FORCE	40
+#define POLLRATE_IDLE		100
 #define POLLRATE_RETRY		500
 #define POLLRATE_ADC		20
 #define POLLRATE_CUTOFF		2000
@@ -68,18 +71,27 @@ static int debug_mask = BCMPMU_PRINT_ERROR |
 #define AVG_LENGTH		3
 #define MAX_VFLOAT		4200
 #define ADC_RETRY_MAX		10
+#define	MAX_VOLT		4250
 
 #define MIN_BATT_VOLT		2300
 #define MAX_BATT_OV		100
 #define MAX_BATT_CURR		3000
 #define MAX_TEMP_DELTA		200
 #define HICAL_FACT		50
+#define HICAL_FACT_INIT		100
 #define LOCAL_FACT		80
+
+#define GUARD_OFF_NORM		10
+#define GUARD_ON_INIT		10
+#define GUARD_OFF_INIT		5
 
 #define FG_CIC_2HZ		0x00
 #define FG_CIC_4HZ		0x01
 #define FG_CIC_8HZ		0x02
 #define FG_CIC_16HZ		0x03
+
+#define MAX_BATT_OV		100
+#define PRE_EOC_MIN_CURR	300
 
 #define pr_em(debug_level, args...) \
 	do { \
@@ -125,6 +137,11 @@ enum {
 	CAL_MODE_FORCE,
 	CAL_MODE_CUTOFF,
 	CAL_MODE_TEMP,
+};
+
+enum {
+	BCMPMU_FG_ST_FB_CAL = (1U << 0),
+	BCMPMU_FG_ST_LB_CAL = (1U << 1),
 };
 
 static struct bcmpmu_charge_zone chrg_zone[] = {
@@ -226,7 +243,9 @@ struct bcmpmu_em {
 	int support_fg;
 	int support_chrg_maint;
 	s64 fg_capacity;
+	s64 fg_capacity_temp;
 	int fg_cap_cal;
+	int fg_1st_fb_cal;
 	int fg_force_cal;
 	int fg_lowbatt_cal;
 	int cal_mode;
@@ -264,6 +283,7 @@ struct bcmpmu_em {
 	int fg_zone;
 	int fg_temp_fact;
 	int fg_comp_mode;
+	int fg_comp_mode_last;
 	int fg_guard;
 	int fg_pending_zone;
 	int fg_zone_settle_tm;
@@ -280,6 +300,8 @@ struct bcmpmu_em {
 	int batt_temp_in_celsius;
 	int retry_cnt;
 	int max_vfloat;
+	int max_volt;
+	int min_volt;
 	int non_pse_charging;
 	int sys_impedence;
 	int oc_volt;
@@ -299,11 +321,89 @@ struct bcmpmu_em {
 	int dtemp_throttle;
 	int die_dbg_temp;
 	bool usb_ov;
+	int pre_eoc_min_curr;
+	int max_batt_ov;
 #ifdef SAMSUNG_DFT_SOC_RETURN_NODE
 	struct power_supply fuelgauge;
 #endif
 };
 static struct bcmpmu_em *bcmpmu_em;
+
+static unsigned int em_poll(struct file *file, poll_table *wait);
+static int em_open(struct inode *inode, struct file *file);
+static int em_release(struct inode *inode, struct file *file);
+
+static const struct file_operations em_fops = {
+	.owner		= THIS_MODULE,
+	.open		= em_open,
+	.release	= em_release,
+	.poll		= em_poll,
+};
+
+static struct miscdevice bcmpmu_em_device = {
+	MISC_DYNAMIC_MINOR, "bcmpmu_em", &em_fops
+};
+
+static int em_open(struct inode *inode, struct file *file)
+{
+	file->private_data = bcmpmu_em;
+	return 0;
+}
+
+static int em_release(struct inode *inode, struct file *file)
+{
+	file->private_data = NULL; 
+	return 0;
+}
+
+static unsigned int em_poll(struct file *file, poll_table *wait)
+{
+	/* To handle inerrupts and other events */
+	return 0;
+}
+
+static void save_fg_status(struct bcmpmu *bcmpmu, int bit, int status)
+{
+	int ret = 0;
+	int temp;
+	ret = bcmpmu->read_dev(bcmpmu,
+			PMU_REG_FG_ST,
+			&temp,
+			bcmpmu->regmap[PMU_REG_FG_ST].mask);
+	if (ret != 0) {
+		pr_em(ERROR, "%s failed to read fg status.\n", __func__);
+		return;
+	}
+	if (status)
+		temp = temp | bit;
+	else
+		temp = temp & ~bit;
+
+	ret = bcmpmu->write_dev(bcmpmu,
+		PMU_REG_FG_ST,
+		temp,
+		bcmpmu->regmap[PMU_REG_FG_ST].mask);
+	pr_em(FLOW, "%s, ret=%d, st=0x%X, bit=0x%X\n",
+		__func__, ret, temp, bit);
+	return;
+}
+
+static int get_fg_status(struct bcmpmu *bcmpmu, int bit)
+{
+	int ret = 0;
+	int data;
+	ret = bcmpmu->read_dev(bcmpmu,
+			PMU_REG_FG_ST,
+			&data,
+			bcmpmu->regmap[PMU_REG_FG_ST].mask);
+	if (ret != 0) {
+		pr_em(ERROR, "%s failed to read fg status.\n", __func__);
+		data = 0;
+	}
+	data = data & bit;
+	pr_em(FLOW, "%s, status=%d, bit=0x%X\n", __func__, data, bit);
+	return data;
+}
 
 static int save_fg_delta(struct bcmpmu *bcmpmu, int data)
 {
@@ -553,47 +653,165 @@ static int get_esr_ocv(struct bcmpmu_em *pem, int slope, int offset)
 	temp1 = 1000 * pem->batt_volt - offset * pem->batt_curr;
 	pr_em(DATA, "%s, temp =%lld, temp1=%lld\n",
 		__func__, temp, temp1);
+	if(temp != 0)
 	ocv = div64_s64(temp1, temp);
 	pr_em(DATA, "%s, ocv =%d, slope=%d, offset=%d\n",
 		__func__, ocv, slope, offset);
 	return ocv;
 }
 
+static int get_esr(struct bcmpmu_em *pem, int slope, int offset){
+	
+	int dividend;
+	int divisor;
+	int esr=0;
+
+	dividend = 1000 * offset + (pem->batt_volt * slope);
+	
+	divisor =  (pem->batt_curr * slope / 1000) +1000;
+	pr_em(DATA, "%s, dividend=%d, divisor=%d, \n",
+		__func__, dividend, divisor);
+	if (divisor !=0)
+		esr = div64_s64(dividend,divisor);
+	return esr;
+}	
+/**
+ * get_ocv() - Calculate battery OCV based on battery current, terminal voltage,
+ *             and ESR data.
+ * @pem:	Pointer to bcmpmu_em structure
+ *
+ * Using battery current (pem->batt_curr), terminal voltage (pem->batt_volt),
+ * and ESR data for the current temperature zone (pem->fg_zone), calculate
+ * the battery Open-Circuit Voltage (OCV).
+ *
+ * Note:
+ * - If temperature control is off (pem->fg_support_tc = 0), by default the
+ *   temperature zone will be FG_TMP_ZONE_MAX = FG_TMP_ZONE_p20.
+ * - If pem->fg_zone_ptr = NULL, a static ESR (pem->esr) will be used for the
+ *   calculation.
+ *
+ * Function returns OCV in mV.
+ *
+ */
 static int get_ocv(struct bcmpmu_em *pem)
 {
 	int slope;
 	int offset;
 	int ocv;
+	int min_volt;
+	int max_volt;
+	int esr_vl,esr_vf;
+	int esr;
+	int esr_vf_lvl;
 
-	if (pem->fg_support_tc == 0)
+	min_volt = pem->cutoffcal[pem->cutoffcal_len-1].volt;
+	esr_vf_lvl = pem->max_volt;
+	max_volt = pem->max_volt;
+	ocv = 0;
+
+	if(!pem->batt_present && pem->batt_volt > pem->max_volt)
+		pem->batt_volt = pem->max_volt;
+
+	pr_em(FLOW, "%s, volt:%d,current:%d, min_volt:%d, max_volt:%d\n",
+	__func__, pem->batt_volt, pem->batt_curr, min_volt, max_volt);
+	if (!pem->fg_zone_ptr) {
+		pr_em(FLOW, "%s, FG zone info not defined volt\n", __func__);
 		ocv = pem->batt_volt - (pem->esr * pem->batt_curr)/1000;
-	else if (pem->fg_zone_ptr == NULL) {
-		pr_em(FLOW, "%s, FG zone info not defined\n", __func__);
-		ocv = pem->batt_volt - (pem->esr * pem->batt_curr)/1000;
+		return ocv;
+
 	} else {
+		if (pem->batt_curr < 0) {
 			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vl_slope;
 			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vl_offset;
 		ocv = get_esr_ocv(pem, slope, offset);
-		if (ocv < (pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl))
+		if ((ocv > min_volt) &&
+			(ocv < (pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl)))
 			return ocv;
+
 			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vm_slope;
 			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vm_offset;
 		ocv = get_esr_ocv(pem, slope, offset);
 		if ((ocv < (pem->fg_zone_ptr[pem->fg_zone].esr_vm_lvl)) &&
 			(ocv >= (pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl)))
 			return ocv;
+
 			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vh_slope;
 			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vh_offset;
 		ocv = get_esr_ocv(pem, slope, offset);
 		if ((ocv < (pem->fg_zone_ptr[pem->fg_zone].esr_vh_lvl)) &&
 			(ocv >= (pem->fg_zone_ptr[pem->fg_zone].esr_vm_lvl)))
 			return ocv;
+
 			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vf_slope;
 			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vf_offset;
-		ocv = get_esr_ocv(pem, slope, offset);
+			ocv = get_esr_ocv(pem, slope, offset);
+		} else {
+			esr_vl= pem->fg_zone_ptr[pem->fg_zone].esr_vl_offset + 
+					(pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl *
+					pem->fg_zone_ptr[pem->fg_zone].esr_vl_slope / 1000);
+			esr_vl = (esr_vl * 105) / 100;
+			esr_vf= pem->fg_zone_ptr[pem->fg_zone].esr_vf_offset + 
+					(esr_vf_lvl *
+					pem->fg_zone_ptr[pem->fg_zone].esr_vf_slope / 1000);
+			esr_vf = (esr_vf * 95) / 100;
+			
+		    pr_em(DATA,"%s, ocv_vl=%d, ocv_vm=%d, ocv_vh=%d, ocv_vf=%d\n",
+				__func__, pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl,
+				pem->fg_zone_ptr[pem->fg_zone].esr_vm_lvl,
+				pem->fg_zone_ptr[pem->fg_zone].esr_vh_lvl,
+				esr_vf_lvl);
+			pr_em(DATA,"%s,esr_vl=%d, esr_vf=%d\n",__func__, esr_vl,esr_vf);
+			
+			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vf_slope;			
+			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vf_offset;
+			esr = get_esr(pem, slope, offset);			
+			if((esr >= esr_vf) && (esr <= esr_vl)){
+				ocv = get_esr_ocv(pem, slope, offset);
+				pr_em(DATA,"%s,ocv=%d, ocv_vf=%d\n",__func__,ocv,
+					(esr_vf_lvl * 101)/100);
+				if (ocv <= (esr_vf_lvl * 101)/100)				
+					return ocv;			
+			}
+			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vh_slope;
+			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vh_offset;
+			esr = get_esr(pem, slope, offset);			
+			if((esr >= esr_vf) && (esr <= esr_vl)){
+				ocv = get_esr_ocv(pem, slope, offset);
+				pr_em(DATA,"%s,ocv=%d, ocv_vf=%d\n",__func__,ocv,
+					((pem->fg_zone_ptr[pem->fg_zone].esr_vh_lvl) * 101) / 100);
+				if (ocv <= ((pem->fg_zone_ptr[pem->fg_zone].esr_vh_lvl) * 101) / 100)				
+					return ocv;
+				}
+			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vm_slope;
+			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vm_offset;
+			esr = get_esr(pem, slope, offset);
+			if((esr >= esr_vf) && (esr <= esr_vl)){
+				ocv = get_esr_ocv(pem, slope, offset);
+				pr_em(DATA,"%s,ocv=%d, ocv_vf=%d\n",__func__,ocv,
+					((pem->fg_zone_ptr[pem->fg_zone].esr_vm_lvl) * 101) / 100);
+				if (ocv <= ((pem->fg_zone_ptr[pem->fg_zone].esr_vm_lvl) * 101) / 100)
+					return ocv;
+				}
+			slope = pem->fg_zone_ptr[pem->fg_zone].esr_vl_slope;
+			offset = pem->fg_zone_ptr[pem->fg_zone].esr_vl_offset;
+			esr = get_esr(pem, slope, offset);
+			if((esr >= esr_vf) && (esr <= esr_vl)){
+				ocv = get_esr_ocv(pem, slope, offset);
+				pr_em(DATA,"%s,ocv=%d, ocv_vf=%d\n",__func__,ocv,
+					((pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl) * 101) /100);
+				if (ocv <= ((pem->fg_zone_ptr[pem->fg_zone].esr_vl_lvl) * 101) /100)
+					return ocv;		
+				}
+		}		
+		if (ocv < min_volt) {
+			pr_em(FLOW, "OCV below min voltage!!\n");
+			ocv = min_volt;
+		} else if (ocv > max_volt) {
+			pr_em(FLOW, "OCV above max voltage!!\n");
+			ocv = max_volt;
+		}
 			return ocv;
 		}
-	return ocv;
 }
 
 static int get_fg_temp_factor(struct bcmpmu_em *pem, int temp)
@@ -660,6 +878,7 @@ static void update_fg_capacity(struct bcmpmu_em *pem, int capacity)
 {
 	pem->fg_capacity  = pem->fg_capacity_full * capacity;
 	pem->fg_capacity = div_s64(pem->fg_capacity, 100);
+	pem->fg_capacity_temp = pem->fg_capacity;
 	pr_em(FLOW, "%s, capacity=%d\n", __func__, capacity);
 }
 
@@ -1152,26 +1371,31 @@ static int is_charger_present(struct bcmpmu_em *pem)
 		return 1;
 }
 
-static int em_batt_get_capacity(struct bcmpmu_em *pem, int pvolt, int curr)
+/**
+ * soc_lookup() - Look up the battery SoC from the voltage-capacity map
+ * @pem:	Pointer to bcmpmu_em structure
+ * @ocv:	Battery Open-Circuit Voltage (mV)
+ *
+ * Given the Open Circuit Voltage (OCV) of the battery, look up the battery
+ * State of Charge (SoC) from the voltage-capacity map. Returns battery SoC (%)
+ */
+static int soc_lookup(struct bcmpmu_em *pem, int ocv)
 {
 	int i = 0;
 	int cap = pem->bvcap[i].cap;
 	int index;
-	int volt = pvolt;
 	int len;
 	struct bcmpmu_voltcap_map *vcmap = get_fg_vcmap(pem, &len);
 	
-	volt = pvolt - (pem->esr * curr)/1000;
-
-	if (volt >= vcmap[0].volt)
+	if (ocv >= vcmap[0].volt)
 		cap = vcmap[0].cap;
-	else if (volt <= vcmap[len - 1].volt)
+	else if (ocv <= vcmap[len - 1].volt)
 		cap = vcmap[len - 1].cap;
 	else {
 		for (i = 0; i < len - 1; i++) {
-			if ((volt <= vcmap[i].volt) &&
-			    (volt > vcmap[i+1].volt)) {
-				index = ((vcmap[i].volt - volt) * 1000)/
+			if ((ocv <= vcmap[i].volt) &&
+			    (ocv > vcmap[i+1].volt)) {
+				index = ((vcmap[i].volt - ocv) * 1000)/
 					 (vcmap[i].volt - vcmap[i+1].volt);
 				cap = vcmap[i].cap +
 					((vcmap[i+1].cap - vcmap[i].cap)
@@ -1180,8 +1404,9 @@ static int em_batt_get_capacity(struct bcmpmu_em *pem, int pvolt, int curr)
 			}
 		}
 	}
-	pr_em(FLOW, "%s, cpcty=%d, pvlt=%d, crr=%d, vlt=%d, imp=%d\n",
-		__func__, cap, pvolt, curr, volt, pem->esr);
+
+	pr_em(FLOW, "%s(): OCV=%dmV SoC=%d%%\n", __func__, ocv, cap);
+
 	return cap;
 }
 
@@ -1230,7 +1455,7 @@ static int update_adc_readings(struct bcmpmu_em *pem)
 			first_time = 1;
 		} else {
 			if ((volt > MIN_BATT_VOLT) &&
-				(volt < (pem->max_vfloat + MAX_BATT_OV)))
+				(volt < (pem->max_vfloat + pem->max_batt_ov)))
 				pem->batt_volt = volt;
 			if (abs(temp - pem->avg_temp) < MAX_TEMP_DELTA)
 				pem->batt_temp = temp;
@@ -1258,7 +1483,7 @@ static void pre_eoc_check(struct bcmpmu_em *pem)
 
 	if ((pem->batt_capacity < 90) ||
 		(pem->batt_volt < pem->fg_fbat_lvl) ||
-		(pem->batt_curr > 300) ||
+		(pem->batt_curr > pem->pre_eoc_min_curr) ||
 		(pem->batt_curr < 0)) {
 		pem->eoc_factor = 0;
 		return;
@@ -1358,19 +1583,24 @@ static int update_eoc(struct bcmpmu_em *pem)
 			__func__, capacity, pem->batt_capacity);
 	}
 	if (capacity == 100) {
-				if (pem->fg_comp_mode == 0)
-					pem->fg_cap_cal = 1;
-				pem->fg_capacity = pem->fg_capacity_full;
-					pem->charge_state = CHRG_STATE_MAINT;
+		if (pem->fg_1st_fb_cal == 0) {
+			pem->fg_1st_fb_cal = 1;
+			save_fg_status(pem->bcmpmu,
+				BCMPMU_FG_ST_FB_CAL, 1);
+		}
+		if (pem->fg_comp_mode == 0)
+			pem->fg_cap_cal = 1;
+		pem->fg_capacity = pem->fg_capacity_full;
+		pem->charge_state = CHRG_STATE_MAINT;
 		if (pem->piggyback_chrg == 0)
 			pem->bcmpmu->chrgr_usb_en(pem->bcmpmu, 0);
-				}
+	}
 
 	pr_em(FLOW, "%s, eoc_st=%d, eoc_cnt=%d\n",
 			__func__, pem->eoc_state, pem->eoc_count);
 	pem->eoc_cap = capacity;
 	return capacity;
-			}
+}
 
 static void clear_cal_state(struct bcmpmu_em *pem)
 {
@@ -1424,25 +1654,65 @@ static int pre_cutoff_check(struct bcmpmu_em *pem)
 	return capacity;
 }
 
+static int get_fg_guard_upper(struct bcmpmu_em *pem)
+{
+	if (pem->fg_1st_fb_cal == 1)
+		return pem->fg_guard;
+	else
+		return GUARD_ON_INIT;
+}
+
+static int get_fg_guard_lower(struct bcmpmu_em *pem)
+{
+	if (pem->fg_1st_fb_cal == 1)
+		return GUARD_OFF_NORM;
+	else
+		return GUARD_OFF_INIT;
+}
+
+static void update_hical_factor(struct bcmpmu_em *pem,
+	int capacity, int capacity_v)
+{
+	if (capacity != 0)
+		pem->high_cal_factor =
+			(capacity_v - capacity) * 100 / capacity;
+	else
+		pem->high_cal_factor = 0;
+	if (pem->fg_1st_fb_cal == 1) {
+		if (pem->high_cal_factor > HICAL_FACT)
+			pem->high_cal_factor = HICAL_FACT;
+		else if (pem->high_cal_factor < -HICAL_FACT)
+			pem->high_cal_factor = -HICAL_FACT;
+	} else {
+		if (pem->high_cal_factor > HICAL_FACT_INIT)
+			pem->high_cal_factor = HICAL_FACT_INIT;
+		else if (pem->high_cal_factor < -HICAL_FACT)
+			pem->high_cal_factor = -HICAL_FACT;
+	}
+}
 
 static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 {
 	struct bcmpmu_adc_req req;
 	int capacity = 0;
 	int capacity_v = 0;
+	int capacity_temp = 0;
 	int fg_result = 0;
 	int ret;
 	int calibration = 0;
+	int volt = pem->batt_volt;
 	int zone = pem->fg_zone;
 	s64 capacity64;
 	int factor;
 	int fg_result_adjusted;
+	int fg_result_temp;
 	static int first_time;
 	int cutoff_cap;
 
 	if (pem->fg_dbg_temp != 0)
 		pem->batt_temp = pem->fg_dbg_temp;
 	pem->fg_zone = update_fg_zone(pem, pem->batt_temp);
+
 	if (pem->fg_temp_fact >= 1000)
 		pem->fg_comp_mode = 0;
 	pem->fg_temp_fact =
@@ -1451,6 +1721,12 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 		pem->fg_comp_mode = 1;
 	pem->fg_guard = get_fg_guard(pem);
 
+	if (pem->fg_comp_mode_last != pem->fg_comp_mode) {
+		pem->fg_comp_mode_last = pem->fg_comp_mode;
+		pem->fg_capacity_temp = pem->fg_capacity;
+	}
+
+/*
 	if (pem->fg_zone_ptr) {
 		if ((pem->fg_zone != zone) &&
 		    (pem->fg_zone_ptr[pem->fg_zone].reset != 0)) {
@@ -1461,11 +1737,8 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 			goto err;
 		};
 	};
+*/
 
-	if (pem->support_fg == 0) {
-		capacity = em_batt_get_capacity(pem,
-			pem->batt_volt, pem->batt_curr);
-	} else {
 		req.sig = PMU_ADC_FG_CURRSMPL;
 		req.tm = PMU_ADC_TM_HK;
 		req.flags = PMU_ADC_RAW_AND_UNIT;
@@ -1504,8 +1777,7 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 				pem->oc_volt / AVG_LENGTH;
 	}
 
-		capacity_v = em_batt_get_capacity(pem,
-				pem->oc_volt, 0);
+	capacity_v = soc_lookup(pem, pem->oc_volt);
 		pem->oc_cap = capacity_v;
 
 		if (pem->high_cal_factor != 0)
@@ -1520,6 +1792,7 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 
 		fg_result_adjusted = fg_result - (fg_result * factor / 100);
 		pem->fg_capacity += fg_result_adjusted;
+
 		pr_em(FLOW, "%s, fg=%d, fg_adj=%d, fact=%d, hi=%d, lo=%d\n",
 			__func__, fg_result, fg_result_adjusted, factor,
 			pem->high_cal_factor, pem->low_cal_factor);
@@ -1529,8 +1802,31 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 		if (pem->fg_capacity <= 0)
 			pem->fg_capacity = 0;
 
+	/*
+	 * capacity = (fg_capacity / fg_capacity_full * 100) + 0.5
+	 * 0.5 is added for proper rounding in the division
+	 */
 		capacity64 = pem->fg_capacity * 100 + pem->fg_capacity_full / 2;
 		capacity = div64_s64(capacity64, pem->fg_capacity_full);
+
+	if ((pem->fg_comp_mode != 0) &&
+		(!is_charger_present(pem))) {
+		fg_result_temp = (fg_result * 1000)/pem->fg_temp_fact;
+		pem->fg_capacity_temp += fg_result_temp;
+
+		if (pem->fg_capacity_temp >= pem->fg_capacity_full)
+			pem->fg_capacity_temp = pem->fg_capacity_full;
+		if (pem->fg_capacity_temp <= 0)
+			pem->fg_capacity_temp = 0;
+
+		capacity64 = pem->fg_capacity_temp * 100
+			+ pem->fg_capacity_full / 2;
+		capacity_temp = div64_s64(capacity64, pem->fg_capacity_full);
+
+		pr_em(DATA, "%s, fg_t=%d, fg_cap_t=%lld, cap_t=%d\n", __func__,
+			fg_result_temp, pem->fg_capacity_temp, capacity_temp);
+	} else
+		capacity_temp = capacity;
 
 		if ((is_charger_present(pem)) &&
 			(pem->batt_capacity != 100) &&
@@ -1541,13 +1837,25 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 		if ((is_charger_present(pem)) &&
 			(capacity <= 1) &&
 			(pem->batt_volt > pem->cutoff_volt))
-			capacity = 1;
+				capacity = 1;
 #endif
 
-		if ((!is_charger_present(pem)) && (capacity <= 1))
+	if ((!is_charger_present(pem)) &&
+		(capacity <= 1) &&
+		(pem->batt_capacity > 0))
 			capacity = 1;
 
-		if (pem->fg_force_cal != 0) {
+		if ((!is_charger_present(pem)) &&
+			(capacity <= 2) &&
+			(pem->fg_1st_fb_cal == 0)) {
+			pem->fg_1st_fb_cal = 1;
+		save_fg_status(pem->bcmpmu, BCMPMU_FG_ST_FB_CAL, 1);
+		}
+
+	if ((pem->fg_force_cal != 0) ||
+		((pem->fg_zone_ptr) &&
+		 (pem->fg_zone > zone) &&
+		 (pem->fg_zone_ptr[pem->fg_zone].reset != 0))) {
 			pem->fg_cap_cal = 0;
 			pem->cal_mode = CAL_MODE_FORCE,
 			calibration = 1;
@@ -1560,16 +1868,21 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 		} else if ((pem->mode != MODE_TRANSITION) &&
 			   (pem->mode != MODE_CHRG) &&
 			   (pem->high_cal_factor == 0) &&
-			   (abs(capacity - capacity_v) > pem->fg_guard)) {
+			   (abs(capacity - capacity_v) >
+			    get_fg_guard_upper(pem))) {
 			pem->fg_cap_cal = 0;
 			pem->cal_mode = CAL_MODE_HIGHBAT,
 			calibration = 1;
 		} else if ((pem->high_cal_factor != 0) &&
-			(abs(capacity - capacity_v) < 10))
+			(abs(capacity - capacity_v) <
+			 get_fg_guard_lower(pem)))
 			pem->high_cal_factor = 0;
 		else if ((pem->low_cal_factor != 0) &&
 			(abs(capacity - capacity_v) <= 1))
 			pem->low_cal_factor = 0;
+		else if ((pem->high_cal_factor != 0) &&
+			 (pem->fg_1st_fb_cal == 0))
+			update_hical_factor(pem, capacity, capacity_v);
 
 		if (calibration == 0) {
 			pem->retry_cnt = 0;
@@ -1597,22 +1910,27 @@ static int update_batt_capacity(struct bcmpmu_em *pem, int *cap)
 				__func__, pem->cutoff_delta,
 				pem->cutoff_update_cnt);
 		}
-	}
 
 	if (update_eoc(pem) > 0)
 		capacity = pem->eoc_cap;
 
-	if ((is_charger_present(pem)) &&
-		(pem->batt_curr >= 0) &&
-		(capacity < pem->batt_capacity))
-		capacity = pem->batt_capacity;
-
+	*cap = capacity;
 	if (calibration == 0) {
-		*cap = (capacity * pem->fg_temp_fact)/1000;
+		if ((pem->fg_comp_mode != 0) &&
+			(!is_charger_present(pem))) {
+			capacity_temp = ((capacity * capacity_temp) + 50) / 100;
+			*cap = capacity_temp +
+				((100 - capacity) * capacity + 50) / 100;
 		if ((capacity > 0) && (*cap == 0))
 			*cap = capacity;
-	} else
-		*cap = capacity;
+		}
+	}
+
+	if ((is_charger_present(pem)) &&
+		(pem->batt_curr >= 0) &&
+		(*cap < pem->batt_capacity))
+		*cap = pem->batt_capacity;
+
 err:
 	pr_em(FLOW, "%s, facc=%d, fcp=%lld, cp=%d, vcp=%d, cl=%d, clm=%d\n",
 		__func__, fg_result, pem->fg_capacity, capacity,
@@ -1634,7 +1952,6 @@ err:
 		else
 			pem->mode = MODE_CHRG;
 	}
-
 	return calibration;
 }
 
@@ -1744,12 +2061,16 @@ static int get_update_rate(struct bcmpmu_em *pem)
 		case MODE_POLL:
 			if (pem->init_poll == 1)
 				rate = POLLRATE_POLL_INIT;
+			else if (pem->cal_mode == CAL_MODE_FORCE)
+				rate = POLLRATE_POLL_FORCE;
 			else
 			rate = POLLRATE_POLL;
 			break;
 		case MODE_IDLE:
 			if (pem->init_poll == 1)
 				rate = POLLRATE_IDLE_INIT;
+			else if (pem->cal_mode == CAL_MODE_FORCE)
+				rate = POLLRATE_IDLE_FORCE;
 			else
 			rate = POLLRATE_IDLE;
 			break;
@@ -1769,6 +2090,9 @@ static int get_update_rate(struct bcmpmu_em *pem)
 static void em_reset(struct bcmpmu *bcmpmu)
 {
 	struct bcmpmu_em *pem = bcmpmu->eminfo;
+
+	if (pem->cal_mode == CAL_MODE_FORCE)
+		return;
 
 	pem->fg_force_cal = 1;
 
@@ -1791,7 +2115,6 @@ static int bcmpmu_get_capacity(struct bcmpmu *bcmpmu)
 	struct bcmpmu_em *pem = bcmpmu->eminfo;
 	return pem->batt_capacity;
 }
-
 
 static void bcmpmu_set_eoc(struct bcmpmu *bcmpmu, int eoc)
 {
@@ -1851,7 +2174,12 @@ static int charging_algorithm(struct bcmpmu_em *pem)
 				pem->charge_state = CHRG_STATE_CHRG;
 			}
 		} else if (pem->charge_state != CHRG_STATE_CHRG) {
-			if (bcmpmu->get_env_bit_status(bcmpmu,
+			/* if there is external charger configured for the
+			platform we do not need to check the validity of
+			PMU_ENV_USB_VALID, as PMU's MBC block is disabled and
+			this bit will never be set */
+			if (pem->support_ext_chrgr ||
+				bcmpmu->get_env_bit_status(bcmpmu,
 				PMU_ENV_USB_VALID) == true)
 				pem->charge_state = CHRG_STATE_CHRG;
 			else {
@@ -2134,11 +2462,9 @@ static void em_algorithm(struct work_struct *work)
 		pem->batt_volt = req.cnv;
 
 		ret = pem->bcmpmu->fg_fst_currsmpl(bcmpmu, &pem->batt_curr);
-		pem->batt_curr;
 
 		pem->oc_volt = get_ocv(pem);
-		capacity = em_batt_get_capacity(pem,
-			pem->oc_volt, 0);
+		capacity = soc_lookup(pem, pem->oc_volt);
 
 		cbatt_poll[poll_count - 1] = capacity;
 
@@ -2187,12 +2513,25 @@ static void em_algorithm(struct work_struct *work)
 				capacity = pem->cap_init;
 				pr_em(FLOW, "%s, Init cal, use saved cap\n",
 					__func__);
+				pem->fg_1st_fb_cal =
+					get_fg_status(pem->bcmpmu,
+					BCMPMU_FG_ST_FB_CAL);
+			} else if ((capacity >= 98) ||
+				(capacity <= 3)) {
+				pem->fg_1st_fb_cal = 1;
+				save_fg_status(pem->bcmpmu,
+					BCMPMU_FG_ST_FB_CAL, 1);
+			} else {
+				pem->fg_1st_fb_cal = 0;
+				save_fg_status(pem->bcmpmu,
+					BCMPMU_FG_ST_FB_CAL, 0);
 			}
 			bcmpmu_usb_get(pem->bcmpmu,
 				BCMPMU_USB_CTRL_GET_CHRGR_TYPE,
 				&pem->chrgr_type);
 			update_fg_capacity(pem, capacity);
 			pem->batt_capacity = capacity;
+			pem->fg_comp_mode_last = pem->fg_comp_mode;
 			update_power_supply(pem, capacity);
 			if (capacity >= 30)
 				pem->fg_lowbatt_cal = 1;
@@ -2208,7 +2547,10 @@ static void em_algorithm(struct work_struct *work)
 				pem->transition = 1;
 			} else if (pem->cal_mode == CAL_MODE_FORCE) {
 				pem->fg_force_cal = 0;
+				pem->fg_1st_fb_cal = 0;
 				pr_em(FLOW, "%s, Force cal\n", __func__);
+				save_fg_status(pem->bcmpmu,
+					BCMPMU_FG_ST_FB_CAL, 0);
 			} else if (pem->cal_mode == CAL_MODE_LOWBAT) {
 				if (pem->fg_cap_cal == 1) {
 					pem->cap_delta +=
@@ -2235,16 +2577,8 @@ static void em_algorithm(struct work_struct *work)
 				pr_em(FLOW, "%s, Temp cal.\n", __func__);
 			else {
 				pr_em(FLOW, "%s, High Volt cal.\n", __func__);
-				if (pem->batt_capacity != 0)
-					pem->high_cal_factor =
-						(capacity - pem->batt_capacity)
-						* 100 / pem->batt_capacity;
-			else
-					pem->high_cal_factor = 0;
-				if (pem->high_cal_factor > HICAL_FACT)
-					pem->high_cal_factor = HICAL_FACT;
-				else if (pem->high_cal_factor < -HICAL_FACT)
-					pem->high_cal_factor = -HICAL_FACT;
+				update_hical_factor(pem,
+					pem->batt_capacity, capacity);
 			}
 			if (pem->cal_mode != CAL_MODE_HIGHBAT)
 				pem->high_cal_factor = 0;
@@ -2254,6 +2588,8 @@ static void em_algorithm(struct work_struct *work)
 		if ((pem->cal_mode != CAL_MODE_HIGHBAT) &&
 			(pem->cal_mode != CAL_MODE_LOWBAT)) {
 			update_fg_capacity(pem, capacity);
+			update_power_supply(pem, capacity);
+			save_fg_cap(pem->bcmpmu, capacity);
 			pr_em(FLOW, "%s, map, v=%d, c=%d, capo=%d, capn=%d\n",
 				__func__, pem->batt_volt, pem->batt_curr,
 				pem->batt_capacity, capacity);
@@ -2334,18 +2670,19 @@ static void em_algorithm(struct work_struct *work)
 				schedule_delayed_work(&pem->work,
 					msecs_to_jiffies(get_update_rate(pem)));
 				return;
-		}
+			}
 		} else {
 			pem->retry_cnt = 0;
-		pem->mode = MODE_POLL;
+			pem->mode = MODE_POLL;
 			poll_count = POLL_SAMPLES;
-		schedule_delayed_work(&pem->work,
-		msecs_to_jiffies(get_update_rate(pem)));
-		return;
-	}
+			if (pem->cal_mode == CAL_MODE_FORCE)
+				cap_poll_count = CAP_POLL_SAMPLES;
+			schedule_delayed_work(&pem->work,
+				msecs_to_jiffies(get_update_rate(pem)));
+			return;
+		}
 	} else
 		pem->retry_cnt = 0;
-
 
 	if ((!is_charger_present(pem)) &&
 	    (pem->fg_comp_mode == 0) &&
@@ -2367,13 +2704,15 @@ static void em_algorithm(struct work_struct *work)
 	schedule_delayed_work(&pem->work,
 		msecs_to_jiffies(get_update_rate(pem)));
 
-#if 0
+#ifndef CONFIG_SEC_CHARGING_FEATURE
+#ifdef CONFIG_WD_TAPPER
 	if (pem->mode == MODE_CUTOFF)
 		wd_tapper_set_timeout(POLLRATE_CUTOFF/1000);
 	else if (pem->mode == MODE_LOWBAT)
 		wd_tapper_set_timeout(POLLRATE_LOWBAT/1000);
 	else
 		wd_tapper_set_timeout(TAPPER_DEFAULT_TIMEOUT);
+#endif
 #endif
 
 	pem->time = get_seconds();
@@ -2460,7 +2799,7 @@ static int em_event_handler(struct notifier_block *nb,
 		req.flags = PMU_ADC_RAW_AND_UNIT;
 		pem->bcmpmu->adc_req(pem->bcmpmu, &req);
 		
-		capacity_v = em_batt_get_capacity(pem, req.cnv, 0);
+		capacity_v = soc_lookup(pem, req.cnv);
 		if ((pem->batt_capacity > (capacity_v + 10)) ||
 			((pem->batt_capacity + 10) < (capacity_v))) {
 			pem->batt_capacity = capacity_v;
@@ -2526,6 +2865,22 @@ static int em_event_handler(struct notifier_block *nb,
 	return 0;
 }
 
+static bool bcmpmu_batt_present(struct bcmpmu *bcmpmu)
+{
+	int ret;
+	u8 reg;
+	bool present = false;
+
+	ret = bcmpmu->read_dev(bcmpmu,
+		  PMU_REG_ENV5,
+			&reg,
+			bcmpmu->regmap[PMU_REG_ENV5].mask);
+
+	if (!ret)
+		present = !!(reg & 0x1); // check P_MBPD 
+	return present;
+}
+
 static int __devinit bcmpmu_em_probe(struct platform_device *pdev)
 {
 	int ret = 0;
@@ -2558,15 +2913,22 @@ static int __devinit bcmpmu_em_probe(struct platform_device *pdev)
 	pem->batt_status = POWER_SUPPLY_STATUS_UNKNOWN;
 	pem->batt_health = POWER_SUPPLY_HEALTH_UNKNOWN;
 	pem->batt_capacity_lvl = POWER_SUPPLY_CAPACITY_LEVEL_UNKNOWN;
+
+	if (bcmpmu_batt_present(pem->bcmpmu)) {
+		pr_em(INIT, "main battery present\n");
 	pem->batt_present = 1;
+	} else {
+		pem->batt_present = 0;
+		pr_em(INIT, "booting with power supply\n");
+	}
+
 	pem->batt_capacity = 50;
 	pem->fg_cap_cal = 0;
+	pem->fg_1st_fb_cal = 0;
 	pem->fg_force_cal = 0;
 	pem->fg_lowbatt_cal = 0;
 	pem->cal_mode = CAL_MODE_NONE;
 	pem->pollrate = POLLRATE_HIGHBAT;
-
-	pem->support_fg = pdata->support_fg;
 
 	pem->support_ext_chrgr = pdata->support_ext_chrgr;
 #ifdef CONFIG_CHARGER_BCMPMU_SPA
@@ -2701,6 +3063,21 @@ static int __devinit bcmpmu_em_probe(struct platform_device *pdev)
 		pem->max_vfloat = pdata->max_vfloat;
 	else
 		pem->max_vfloat = MAX_VFLOAT;
+
+	if (pdata->max_batt_ov)
+		pem->max_batt_ov = pdata->max_batt_ov;
+	else
+		pem->max_batt_ov = MAX_BATT_OV;
+	if (pdata->pre_eoc_min_curr)
+		pem->pre_eoc_min_curr = pdata->pre_eoc_min_curr;
+	else
+		pem->pre_eoc_min_curr = PRE_EOC_MIN_CURR;
+
+	if (pdata->max_vfloat)
+		pem->max_volt = pdata->max_vfloat;
+	else
+		pem->max_volt = MAX_VOLT;
+
 	pr_em(INIT, "%s, Battery Model = %s\n", __func__, pdata->batt_model);
 
 	pem->charge_zone = CHRG_ZONE_QC;
@@ -2710,6 +3087,7 @@ static int __devinit bcmpmu_em_probe(struct platform_device *pdev)
 	pem->capacity_cutoff = -1;
 	pem->usb_ov = false;
 	INIT_DELAYED_WORK(&pem->work, em_algorithm);
+	misc_register(&bcmpmu_em_device);
 
 	pem->nb.notifier_call = em_event_handler;
 	ret = bcmpmu_add_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION, &pem->nb);
@@ -2789,7 +3167,7 @@ static int __devinit bcmpmu_em_probe(struct platform_device *pdev)
 	device_create_file(pem->fuelgauge.dev, &dev_attr_fg_curr_ua);
 #endif
 
-	schedule_delayed_work(&pem->work, msecs_to_jiffies(500));
+	schedule_delayed_work(&pem->work, msecs_to_jiffies(0));
 
 	return 0;
 
@@ -2821,6 +3199,8 @@ static int __devexit bcmpmu_em_remove(struct platform_device *pdev)
 	struct bcmpmu *bcmpmu = pdev->dev.platform_data;
 	struct bcmpmu_em *pem = bcmpmu->eminfo;
 	int ret;
+
+	misc_deregister(&bcmpmu_em_device);
 
 #ifdef CONFIG_MFD_BCMPMU_DBG
 	sysfs_remove_group(&pdev->dev.kobj, &bcmpmu_em_attr_group);

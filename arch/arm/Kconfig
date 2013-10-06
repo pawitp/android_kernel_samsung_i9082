@@ -1288,6 +1288,15 @@ config ARM_ERRATA_764369
 	  relevant cache maintenance functions and sets a specific bit
 	  in the diagnostic control register of the SCU.
 
+config ARM_ERRATA_782773
+	bool "ARM errata: Updating a translation entry might cause an unexpected translation fault"
+	depends on CPU_V7
+	help
+	  This option enables the workaround for the 782773 Cortex-A9 (all r0,
+	  r2 and r3 revisions) erratum. It might cause MMU exception in case
+	  page table walk happens just after updating the existing
+	  with setting page table in L1 data cache.
+
 config ARM_ERRATA_775420
        bool "ARM errata: A data cache maintenance operation which aborts, might lead to deadlock"
        depends on CPU_V7

@@ -30,7 +30,11 @@
 #include <linux/i2c-kona.h>
 #include <linux/slab.h>
 #include <linux/err.h>
-#ifdef CONFIG_CAPRI_BSC3_PAD_CTRL_MODE
+#ifdef CONFIG_DEBUG_FS
+#include <linux/seq_file.h>
+#include <linux/debugfs.h>
+#endif /*CONFIG_DEBUG_FS*/
+#if defined(CONFIG_CAPRI_BSC3_PAD_CTRL_MODE)|| defined(CONFIG_CAPRI_BSC1_PAD_CTRL_MODE)
 #include <mach/chip_pinmux.h>
 #include <mach/pinmux.h>
 #endif
@@ -70,6 +74,17 @@
 
 #define MAX_RETRY_NUMBER        (3-1)
 
+#ifdef CONFIG_DEBUG_FS
+static struct dentry *bsc_dentry, *bsc_speed;
+static int bsc_clk_open(struct inode *inode, struct file *file);
+static ssize_t set_i2c_bus_speed(struct file *file, char const __user *buf,
+			size_t size, loff_t *offset);
+static const struct file_operations default_file_operations = {
+	.open = bsc_clk_open,
+	.read = seq_read,
+	.write = set_i2c_bus_speed,
+};
+#endif /*CONFIG_DEBUG_FS*/
 /*
  * BSC (I2C) private data structure
  */
@@ -169,6 +184,33 @@ static const unsigned int gBusSpeedTable[BSC_SPD_MAXIMUM] = {
 };
 
 #ifdef CONFIG_CAPRI_BSC3_PAD_CTRL_MODE
+#ifdef CONFIG_MACH_CAPRI_SS_CRATER
+static struct pin_config gpin_bsc3_scl_config[2] = {
+	{
+		.name = PN_VC_CAM2_SCL,
+		.func = PF_GPIO_065,
+		.reg.val = 0x304,
+	},
+	{
+		.name = PN_VC_CAM2_SCL,
+		.func = PF_BSC3_SCL,
+		.reg.val = 0x140,
+	},
+};
+
+static struct pin_config gpin_bsc3_sda_config[2] = {
+	{
+		.name = PN_VC_CAM2_SDA,
+		.func = PF_GPIO_066,
+		.reg.val = 0x304,
+	},
+	{
+		.name = PN_VC_CAM2_SDA,
+		.func = PF_BSC3_SDA,
+		.reg.val = 0x140,
+	},
+};
+#else
 static struct pin_config gpin_bsc3_scl_config[2] = {
 	{
 		.name = PN_VC_CAM3_SCL,
@@ -192,6 +234,35 @@ static struct pin_config gpin_bsc3_sda_config[2] = {
 		.name = PN_VC_CAM3_SDA,
 		.func = PF_BSC3_SDA,
 		.reg.val = 0x130,
+	},
+};
+#endif
+#endif
+
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+static struct pin_config gpin_bsc1_scl_config[2] = {
+	{
+		.name = PN_BSC1_SCL,
+		.func = PF_SPARE_07,
+		.reg.val = 0x308,
+	},
+	{
+		.name = PN_BSC1_SCL,
+		.func = PF_BSC1_SCL,
+		.reg.val = 0x018,
+	},
+};
+
+static struct pin_config gpin_bsc1_sda_config[2] = {
+	{
+		.name = PN_BSC1_SDA,
+		.func = PF_SPARE_08,
+		.reg.val = 0x308,
+	},	
+	{
+		.name = PN_BSC1_SDA,
+		.func = PF_BSC1_SDA,
+		.reg.val = 0x018,
 	},
 };
 #endif
@@ -1169,6 +1240,9 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 #endif
 
 	down(&dev->dev_lock);
+#ifdef CONFIG_ARCH_CAPRI
+	pause_nohz();
+#endif
 	bsc_enable_clk(dev);
 	bsc_enable_pad_output((uint32_t)dev->virt_base, true);
 	hw_cfg = (struct bsc_adap_cfg *)dev->device->platform_data;
@@ -1181,13 +1255,26 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 		pinmux_set_pin_config(&gpin_bsc3_scl_config[1]);
 	}
 #endif
+
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+	if (dev->irq == BCM_INT_ID_I2C0) {
+
+	/* Pull up SDA first so it wont generate STOP condition */
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[1]);
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[1]);
+	}
+#endif
+
 #ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
 	if (hw_cfg && hw_cfg->is_pmu_i2c) {
 		rc = pwr_mgr_pm_i2c_sem_lock();
 		if (rc) {
 			bsc_enable_pad_output((uint32_t)dev->virt_base, false);
 			bsc_disable_clk(dev);
-			down(&dev->dev_lock);
+#ifdef CONFIG_ARCH_CAPRI
+			resume_nohz();
+#endif
+			up(&dev->dev_lock);
 			return rc;
 		} else {
 			rel_hw_sem = true;
@@ -1305,10 +1392,22 @@ static int bsc_xfer(struct i2c_adapter *adapter, struct i2c_msg msgs[], int num)
 	}
 #endif
 
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+	if (dev->irq == BCM_INT_ID_I2C0) {
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[0]);
+		/* add a delay so it wont generate START condition by mistake */
+		udelay(1);
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[0]);
+	}
+#endif
+
 	bsc_disable_clk(dev);
 #ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
 	if (rel_hw_sem)
 		pwr_mgr_pm_i2c_sem_unlock();
+#endif
+#ifdef CONFIG_ARCH_CAPRI
+	resume_nohz();
 #endif
 	up(&dev->dev_lock);
 	return (rc < 0) ? rc : num;
@@ -1338,10 +1437,20 @@ hs_ret:
 	}
 #endif
 
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE 
+	if (dev->irq == BCM_INT_ID_I2C0) {
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[0]);
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[0]);
+	}
+#endif
+
 	bsc_disable_clk(dev);
 #ifdef CONFIG_KONA_PMU_BSC_USE_PMGR_HW_SEM
 	if (rel_hw_sem)
 		pwr_mgr_pm_i2c_sem_unlock();
+#endif
+#ifdef CONFIG_ARCH_CAPRI
+	resume_nohz();
 #endif
 	up(&dev->dev_lock);
 	return rc;
@@ -1727,6 +1836,14 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 		pinmux_set_pin_config(&gpin_bsc3_sda_config[1]);
 	}
 #endif
+
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+	if (dev->irq == BCM_INT_ID_I2C0) {
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[1]);
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[1]);
+	}
+#endif
+
 	/*
 	 * Configure BSC timing registers
 	 * HS timing is calculated based on 26MHz source
@@ -1853,7 +1970,29 @@ static int __devinit bsc_probe(struct platform_device *pdev)
 	}
 #endif
 
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+	if (dev->irq == BCM_INT_ID_I2C0) {
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[0]);
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[0]);
+	}
+#endif
+
 	bsc_disable_clk(dev);
+
+#ifdef CONFIG_DEBUG_FS
+	/*create debugfs interface for the device*/
+	bsc_dentry = debugfs_create_dir(adap->name, NULL);
+	if (!bsc_dentry && IS_ERR(bsc_dentry)) {
+		printk(KERN_ERR "Failed to create debugfs directory\n");
+	return PTR_ERR(bsc_dentry);
+	}
+	bsc_speed = debugfs_create_file("speed", 0444, bsc_dentry, adap,
+			&default_file_operations);
+	if (!bsc_speed && IS_ERR(bsc_speed)) {
+		printk(KERN_ERR "Failed to create debugfs file\n");
+		return PTR_ERR(bsc_speed);
+	}
+#endif /*CONFIG_DEBUG_FS*/
 	return 0;
 
 err_hw_sem:
@@ -1880,6 +2019,13 @@ err_bsc_deinit:
 	if (dev->irq == BCM_INT_ID_I2C2) {
 		pinmux_set_pin_config(&gpin_bsc3_scl_config[0]);
 		pinmux_set_pin_config(&gpin_bsc3_sda_config[0]);
+	}
+#endif
+
+#ifdef CONFIG_CAPRI_BSC1_PAD_CTRL_MODE
+	if (dev->irq == BCM_INT_ID_I2C0) {
+		pinmux_set_pin_config(&gpin_bsc1_scl_config[0]);
+		pinmux_set_pin_config(&gpin_bsc1_sda_config[0]);
 	}
 #endif
 
@@ -1936,6 +2082,10 @@ static int bsc_remove(struct platform_device *pdev)
 	iomem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	release_mem_region(iomem->start, resource_size(iomem));
 
+#ifdef CONFIG_DEBUG_FS
+	debugfs_remove(bsc_speed);
+	debugfs_remove(bsc_dentry);
+#endif /*CONFIG_DEBUG_FS*/
 	return 0;
 }
 
@@ -2010,6 +2160,104 @@ static void __exit bsc_exit(void)
 
 arch_initcall(bsc_init);
 module_exit(bsc_exit);
+
+#ifdef CONFIG_DEBUG_FS
+static int show_i2c_bus_speed(struct seq_file *m, void *v)
+{
+	struct bsc_i2c_dev *dev;
+	struct i2c_adapter *adap;
+
+	adap = (struct i2c_adapter *)m->private;
+	if (!adap)
+		return -ENODEV;
+
+	dev = i2c_get_adapdata(adap);
+	switch (dev->speed) {
+	case BSC_SPD_400K:
+		seq_printf(m, "400K\n");
+		break;
+	case BSC_SPD_100K:
+		seq_printf(m, "100K\n");
+		break;
+	case BSC_SPD_50K:
+		seq_printf(m, "50K\n");
+		break;
+	default:
+		seq_printf(m, "%d\n", dev->speed);
+		break;
+	}
+	return 0;
+}
+
+/*sysfs interface to change bsc speed - used by hwtest*/
+static ssize_t set_i2c_bus_speed(struct file *file,
+				char const __user *buf, size_t size,
+					loff_t *offset)
+{
+	struct bsc_i2c_dev *dev;
+	struct device *d;
+	struct i2c_adapter *adap;
+	struct bsc_adap_cfg *hw_cfg = NULL;
+	int speed = 0, buf_size, bus;
+	unsigned int addr;
+	char data[64];
+
+	buf_size = min((int)size, 64);
+	if (strncpy_from_user(data, buf, buf_size) < 0)
+		return -EFAULT;
+	data[buf_size] = 0;
+
+	adap = (struct i2c_adapter *)
+		((struct seq_file *)file->private_data)->private;
+	if (!adap)
+		return -ENODEV;
+
+	dev = i2c_get_adapdata(adap);
+
+	sscanf(data, "%d 0x%x", &speed, &addr);
+	if (speed == 400)
+		speed = BSC_SPD_400K;
+	else if (speed == 100)
+		speed = BSC_SPD_100K;
+	else
+		speed = BSC_SPD_50K;	/* Default speed */
+
+	dev->speed = speed;
+	if (!dev) {
+		printk(KERN_ERR "Cannot find i2c device\n");
+		return -ENODEV;
+	}
+
+	d = bsc_i2c_get_client(adap, addr);
+	if (d) {
+		struct i2c_client *client = NULL;
+		struct i2c_slave_platform_data *pd = NULL;
+		client = i2c_verify_client(d);
+		pd = (struct i2c_slave_platform_data *)client->dev.
+		    platform_data;
+		if (pd)
+			pd->i2c_speed = speed;
+	} else
+		/*Not an error- as client address is optional parameter */
+		printk(KERN_ERR "Cannot find client at 0x%x\n", addr);
+
+	hw_cfg = (struct bsc_adap_cfg *)dev->device->platform_data;
+	if (hw_cfg->is_pmu_i2c)
+		bsc_set_bus_speed((uint32_t)dev->virt_base,
+					gBusSpeedTable[speed], true);
+	else
+		bsc_set_bus_speed((uint32_t)dev->virt_base,
+					gBusSpeedTable[speed], false);
+	dev->current_speed = speed;
+
+	return size;
+}
+
+static int bsc_clk_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, show_i2c_bus_speed, inode->i_private);
+}
+#endif/*CONFIG_DEBUG_FS*/
 
 MODULE_AUTHOR("Broadcom");
 MODULE_DESCRIPTION("Broadcom I2C Driver");

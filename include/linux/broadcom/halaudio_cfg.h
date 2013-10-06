@@ -18,15 +18,15 @@
 *  @brief   Board dependant Hal Audio configurations
 *
 *****************************************************************************/
-#if !defined( HALAUDIO_CFG_H )
+#if !defined(HALAUDIO_CFG_H)
 #define HALAUDIO_CFG_H
 
 /* ---- Constants and Types ---------------------------------------------- */
 #define HALAUDIO_CFG_NAME_LEN    20
 
 typedef struct halaudio_cfg_dev_dir {
-	int chans;		/* Channels: 0=default, 1=mono, 2=stereo, etc. */
-	int chidx;		/* Channel index for mono channel selection */
+	int chans;	/* Channels: 0=default, 1=mono, 2=stereo, etc. */
+	int chidx;	/* Channel index for mono channel selection */
 
 	/* Following parameters are not used yet */
 #if 0
@@ -61,7 +61,7 @@ typedef struct halaudio_dev_info {
 
 typedef struct halaudio_dev_cfg {
 	char name[HALAUDIO_CFG_NAME_LEN];	/* device name */
-	int has_aux;		/* indicate whether device has AUX pair or not */
+	int has_aux;	/* indicate whether device has AUX pair or not */
 	HALAUDIO_DEV_INFO info;	/* main device information */
 	HALAUDIO_DEV_INFO aux_info;	/* AUX information */
 

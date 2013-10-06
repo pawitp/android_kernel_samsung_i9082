@@ -1,42 +1,45 @@
-/************************************************************************************************/
-/*                                                                                              */
-/*  Copyright 2009 - 2011  Broadcom Corporation                                                 */
-/*                                                                                              */
-/*     Unless you and Broadcom execute a separate written software license agreement governing  */
-/*     use of this software, this software is licensed to you under the terms of the GNU        */
-/*     General Public License version 2, available at                                           */
-/*     http://www.broadcom.com/licenses/GPLv2.php   (the "GPL").                                */
-/*                                                                                              */
-/************************************************************************************************/
+/******************************************************************************/
+/*                                                                            */
+/*  Copyright 2009 - 2011  Broadcom Corporation                               */
+/*                                                                            */
+/*     Unless you and Broadcom execute a separate written software license    */
+/*     agreement governing use of this software, this software is licensed    */
+/*     to you under the terms of the GNU                                      */
+/*     General Public License version 2, available at                         */
+/*     http://www.broadcom.com/licenses/GPLv2.php   (the "GPL").              */
+/*                                                                            */
+/******************************************************************************/
 /**
 *
 *   @file   sysparm_shared.h
 *
 *   @brief  This file contains the audio system parameter functions.
 *
-****************************************************************************/
+***************************************************************************/
 
-//**********************************************************
-//**** NOTE ************************************************
-//*  sysparm_shared.h in CP image and in Android AP image
-//*  should be the SAME.
-//*  Change either one of them, the other one should also
-//*  be changed.
-//**********************************************************
+/**********************************************************
+**** NOTE ************************************************
+*  sysparm_shared.h in CP image and in Android AP image
+*  should be the SAME.
+*  Change either one of them, the other one should also
+*  be changed.
+***********************************************************/
 
 #ifndef _SYSPARM_SHARED_H_
 #define _SYSPARM_SHARED_H_
 
 /**
-*   @defgroup   SystemParameterGroup	Audio System Parameters
+*@defgroup   SystemParameterGroup	Audio System Parameters
 *	@ingroup	SystemCnfgOverviewGroup
 *
-*   @brief      This group defines the software interface to the audio system parameters
+*@brief This group defines the software interface to the audio system parameters
 ****************************************************************************/
 
 #define NUM_OF_VOICE_COEFF			35
 #define NUM_OF_MIC_EQ_BIQUAD			12
 #define NUM_OF_SPEAKER_EQ_BIQUAD			12
+#define SBC_MAX_NUM_OF_SUBBANDS		8
+#define SBC_MAX_NUM_OF_CHANNELS		2
 #define COEF_NUM_OF_EACH_EQ_BIQUAD		5
 #define COEF_NUM_OF_EACH_GROUP_HW_SIDETONE		8
 #define NUM_OF_GROUP_HW_SIDETONE		16
@@ -48,15 +51,18 @@
 #define NUM_OF_ECHO_NLP_GAIN		6
 /** audio related defines */
 #define AUDIO_MAGIC_SIZE		16
-//#define       AUDIO_MODE_NUMBER               9       ///< Up to 9 Audio Profiles (modes) after 213x1
-//#define AUDIO_MODE_NUMBER_VOICE       (AUDIO_MODE_NUMBER*2)
-#define	AUDIO_5BAND_EQ_MODE_NUMBER		6	///< Up to 6 Audio EQ Profiles (modes)
-#define DSP_SUBBAND_COMPANDER_FIR_TAP 11	///<11 taps
+/*#define       AUDIO_MODE_NUMBER               9*/
+	///< Up to 9 Audio Profiles (modes) after 213x1
+/*#define AUDIO_MODE_NUMBER_VOICE       (AUDIO_MODE_NUMBER*2)*/
+#define	AUDIO_5BAND_EQ_MODE_NUMBER		6
+	///< Up to 6 Audio EQ Profiles (modes)
+#define DSP_SUBBAND_COMPANDER_FIR_TAP 11 ///<11 taps
 #define DSP_SUBBAND_NLP_FREQ_BINS_WB 24	///<24 freq bins
 
 #define	NUM_OMEGA_VOICE_BANDS	3
 #define NUM_OMEGA_VOICE_MAX_VOLUME_LEVELS	11
-#define NUM_OMEGA_VOICE_PARMS (NUM_OMEGA_VOICE_BANDS*NUM_OMEGA_VOICE_MAX_VOLUME_LEVELS)
+#define NUM_OMEGA_VOICE_PARMS\
+	(NUM_OMEGA_VOICE_BANDS*NUM_OMEGA_VOICE_MAX_VOLUME_LEVELS)
 
 typedef struct {
 	Int16 omega_voice_thres_dB[NUM_OMEGA_VOICE_BANDS];
@@ -83,7 +89,7 @@ typedef struct {
 	UInt16 kappa_voice_slow_detector_max_supp_dB;
 } KappaVoice_Sysparm_t;
 
-// Echo Canceller Comfort noise and NLP sysparms RON 4/28/2005
+/* Echo Canceller Comfort noise and NLP sysparms RON 4/28/2005*/
 typedef struct {
 #ifdef DSP_FEATURE_SUBBAND_NLP
 	UInt16 echo_subband_nlp_distortion_thresh[DSP_SUBBAND_NLP_FREQ_BINS_WB];
@@ -94,18 +100,18 @@ typedef struct {
 	UInt16 echo_subband_nlp_noise_margin_wb[DSP_SUBBAND_NLP_FREQ_BINS_WB];
 	UInt16 nlp_distortion_coupling[DSP_SUBBAND_NLP_FREQ_BINS_WB];
 	UInt16 echo_subband_nlp_dt_fine_control;
-	UInt16 reverb_time_constant;	//Used in reverb control
-	Int16 reverb_level;	//Used in reverb control
+	UInt16 reverb_time_constant;	/*Used in reverb control*/
+	Int16 reverb_level;	/*Used in reverb control*/
 #endif
 	Int16 echo_cng_bias;
 	UInt16 echo_cng_enable;
 	UInt16 echo_subband_nlp_enable;
 	UInt16 echo_nlp_gain;
 	UInt16 echo_nlp_min_ul_brk_in_thresh;
-	UInt16 echo_nlp_dtalk_dl_agc_idx;	// not used yet
-	UInt16 echo_nlp_idle_ul_gain;	// not used yet
-	UInt16 echo_nlp_idle_dl_agc_idx;	// not used yet
-	UInt16 echo_nlp_ul_active_dl_agc_idx;	// not used yet
+	UInt16 echo_nlp_dtalk_dl_agc_idx;	/* not used yet*/
+	UInt16 echo_nlp_idle_ul_gain;	/* not used yet*/
+	UInt16 echo_nlp_idle_dl_agc_idx;	/* not used ye*/
+	UInt16 echo_nlp_ul_active_dl_agc_idx;	/* not used yet*/
 	UInt16 echo_nlp_min_dl_pwr;
 	UInt16 echo_nlp_min_ul_pwr;
 	UInt16 echo_nlp_dl_loss_adjust_thld;
@@ -143,11 +149,11 @@ typedef struct {
 	UInt8 audio_parm_magic[AUDIO_MAGIC_SIZE];
 	UInt32 audio_param_address;
 	UInt16 audio_channel;
-	UInt16 speaker_pga;	//level, index
-	UInt16 mic_pga;		//level, index
+	UInt16 speaker_pga;	/*level, index*/
+	UInt16 mic_pga;		/*level, index*/
 	UInt16 max_mic_gain;
 	UInt16 sidetone;
-	UInt16 audio_dsp_sidetone;	//means dsp_sidetone_enable.
+	UInt16 audio_dsp_sidetone; /*means dsp_sidetone_enable.*/
 	UInt16 ty_mic_gain;
 	UInt16 sidetone_tty;
 	UInt16 echo_cancelling_enable;
@@ -208,9 +214,10 @@ typedef struct {
 	UInt16 volume_step_size;
 	UInt16 num_supported_volume_levels;
 
-	UInt16 voice_volume_max;	//in dB.
-	UInt16 voice_volume_init;	//in dB.
-	Int32 dsp_voice_vol_tbl[NUM_OF_ENTRY_IN_DSP_VOICE_VOLUME_TABLE];	//in dB.
+	UInt16 voice_volume_max;	/*in dB.*/
+	UInt16 voice_volume_init;	/*in dB.*/
+	Int32 dsp_voice_vol_tbl[NUM_OF_ENTRY_IN_DSP_VOICE_VOLUME_TABLE];
+		/*in dB.*/
 
 	UInt16 sidetone_output_gain;
 	UInt16 sidetone_biquad_scale_factor;
@@ -299,10 +306,11 @@ typedef struct {
 			     NUM_OF_GROUP_HW_SIDETONE];
 #endif
 
-	UInt16 echo_path_change_detection_threshold;	//Used in echo path change detection
-	Smart_Compressor_t smart_compressor;	//smart compressor
+	UInt16 echo_path_change_detection_threshold;
+		/*Used in echo path change detection*/
+	Smart_Compressor_t smart_compressor;	/*smart compressor*/
 
-	//Multi-Band Compressor parameters
+	/*Multi-Band Compressor parameters*/
 
 	UInt16 ltpf_enable;
 	/* Multi-Band Compressor parameters */
@@ -349,11 +357,32 @@ typedef struct {
 
 	/*in mB (0.01 dB). */
 	Int32 fm_radio_digital_vol[NUM_OF_ENTRY_IN_FM_RADIO_DIGITAL_VOLUME];
+
+	UInt16 mpm_niir_coeff;
+	UInt16 mpm_gain_attack_step;
+	UInt32 mpm_gain_attack_slope;
+	UInt32 mpm_gain_decay_slope;
+	UInt16 mpm_gain_attack_thre;
+	UInt16 ihf_protection_enable;
 } SysMultimediaAudioParm_t;
 
 typedef struct {
 	UInt32 treq_biquad_num;
-	UInt32 treq_coef[12 * 10];
+	UInt32 treq_coef[NUM_OF_SPEAKER_EQ_BIQUAD*COEF_NUM_OF_EACH_EQ_BIQUAD*2];
+	UInt32 treq_gain[NUM_OF_SPEAKER_EQ_BIQUAD*2];
+	UInt32 treq_outbit_sel[2];
+	UInt32 treq_output_gain;
+	Int16 t2lin[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 g1lin[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 g0[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 g1[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 g2[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 t0[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 t1[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 t2[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 s0[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 s1[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
+	Int16 s2[SBC_MAX_NUM_OF_SUBBANDS*SBC_MAX_NUM_OF_CHANNELS];
 } SysIndMultimediaAudioParm_t;
 
 #endif /*_SYSPARM_SHARED_H_*/

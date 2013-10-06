@@ -24,6 +24,7 @@
 #include <linux/serial_8250.h>
 #include <linux/i2c.h>
 #include <linux/i2c-kona.h>
+#include <linux/debugfs.h>
 
 #include <asm/memory.h>
 #include <asm/sizes.h>
@@ -40,6 +41,10 @@
 #include <mach/kona.h>
 #include <mach/dma_mmap.h>
 #include <mach/sdma.h>
+
+#if defined(CONFIG_SPI_SPIDEV) && defined(CONFIG_SPI_SSPI_KONA)
+#include <linux/spi/spi.h>
+#endif
 
 #ifdef CONFIG_I2C_GPIO
 #include <linux/i2c-gpio.h>
@@ -84,7 +89,10 @@
 #ifdef CONFIG_BCM_BZHW
 #include <linux/broadcom/bcm_bzhw.h>
 #endif
-
+#ifdef CONFIG_USB_SWITCH_TSU6721
+#include <linux/power_supply.h>
+#include <linux/i2c/tsu6721.h>
+#endif
 #ifdef CONFIG_USB_SWITCH_FSA9485
 #include <linux/power_supply.h>
 #include <linux/switch.h>
@@ -92,6 +100,9 @@
 #endif
 #ifdef CONFIG_BQ24272_CHARGER
 #include <linux/bq24272_charger.h>
+#endif
+#ifdef CONFIG_SMB358_CHARGER
+#include <linux/smb358_charger.h>
 #endif
 
 #if defined(CONFIG_TOUCHSCREEN_EGALAX_I2C) || defined(CONFIG_TOUCHSCREEN_EGALAX_I2C_MODULE)
@@ -103,12 +114,8 @@
 #include <linux/i2c/bcm15500_i2c_ts.h>
 #endif
 
-#if defined(CONFIG_MPU_SENSORS_MPU6050B1) || defined(CONFIG_MPU_SENSORS_MPU6050B1_MODULE)
-#include <linux/mpu_411.h>
-#endif
-
-#if defined(CONFIG_MPU_SENSORS_MPU6500) || defined(CONFIG_MPU_SENSORS_MPU6500_MODULE)
-#include <linux/mpu_511.h>
+#if defined(CONFIG_INPUT_MPU6050) || defined(CONFIG_INPUT_MPU6500)
+#include <linux/mpu6k_input.h>
 #endif
 
 #if defined(CONFIG_OPTICAL_CM3663) 
@@ -133,6 +140,11 @@
 #include <linux/ami306_def.h>
 #include <linux/ami_sensor.h>
 #include <ami306_settings.h>
+#endif
+
+#if defined(CONFIG_INPUT_HSCDTD006A) || defined(CONFIG_INPUT_HSCDTD006A_MODULE)
+#include <linux/hscdtd.h>
+#include <hscdtd006a_settings.h>
 #endif
 
 #if defined(CONFIG_NET_ISLAND)
@@ -198,6 +210,10 @@
 #include <linux/i2c/tango_ts.h>
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_FT5X06
+#include <linux/i2c/ft5x06_ts.h>
+#endif /* CONFIG_TOUCHSCREEN_FT5X06 */
+
 #ifdef CONFIG_TOUCHSCREEN_QT602240
 #include <linux/i2c/qt602240_ts.h>
 #endif
@@ -227,7 +243,7 @@
 #include <linux/broadcom/vc_cam.h>
 #endif
 
-#ifdef CONFIG_BCM_VC_RESERVE_LOWMEM
+#if defined(CONFIG_BCM_VC_RESERVE_LOWMEM)
 #include <linux/broadcom/vc_mem.h>
 #endif
 
@@ -256,8 +272,8 @@ void tsp_charger_infom(bool en)
 {
   
 }
-
 #endif
+static bool is_uart_wl_active = true;
 
 #if defined(CONFIG_LCD_LD9040)
 #include "board-s2ve-oled.c"
@@ -354,6 +370,12 @@ static void gp2a_led_onoff(int onoff);
 #define IS_MULTI_TOUCH  1
 #define MAX_NUM_FINGERS 2
 #endif
+
+#ifdef CONFIG_TOUCHSCREEN_FT5X06
+#define FT5X06_GPIO_RESET_PIN	8
+#define FT5X06_GPIO_IRQ_PIN	11
+#define FT5X06_I2C_BUS_ID	1
+#endif /* CONFIG_TOUCHSCREEN_FT5X06 */
 
 #ifdef CONFIG_TOUCHSCREEN_GT818
 #define GT818_GPIO_RESET_PIN        (10)
@@ -776,15 +798,25 @@ static void __init board_add_headsetdet_device(void)
  * Default table used if the platform does not pass one
  */ 
 
-#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
+#if defined(CONFIG_SS_NEW_EARPHONE_SPEC)
 static unsigned int  capriss_button_adc_values [3][2] = 
 {
 	/* SEND/END Min, Max*/
-        {0,     125},
+        {0,     116},
 	/* Volume Up  Min, Max*/
-        {126,    240},
+        {117,   248},
 	/* Volue Down Min, Max*/
-        {241,   550},
+        {249,   999},
+};
+#elif defined(CONFIG_MACH_CAPRI_SS_CRATER)
+static unsigned int  capriss_button_adc_values [3][2] = 
+{
+	/* SEND/END Min, Max*/
+        {0,     150},
+	/* Volume Up  Min, Max*/
+        {151,    300},
+	/* Volue Down Min, Max*/
+        {301,   700},
 };
 #else
 static unsigned int  capriss_button_adc_values [3][2] = 
@@ -822,7 +854,7 @@ static struct kona_headset_pd headset_data = {
 	/* GPIO state read is 1 on HS insert and 0 for
 	 * HS remove
 	 */
-#if defined(CONFIG_MACH_CAPRI_SS) || defined(CONFIG_MACH_CAPRI_SS_S2VE) ||defined(CONFIG_MACH_CAPRI_M500) || defined(CONFIG_MACH_CAPRI_SS_ARUBA) || defined(CONFIG_MACH_CAPRI_SS_BAFFIN)  || defined(CONFIG_MACH_CAPRI_SS_CRATER)
+#if defined(CONFIG_MACH_CAPRI_SS) || defined(CONFIG_MACH_CAPRI_SS_S2VE) ||defined(CONFIG_MACH_CAPRI_M500)||defined(CONFIG_MACH_CAPRI_SS_BAFFIN)||defined(CONFIG_MACH_CAPRI_SS_CRATER)
 	.hs_default_state = 1,
 #else
 	.hs_default_state = 0,
@@ -907,6 +939,33 @@ struct platform_device headset_device = {
 };
 #endif /* CONFIG_KONA_HEADSET || CONFIG_KONA_HEADSET_MULTI_BUTTON */
 
+#if defined(CONFIG_SPI_SPIDEV) && defined(CONFIG_SPI_SSPI_KONA)
+/*
+ * SPI board info for the slaves
+ */
+static struct spi_board_info spidev_board_info[] __initdata = {
+	{
+		.modalias = "spidev",  /* use spidev generic driver */
+		.max_speed_hz = 13000000,      /* use max speed */
+		.bus_num = 0,          /* framework bus number */
+		.chip_select = 0,      /* for each slave */
+		.platform_data = NULL, /* no spi_driver specific */
+		.irq = 0,              /* IRQ for this device */
+		.mode = SPI_LOOP,      /* SPI mode 0 */
+		},
+#ifdef CONFIG_SPI_KONA_SSP3_TEST
+	{
+		.modalias = "spidev",  /* use spidev generic driver */
+		.max_speed_hz = 13000000,      /* use max speed */
+		.bus_num = 2,          /* framework bus number */
+		.chip_select = 0,      /* for each slave */
+		.platform_data = NULL, /* no spi_driver specific */
+		.irq = 0,              /* IRQ for this device */
+		.mode = SPI_LOOP,      /* SPI mode 0 */
+	},
+#endif /* CONFIG_SPI_KONA_SSP3_TEST */
+};
+#endif
 
 #if defined(CONFIG_BCM_HDMI_DET) || defined(CONFIG_BCM_HDMI_DET_MODULE)
 
@@ -1101,6 +1160,7 @@ static struct egalax_i2c_ts_cfg egalax_i2c_param =
 	},
    .reset_time = 0,
    .reset_level = 0,
+	.supply = "5v_lcd",
 };
 
 static struct i2c_board_info egalax_i2c_boardinfo[] =
@@ -1134,12 +1194,229 @@ struct platform_device bq24272_charger =  {
 
 #endif
 
+#ifdef CONFIG_SMB358_CHARGER
+static struct i2c_board_info  __initdata charger_i2c_devices_info[]  = {
+	{
+		I2C_BOARD_INFO("smb358", SMB358_SLAVE_ADDR),
+	},
+};
+
+static struct smb358_platform_data smb358_info = {
+	.irq = GPIO_SMB358_INT,
+}; 
+
+struct platform_device smb358_charger =  {
+	.name		= "smb358",
+	.id		= CHARGER_I2C_BUS_ID, 
+	.dev		= {
+		.platform_data = &smb358_info,
+	},	
+};
+#endif
+
+#if defined(CONFIG_USB_SWITCH_TSU6721)
+
+enum cable_type_t{
+	CABLE_TYPE_USB,
+	CABLE_TYPE_AC,
+	CABLE_TYPE_ACCESSORY,
+	CABLE_TYPE_NONE
+};
+
+
+extern int musb_info_handler(struct notifier_block *nb, unsigned long event, void *para);
+void set_usb_connection_status(void *para);
+void send_usb_insert_event(enum bcmpmu_event_t event, void *para);
+void send_USB_remove_event();
+void send_chrgr_insert_event(enum bcmpmu_event_t event, void *para);
+void send_uart_jig_insert_event(bool attached);
+static enum cable_type_t set_cable_status;
+
+static void tsu6721_usb_cb(bool attached)
+{
+	enum bcmpmu_chrgr_type_t chrgr_type;
+	enum bcmpmu_usb_type_t usb_type;
+#if defined(CONFIG_SEC_CHARGING_FEATURE)
+	int spa_data=0;
+#endif	
+
+	set_cable_status = attached ? CABLE_TYPE_USB : CABLE_TYPE_NONE;
+
+	switch (set_cable_status) {
+	case CABLE_TYPE_USB:
+		usb_type = PMU_USB_TYPE_SDP;
+		chrgr_type = PMU_CHRGR_TYPE_SDP;
+#if defined(CONFIG_SEC_CHARGING_FEATURE)
+		spa_data = POWER_SUPPLY_TYPE_USB;
+#endif
+		pr_info("%s USB attached\n",__func__);
+		send_usb_insert_event(BCMPMU_USB_EVENT_USB_DETECTION,
+				      &usb_type);
+		break;		
+
+	case CABLE_TYPE_NONE:
+		usb_type = PMU_USB_TYPE_NONE;
+		chrgr_type = PMU_CHRGR_TYPE_NONE;		
+#if defined(CONFIG_SEC_CHARGING_FEATURE)
+		spa_data = POWER_SUPPLY_TYPE_BATTERY;
+		pr_info("%s USB removed\n",__func__);
+		set_usb_connection_status(&usb_type); // for unplug, we only set status, but not send event
+#else
+		send_usb_insert_event(BCMPMU_USB_EVENT_USB_DETECTION,
+				      &usb_type);
+#endif
+		break;
+	}	
+	send_chrgr_insert_event(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,&chrgr_type);
+#if defined(CONFIG_SEC_CHARGING_FEATURE)
+	spa_event_handler(SPA_EVT_CHARGER, spa_data);
+#endif
+	return;
+}
+
+static void tsu6721_charger_cb(bool attached)
+{
+	enum bcmpmu_chrgr_type_t chrgr_type;
+	enum bcmpmu_usb_type_t usb_type;
+#if defined(CONFIG_SEC_CHARGING_FEATURE)	
+	int spa_data=0;
+#endif
+	
+	set_cable_status = attached ? CABLE_TYPE_AC : CABLE_TYPE_NONE;
+
+	switch (set_cable_status) {
+	case CABLE_TYPE_AC:
+		chrgr_type = PMU_CHRGR_TYPE_DCP;		
+#if defined(CONFIG_SEC_CHARGING_FEATURE)	
+		if( attached == CABLE_TYPE_ACCESSORY)
+			spa_data = POWER_SUPPLY_TYPE_USB_ACA;
+		else
+			spa_data = POWER_SUPPLY_TYPE_USB_DCP;
+#endif
+		is_cable_attached = 1;
+		tsp_charger_infom(1);
+		pr_info("%s TA attached\n",__func__);
+		break;
+	case CABLE_TYPE_NONE:
+		chrgr_type = PMU_CHRGR_TYPE_NONE;
+#if defined(CONFIG_SEC_CHARGING_FEATURE)				
+		spa_data = POWER_SUPPLY_TYPE_BATTERY;
+#endif
+		is_cable_attached = 0;
+		tsp_charger_infom(0);
+		pr_info("%s TA removed\n",__func__);
+		break;
+	}
+	send_chrgr_insert_event(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,&chrgr_type);
+#if defined(CONFIG_SEC_CHARGING_FEATURE)
+	spa_event_handler(SPA_EVT_CHARGER, spa_data);
+#endif
+}
+
+static void tsu6721_jig_cb(bool attached)
+{
+	pr_info("%s attached %d\n", __func__,attached);
+}
+
+static struct wake_lock jig_uart_wl;
+
+static int uas_jiguart_wl_init(void)
+{
+	wake_lock_init(&jig_uart_wl, WAKE_LOCK_SUSPEND, "jig_uart_wake");
+}
+void uas_jig_force_sleep(void)
+{
+	if(wake_lock_active(&jig_uart_wl))
+	{
+		wake_unlock(&jig_uart_wl);
+		pr_info("Force unlock jig_uart_wl\n");
+	}
+}
+
+int jig_attach_info = SPA_ACC_NONE;
+EXPORT_SYMBOL(jig_attach_info);
+
+static void tsu6721_uart_cb(bool attached)
+{
+	SPA_ACC_INFO_T acc_info;
+
+	if(attached==true)
+	{
+		acc_info=SPA_ACC_JIG_UART;
+		musb_info_handler(NULL, 0, 1);
+	}
+	else
+	{
+		acc_info=SPA_ACC_NONE;
+		musb_info_handler(NULL, 0, 0);
+	}
+      jig_attach_info = acc_info;
+	send_uart_jig_insert_event(attached);
+
+	if (is_uart_wl_active) {
+		if (attached == true) {
+			if (wake_lock_active(&jig_uart_wl) == 0)
+				wake_lock(&jig_uart_wl);
+		} else {
+			if (wake_lock_active(&jig_uart_wl))
+				wake_unlock(&jig_uart_wl);
+		}
+	}
+}
+
+void send_otg_insert_event();
+
+static void tsu6721_ovp_cb(bool attached)
+{
+	pr_info("%s:%s\n",__func__,(attached?"TRUE":"FALSE")); 
+#ifdef CONFIG_CHARGER_BCMPMU_SPA
+	spa_event_handler(SPA_EVT_OVP, (int)attached);
+#endif
+}
+
+
+static struct tsu6721_platform_data tsu6721_pdata = {
+        .usb_cb = tsu6721_usb_cb,
+        .charger_cb = tsu6721_charger_cb,
+        .jig_cb = tsu6721_jig_cb,
+        .uart_cb = tsu6721_uart_cb,
+        .ovp_cb = tsu6721_ovp_cb,
+
+};
+
+static struct i2c_board_info  __initdata micro_usb_i2c_devices_info[]  = {
+	{
+                I2C_BOARD_INFO("tsu6721", 0x4A >> 1),
+                .platform_data = &tsu6721_pdata,
+                .irq = gpio_to_irq(GPIO_USB_INT),
+	},
+};
+
+static struct i2c_gpio_platform_data mUSB_i2c_gpio_data={
+        .sda_pin        = GPIO_USB_I2C_SDA,
+                .scl_pin= GPIO_USB_I2C_SCL,
+	.udelay	 = 2,
+};
+
+static struct platform_device mUSB_i2c_gpio_device = {
+	.name			= "i2c-gpio",
+        .id                     = TSU6721_I2C_BUS_ID,
+	.dev			={
+                .platform_data  = &mUSB_i2c_gpio_data,
+	},
+};
+static struct platform_device *mUSB_i2c_devices[] __initdata = {
+        &mUSB_i2c_gpio_device,
+};
+
+#endif
 
 #ifdef CONFIG_USB_SWITCH_FSA9485
 
 enum cable_type_t{
 	CABLE_TYPE_USB,
 	CABLE_TYPE_AC,
+	CABLE_TYPE_ACCESSORY,
 	CABLE_TYPE_NONE
 };
 
@@ -1187,7 +1464,7 @@ static void fsa9485_usb_cb(bool attached)
 	spa_event_handler(SPA_EVT_CHARGER, spa_data);
 }
 
-static void fsa9485_charger_cb(bool attached)
+static void fsa9485_charger_cb(unsigned int attached)
 {
 	enum bcmpmu_chrgr_type_t chrgr_type;
 	enum bcmpmu_usb_type_t usb_type;
@@ -1203,7 +1480,10 @@ static void fsa9485_charger_cb(bool attached)
 	case CABLE_TYPE_AC:
 		chrgr_type = PMU_CHRGR_TYPE_DCP;		
 #if defined(CONFIG_SEC_CHARGING_FEATURE)	
-		spa_data = POWER_SUPPLY_TYPE_USB_DCP;
+		if( attached == CABLE_TYPE_ACCESSORY)
+			spa_data = POWER_SUPPLY_TYPE_USB_ACA;
+		else
+			spa_data = POWER_SUPPLY_TYPE_USB_DCP;
 #endif
 		is_cable_attached = 1;
 		tsp_charger_infom(1);
@@ -1696,6 +1976,21 @@ static struct i2c_board_info __initdata cyttsp4_i2c_info[]  = {
 };
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_ZINITIX_BT532
+static struct i2c_board_info __initdata zinitix_i2c_info[]  = {
+	{
+		I2C_BOARD_INFO("zinitix_touch", 0x20),
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)		
+		.irq = gpio_to_irq(183),
+#else	
+		.irq = gpio_to_irq(8),
+#endif
+
+		.platform_data = "zinitix_touch",
+	},
+};
+#endif
+
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT
 #include <linux/i2c/atmel_mxt_ts.h>
 
@@ -1744,6 +2039,29 @@ static struct i2c_board_info __initdata mxt224_info[] = {
 
 
 #endif
+
+#ifdef CONFIG_TOUCHSCREEN_FT5X06
+static struct ft5x06_platform_data ft5x06_plat_data = {
+	.gpio_irq_pin = FT5X06_GPIO_IRQ_PIN,
+	.gpio_reset_pin = FT5X06_GPIO_RESET_PIN,
+	.x_max_value = FT5X06_MAX_X - 1,
+	.y_max_value = FT5X06_MAX_Y - 1,
+	.layout = FT5X06_LAYOUT,
+	.is_multi_touch = FT5X06_IS_MULTI_TOUCH,
+	.is_resetable = 1,
+	.max_finger_val = FT5X06_MAX_NUM_FINGERS,
+	.press_max = FT5X06_PRESS_MAX,
+	.press_value = FT5X06_PRESS,
+};
+
+static struct i2c_board_info __initdata ft5x06_info[] = {
+	{
+	 I2C_BOARD_INFO(I2C_FT5X06_DRIVER_NAME, FT5X06_SLAVE_ADDR),
+	 .platform_data = &ft5x06_plat_data,
+	 .irq = gpio_to_irq(FT5X06_GPIO_IRQ_PIN),
+	 },
+};
+#endif /* CONFIG_TOUCHSCREEN_FT5X06 */
 
 #ifdef CONFIG_TOUCHSCREEN_GT818
 
@@ -2315,6 +2633,81 @@ static struct bcm_keymap newKeymap[] = {
 	{BCM_KEY_ROW_7, BCM_KEY_COL_7, "unused", 0},
 };
 
+#elif defined(CONFIG_MACH_CAPRI_GARNET)
+static struct bcm_keymap newKeymap[] = {
+	{BCM_KEY_ROW_0, BCM_KEY_COL_0, "Volumedown Key", KEY_VOLUMEDOWN},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_1, "Volumeup Key", KEY_VOLUMEUP},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_0, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_0, "Camera Focus Key", KEY_CAMERA_FOCUS},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_1, "Camera Key", KEY_CAMERA},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_1, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_2, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_3, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_4, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_5, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_6, BCM_KEY_COL_7, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_0, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_1, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_2, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_3, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_4, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_5, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_6, "unused", 0},
+	{BCM_KEY_ROW_7, BCM_KEY_COL_7, "unused", 0},
+};
+
+static struct bcm_keypad_platform_info bcm_keypad_data = {
+	.row_num = 2,
+	.col_num = 3,
+	.keymap = newKeymap,
+	.bcm_keypad_base = (void *)__iomem HW_IO_PHYS_TO_VIRT(KEYPAD_BASE_ADDR),
+};
+
 #else 
 static struct bcm_keymap newKeymap[] = {
 	{BCM_KEY_ROW_0, BCM_KEY_COL_0, "Volumedown Key", KEY_VOLUMEDOWN},
@@ -2391,6 +2784,13 @@ static struct bcm_keypad_platform_info bcm_keypad_data = {
 };
 #endif
 
+#endif
+
+#if defined(CONFIG_BCM_WFD) || defined(CONFIG_BCM_WFD_MODULE)
+static struct platform_device board_bcm_wfd_device = {
+	.name = "bcm-wfd",
+	.id = -1,
+};
 #endif
 
 #if defined(CONFIG_BCM_GPS) || defined(CONFIG_BCM_GPS_MODULE)
@@ -2530,68 +2930,76 @@ struct platform_device * vchiq_devices[] __initdata =
 
 #endif  /* CONFIG_KONA_VCHIQ */
 
-#if defined(CONFIG_MPU_SENSORS_MPU6050B1) || defined(CONFIG_MPU_SENSORS_MPU6050B1_MODULE)
-
-#define MPU6050_IRQ_GPIO 121
-#define mpu6050_platform_data concatenate(CAPRI_BOARD_ID, _mpu6050_data)
-
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN)
-
-static struct mpu_platform_data mpu6050_platform_data =
+#if defined(CONFIG_INPUT_MPU6050) || defined(CONFIG_INPUT_MPU6500)
+#define GYRO_INT_GPIO_PIN   	(121)
+static void sensors_regulator_on(bool onoff)
 {
-	.int_config  = 0x10,
-		.level_shifter = 0,
-	.orientation = {
-	0, 1, 0,
-	1, 0, 0,
-	0, 0, -1},	
-};
 
-static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
-{
-	{
-		I2C_BOARD_INFO("mpu6050", 0x68),
-		.platform_data = &mpu6050_platform_data,
-	},
-};
+}
 
-#elif defined(CONFIG_MACH_CAPRI_SS_CRATER)
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
 
-static struct mpu_platform_data mpu6050_platform_data =
-{
-	.int_config  = 0x10,
-	.level_shifter = 0,
+static struct mpu6k_input_platform_data mpu6k_pdata = {
+	.power_on = sensors_regulator_on,
 	.orientation = {
 	1, 0, 0,
 	0, -1, 0,
-	0, 0, -1},	
+	0, 0, -1
+	},	
+	.acc_cal_path = "/efs/calibration_data",
+	.gyro_cal_path = "/efs/gyro_cal_data",
 };
 
 static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
 {
 	{
-		I2C_BOARD_INFO("mpu6050", 0x68),
-		.platform_data = &mpu6050_platform_data,
+		I2C_BOARD_INFO("mpu6050_input", 0x68),
+		.platform_data = &mpu6k_pdata,
+		.irq = gpio_to_irq(GYRO_INT_GPIO_PIN),
+	},
+};
+
+#elif defined(CONFIG_MACH_CAPRI_SS_BAFFIN)
+
+static struct mpu6k_input_platform_data mpu6k_pdata = {
+	.power_on = sensors_regulator_on,
+	.orientation = {
+	0, 1, 0,
+	1, 0, 0,
+	0, 0, -1
+	},	
+	.acc_cal_path = "/efs/calibration_data",
+	.gyro_cal_path = "/efs/gyro_cal_data",
+};
+
+static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
+{
+	{
+		I2C_BOARD_INFO("mpu6050_input", 0x68),
+		.platform_data = &mpu6k_pdata,
+		.irq = gpio_to_irq(GYRO_INT_GPIO_PIN),
 	},
 };
 
 #else
 
-static struct mpu_platform_data mpu6050_platform_data =
-{
-	.int_config  = 0x10,
-	.level_shifter = 0,
-        .orientation = {
+static struct mpu6k_input_platform_data mpu6k_pdata = {
+	.power_on = sensors_regulator_on,
+	.orientation = {
 	-1, 0, 0,
 	0, -1, 0,
-        0, 0, 1},
+        0, 0, 1
+	},	
+	.acc_cal_path = "/efs/calibration_data",
+	.gyro_cal_path = "/efs/gyro_cal_data",
 };
 
 static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
 {
 	{
-		I2C_BOARD_INFO("mpu6050", 0x68),
-		.platform_data = &mpu6050_platform_data,
+		I2C_BOARD_INFO("mpu6050_input", 0x68),
+		.platform_data = &mpu6k_pdata,
+		.irq = gpio_to_irq(GYRO_INT_GPIO_PIN),
 	},
 
 #ifdef CONFIG_INPUT_YAS_MAGNETOMETER
@@ -2604,49 +3012,12 @@ static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
 
 #endif
 
-#endif /* CONFIG_MPU_SENSORS_MPU6050B1 */
+#endif //defined(CONFIG_INPUT_MPU6050) || defined(CONFIG_INPUT_MPU6500)
 
-#if defined(CONFIG_MPU_SENSORS_MPU6500) || defined(CONFIG_MPU_SENSORS_MPU6500_MODULE)
-
-#define MPU6500_IRQ_GPIO 121
-#define mpu6500_platform_data concatenate(CAPRI_BOARD_ID, _mpu6500_data)
-
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)
-static struct mpu_platform_data mpu_platform_data =
-{
-	.int_config  = 0x10,
-	.level_shifter = 0,
-	.orientation = {
-	-1, 0, 0,
-	0, 1, 0,
-	0, 0, -1},	
-        .sec_slave_type = SECONDARY_SLAVE_TYPE_NONE,
-        .key = {0xdd, 0x16, 0xcd, 0x7, 0xd9, 0xba, 0x97, 0x37, 
-        0xce, 0xfe, 0x23, 0x90, 0xe1, 0x66, 0x2f, 0x32},
+#if defined(CONFIG_INPUT_YAS_ORIENTATION)
+static struct platform_device yas532_orient_device = {
+	.name = "orientation",
 };
-#else
-static struct mpu_platform_data mpu_platform_data =
-{
-	.int_config  = 0x10,
-	.level_shifter = 0,
-	.orientation = {
-	0, 1, 0,
-	1, 0, 0,
-	0, 0, -1},	
-        .sec_slave_type = SECONDARY_SLAVE_TYPE_NONE,
-        .key = {0xdd, 0x16, 0xcd, 0x7, 0xd9, 0xba, 0x97, 0x37, 
-        0xce, 0xfe, 0x23, 0x90, 0xe1, 0x66, 0x2f, 0x32},
-};
-#endif//defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)
-
-static struct i2c_board_info __initdata inv_mpu_i2c0_boardinfo[] =
-{
-	{
-		I2C_BOARD_INFO("mpu6500", 0x68),
-		.platform_data = &mpu_platform_data,
-	},
-};
-
 #endif
 
 #if defined(CONFIG_OPTICAL_CM3663) 
@@ -2751,6 +3122,15 @@ static struct i2c_board_info __initdata i2c_al3006_info[] = {
 };
 #endif
 
+#if defined(CONFIG_INPUT_HSCDTD006A) || defined(CONFIG_INPUT_HSCDTD006A_MODULE)
+static struct hscdtd_platform_data hscdtd006a_data = HSCDTD006A_PLATFORM_DATA;
+static struct i2c_board_info __initdata i2c_hscdtd006a_info[] = {
+	{
+	 I2C_BOARD_INFO(HSCDTD_DRIVER_NAME, HSCDTD006A_I2C_ADDRESS),
+	 .platform_data = &hscdtd006a_data,
+	 },
+};
+#endif
 
 #if defined(CONFIG_BCM_RFKILL) || defined(CONFIG_BCM_RFKILL_MODULE)
 #define board_bcmbt_rfkill_cfg concatenate(CAPRI_BOARD_ID, _bcmbt_rfkill_cfg)
@@ -2814,11 +3194,13 @@ static void __init board_add_bcm_bzhw_device(void)
 
 
 #if defined(CONFIG_BCM_BT_LPM) || defined(CONFIG_BCM_BT_LPM_MODULE)
+#define GPIO_BT_WAKE 97
+#define GPIO_HOST_WAKE 96
 #define board_bcmbt_lpm_cfg concatenate(CAPRI_BOARD_ID, _bcmbt_lpm_cfg)
-static struct bcm_bt_lpm_platform_data board_bcmbt_lpm_cfg =
-{
-	.gpio_bt_wake = GPIO_BT_WAKE,
-	.gpio_host_wake = GPIO_HOST_WAKE,
+static struct bcmbt_platform_data board_bcmbt_lpm_cfg = {
+	.bt_wake_gpio = GPIO_BT_WAKE,
+	.host_wake_gpio = GPIO_HOST_WAKE,
+	.bt_uart_port = 1,
 };
 #define board_bcmbt_lpm_device concatenate(CAPRI_BOARD_ID, _bcmbt_lpm_device)
 static struct platform_device board_bcmbt_lpm_device =
@@ -2935,11 +3317,21 @@ static void __init add_i2c_device(void)
 				ARRAY_SIZE(bcm915500_i2c_boardinfo));
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_FT5X06
+	i2c_register_board_info(FT5X06_I2C_BUS_ID, ft5x06_info,
+				ARRAY_SIZE(ft5x06_info));
+#endif /* CONFIG_TOUCHSCREEN_FT5X06 */
+
+#if defined(CONFIG_USB_SWITCH_TSU6721)
+       pr_info("tsu6721\n");
+	uas_jiguart_wl_init();
+       i2c_register_board_info(TSU6721_I2C_BUS_ID, micro_usb_i2c_devices_info,ARRAY_SIZE(micro_usb_i2c_devices_info));
+#endif
 #ifdef CONFIG_USB_SWITCH_FSA9485
 	pr_info("fsa9485\n");
 	i2c_register_board_info(FSA9485_I2C_BUS_ID, micro_usb_i2c_devices_info,ARRAY_SIZE(micro_usb_i2c_devices_info));
 #endif
-#ifdef CONFIG_BQ24272_CHARGER
+#if defined(CONFIG_BQ24272_CHARGER) || defined(CONFIG_SMB358_CHARGER)
 	pr_info("charger_i2c_devices_info\n");
 	i2c_register_board_info(CHARGER_I2C_BUS_ID, charger_i2c_devices_info,ARRAY_SIZE(charger_i2c_devices_info));
 #endif
@@ -2971,6 +3363,11 @@ static void __init add_i2c_device(void)
 		ARRAY_SIZE(cyttsp4_i2c_info));
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_ZINITIX_BT532
+	i2c_register_board_info(1, zinitix_i2c_info,
+		ARRAY_SIZE(zinitix_i2c_info));
+#endif
+
 #ifdef CONFIG_TOUCHSCREEN_ATMEL_MXT
 i2c_register_board_info(1,
 			mxt224_info,
@@ -2989,13 +3386,7 @@ i2c_register_board_info(1,
 	board_mhl_init();
 #endif
 
-#if defined(CONFIG_MPU_SENSORS_MPU6050B1) || defined(CONFIG_MPU_SENSORS_MPU6050B1_MODULE)
-	inv_mpu_i2c0_boardinfo[0].irq = gpio_to_irq(MPU6050_IRQ_GPIO);
-	i2c_register_board_info(0, inv_mpu_i2c0_boardinfo, ARRAY_SIZE(inv_mpu_i2c0_boardinfo));
-#endif
-    
-#if defined(CONFIG_MPU_SENSORS_MPU6500) || defined(CONFIG_MPU_SENSORS_MPU6500_MODULE)
-	inv_mpu_i2c0_boardinfo[0].irq = gpio_to_irq(MPU6500_IRQ_GPIO);
+#if defined(CONFIG_INPUT_MPU6050)
 	i2c_register_board_info(0, inv_mpu_i2c0_boardinfo, ARRAY_SIZE(inv_mpu_i2c0_boardinfo));
 #endif
 
@@ -3033,6 +3424,11 @@ i2c_register_board_info(1,
 #endif
 		i2c_ami306_info, ARRAY_SIZE(i2c_ami306_info));
 #endif /* CONFIG_AMI306 */
+
+#if defined(CONFIG_INPUT_HSCDTD006A) || defined(CONFIG_INPUT_HSCDTD006A_MODULE)
+	i2c_register_board_info(HSCDTD006A_I2C_BUS_ID, i2c_hscdtd006a_info, ARRAY_SIZE(i2c_hscdtd006a_info));
+#endif
+
 
 #if defined(CONFIG_BCM2079X_NFC_I2C)
 	i2c_register_board_info(BCM_NFC_BUSID, i2c_devs_nfc, ARRAY_SIZE(i2c_devs_nfc));
@@ -3094,15 +3490,15 @@ static void __init add_usbh_device(void)
 static void otg_accessory_power(int enable)
 {
 	u8 on = (u8)!!enable;
-	printk("USBD] otg_accessory_power\n");
+	printk("USBD] otg_accessory_power dis\n");
 	/* max77693 otg power control */
-	
-	//otg_control(enable);
+	/*
+	otg_control(enable);
 
 	gpio_request(GPIO_OTG_EN, "USB_OTG_EN");
 	gpio_direction_output(GPIO_OTG_EN, on);
 	gpio_free(GPIO_OTG_EN);
-	pr_info("%s: otg accessory power = %d\n", __func__, on);
+	pr_info("%s: otg accessory power = %d\n", __func__, on);*/
 }
 
 static void otg_accessory_powered_booster(int enable)
@@ -3127,6 +3523,7 @@ struct platform_device host_notifier_device = {
 };
 #endif
 
+#ifdef CONFIG_USB_SWITCH_FSA9485
 static void fsa9485_otg_cb(bool attached)
 {
 	set_cable_status = attached ? CABLE_TYPE_USB : CABLE_TYPE_NONE;
@@ -3146,12 +3543,17 @@ static void fsa9485_otg_cb(bool attached)
 	}	
 
 }
-
+#endif
 static void __init add_usb_otg_device(void)
 {
 #if defined(CONFIG_KONA_OTG_CP) || defined(CONFIG_KONA_OTG_CP_MODULE)
 	platform_device_register(&otg_cp_device);
 #endif
+
+#if defined(CONFIG_BCM_WFD) || defined(CONFIG_BCM_WFD_MODULE)
+	platform_device_register(&board_bcm_wfd_device);
+#endif
+
 //dh0318.lee ENABLE_OTGGTEST
 #ifdef CONFIG_USB_HOST_NOTIFY
 	platform_device_register(&host_notifier_device);
@@ -3190,6 +3592,7 @@ static void __init board_add_halaudio_device(void)
 }
 #endif /* CONFIG_BCM_HALAUDIO */
 
+#ifdef CONFIG_SEC_CHARGING_FEATURE
 #ifdef CONFIG_WD_TAPPER
 static struct wd_tapper_platform_data wd_tapper_data = {
   /* Set the count to the time equivalent to the time-out in seconds
@@ -3210,6 +3613,7 @@ static struct platform_device wd_tapper = {
   },
 };
 #endif
+#endif
 
 #if defined(CONFIG_BCM_ALSA_SOUND)
 #define board_caph_platform_cfg concatenate(CAPRI_BOARD_ID, _caph_platform_cfg)
@@ -3222,11 +3626,12 @@ static struct caph_platform_cfg board_caph_platform_cfg =
 		.ext_aud_plat_cfg = {
 			.ihf_ext_amp_gpio = -1,
 			.dock_aud_route_gpio = -1,
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)			
-			.mode_sel_aud_route_gpio = -1,
 			.mic_sel_aud_route_gpio = -1,
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)		
+			.mode_sel_aud_route_gpio = -1,
 			.bt_sel_aud_route_gpio = -1,
 #endif	
+
 		}
 	}
 };
@@ -3276,23 +3681,26 @@ struct spa_temp_tb batt_temp_tb[]=
 	{869, -300},            /* -30 */
 	{754, -200},			/* -20 */
 	{639, -100},                    /* -10 */
-	{573, -50},			/* -5 */
-	{506,   0},                    /* 0   */
-	{442,   50},                    /* 0   */
+	{566, -50},			/* -5 */
+	{492,   0},                    /* 0   */
+	{440,   50},                    /* 5   */
 	{380,  100},                    /* 10  */
 	{323,  150},                    /* 10  */
 	{267,  200},                    /* 20  */
 	{229,  250},                    /* 25  */
 	{194,  300},                    /* 30  */
 	{163,  350},                    /* 30  */
-	{137,  400},                    /* 40  */
-	{114,  450},                    /* 40  */
+	{132,  400},                    /* 40  */
+	{114,  450},                    /* 45  */
 	{97 ,  500},                    /* 50  */
 	{81 ,  550},                    /* 50  */
 	{68 ,  600},                    /* 60  */
 	{57 ,  650},                    /* 65  */
 	{48 ,  700},            /* 70  */
-	{34 ,  800},            /* 80  */
+	{41 ,  750},           	/* 75  */	
+	{35 ,  800},            	/* 80  */
+	{30 ,  850},           	/* 85  */	
+	{25 ,  900},            	/* 90  */	
 };
 #else
 struct spa_temp_tb batt_temp_tb[]=
@@ -3322,7 +3730,11 @@ struct spa_temp_tb batt_temp_tb[]=
 
 struct spa_power_data spa_power_pdata=
 {
+#if defined(CONFIG_MFD_BCM59054)
+	.charger_name = "bcm59054_charger",
+#else
 	.charger_name = "bcm59056_charger",
+#endif
 #if defined(CONFIG_MACH_CAPRI_SS_BAFFIN)
 	.eoc_current=160,
 	.recharge_voltage=4300,
@@ -3332,8 +3744,23 @@ struct spa_power_data spa_power_pdata=
 	.backcharging_time = 40, //mins
 	.recharging_eoc = 40, // mA
 #endif
+#elif defined(CONFIG_MACH_CAPRI_SS_CRATER)
+	.eoc_current=200,
+	.recharge_voltage=4300,
+	.charging_cur_usb=450,
+	.charging_cur_wall=2000,
+#if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
+	.backcharging_time = 40, //mins
+	.recharging_eoc = 100, // mA
+#endif
 #else	
+#if defined(CONFIG_SPA_SUPPLEMENTARY_CHARGING)
+	.backcharging_time = 18, //mins
+	.recharging_eoc = 100, // mA
+	.eoc_current=150,
+#else
 	.eoc_current=100,
+#endif
 	.recharge_voltage=4150,
 	.charging_cur_usb=500,
 	.charging_cur_wall=850,
@@ -3458,9 +3885,17 @@ static void __init add_devices(void)
 	pr_info("fsa9485 mUSB_i2c_devices\n");
 	platform_add_devices(mUSB_i2c_devices, ARRAY_SIZE(mUSB_i2c_devices));
 #endif
+#if defined(CONFIG_USB_SWITCH_TSU6721)
+        pr_info("tsu6721 mUSB_i2c_devices\n");
+	platform_add_devices(mUSB_i2c_devices, ARRAY_SIZE(mUSB_i2c_devices));
+#endif
 #ifdef CONFIG_BQ24272_CHARGER
 	pr_info("bq24272 charger_i2c_devices_info\n");
 	platform_device_register(&bq24272_charger);
+#endif
+#ifdef CONFIG_SMB358_CHARGER
+	pr_info("smb358 charger_i2c_devices_info\n");
+	platform_device_register(&smb358_charger);
 #endif
 #if defined(CONFIG_NET_ISLAND)
 	platform_device_register(&net_device);
@@ -3474,16 +3909,35 @@ static void __init add_devices(void)
    platform_add_devices( vchiq_devices, ARRAY_SIZE( vchiq_devices ) );
 #endif
 
+#ifdef CONFIG_SEC_CHARGING_FEATURE
 #if defined(CONFIG_WD_TAPPER)
 	platform_device_register(&wd_tapper);
+#endif
 #endif
 #ifdef CONFIG_BCM_SS_VIBRA                                                                                                         
 	platform_device_register( &bcm_vibrator_device);
 #endif
+
+#if defined(CONFIG_SENSORS_KIONIX_KXTIK) || defined(CONFIG_SENSORS_KIONIX_KXTIK_MODULE)
+	kxtik_init_platform_hw();
+#endif /* CONFIG_SENSORS_KIONIX_KXTIK */
+
+#if defined(CONFIG_SENSORS_AK8963) || defined(CONFIG_SENSORS_AK8963_MODULE)
+	akm8963_init_platform_hw();
+#endif /* CONFIG_SENSORS_AK8963 */
+#if defined(CONFIG_SPI_SPIDEV) && defined(CONFIG_SPI_SSPI_KONA)
+	spi_register_board_info(spidev_board_info,
+			ARRAY_SIZE(spidev_board_info));
+#endif
+
 #if defined(CONFIG_SEC_CHARGING_FEATURE)
 // Samsung charging feature
 	platform_device_register(&spa_power_device);
 	platform_device_register(&spa_ps_device);
+#endif
+
+#if defined(CONFIG_INPUT_YAS_ORIENTATION)
+        platform_device_register(&yas532_orient_device);    
 #endif
 
 }
@@ -3676,7 +4130,7 @@ static void __init drv2603_vibrator_init(void)
 	platform_device_register(&drv2603_device);
 }
 #endif
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)		
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)		
 
 #define GPIO_SIM_SEL 158
 
@@ -3895,7 +4349,7 @@ static void __init board_init(void)
 #if defined(CONFIG_DRV2603_VIBRATOR)
 	drv2603_vibrator_init();
 #endif
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)		
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)		
     sim_sel_switch_init();
     uart_sel_switch_init();
     //mode_sel_switch_init();
@@ -3905,6 +4359,39 @@ static void __init board_init(void)
 #endif
 
 }
+
+int disable_uart_jigbox_wakelock(void *data, u64 clk_idle)
+{
+	is_uart_wl_active = false;
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
+	uas_jig_force_sleep();
+#endif
+}
+
+DEFINE_SIMPLE_ATTRIBUTE(set_uart_sleep_fops,
+		NULL, disable_uart_jigbox_wakelock, "%llu\n");
+
+
+static struct dentry *dent_board_template_root_dir;
+int __init board_template_debug_init(void)
+{
+	dent_board_template_root_dir =
+		debugfs_create_dir("board_template", 0);
+
+	if (!dent_board_template_root_dir)
+		return -ENOMEM;
+
+	if (!debugfs_create_file("allow_uart_sleep",
+		S_IWUSR | S_IRUSR,
+		dent_board_template_root_dir,
+		NULL,
+		&set_uart_sleep_fops))
+		return -ENOMEM;
+
+	return 0;
+}
+
+late_initcall(board_template_debug_init);
 
 static void __init board_reserve(void)
 {

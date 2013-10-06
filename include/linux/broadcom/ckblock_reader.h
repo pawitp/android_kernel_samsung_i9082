@@ -17,11 +17,11 @@
 #define __CKBLOCK_READER_H
 
 /**
- * @brief 	readCKDataBlock : Reads the CK Data block from the MTD device.
- * @param	buff 	: Kernel Space buffer to which the data will be read. 
+ * @brief	readCKDataBlock : Reads the CK Data block from the MTD device.
+ * @param	buff	: Kernel Space buffer to which the data will be read.
  * @param	len     : number of bytes to read.
- * @return	Returns -1 on error. On success returns the number of bytes 
- *		actually read 
+ * @return	Returns -1 on error. On success returns the number of bytes
+ *		actually read
  *
  * @description	This function reads the CK data block from the MTD device.
  * It returns -1 on error. On success returns the number of bytes actually

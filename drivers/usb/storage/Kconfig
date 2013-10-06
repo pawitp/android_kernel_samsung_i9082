@@ -223,3 +223,10 @@ config USB_LIBUSUAL
 		options libusual bias="ub"
 
 	  If unsure, say N.
+
+config USB_STORAGE_MEDIA_SCAN
+	boolean "USB STORAGE SCSI MEDIA SCAN"
+	depends on USB
+	help
+	  It will check that the connected usb devices have the SCSI media or not.
+	  that is used by usb storage devices

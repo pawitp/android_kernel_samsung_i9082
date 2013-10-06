@@ -112,7 +112,23 @@ static int enter_dormant_state(struct kona_idle_state *state);
 static int enter_retention_state(struct kona_idle_state *state);
 static int capri_devtemp_cntl(struct as_one_cpu *sys, int enable);
 static Boolean redo_auto = FALSE;
-volatile int suspend_debug_count;
+int suspend_debug_count;
+
+#define PM_WAKEUP_BY_COMMON_INT_TO_AC_EVENT 1
+#define PM_WAKEUP_BY_COMMON_TIMER_1_EVENT  2
+#define VREQ_NONZERO_PI_MODEM_EVENT_IS_ON  4
+
+struct capri_pm_dbg {
+	u32 hubTM_stcs;
+	u32 hubTM_stclo;
+	u32 hubTM_stchi;
+	u32 hubTM_stcm1;
+	u32 pm_set[7];
+	u32 pm_event;
+};
+
+struct capri_pm_dbg pre_pm_dbg;
+struct capri_pm_dbg post_pm_dbg;
 
 enum {
 	SUSPEND_WFI,
@@ -208,8 +224,14 @@ static int dbg_dsm_suspend;
 module_param_named(dbg_dsm_suspend, dbg_dsm_suspend,
 		   int, S_IRUGO | S_IWUSR | S_IWGRP);
 
-static struct clk *pbsc_clk;
+#if defined(CONFIG_CAPRI_SYSEMI_DDR3)
+extern unsigned int ddr3_phy_mode;
+module_param_named(ddr3_phy_mode, ddr3_phy_mode,
+	int, S_IRUGO | S_IWUSR | S_IWGRP);
+#endif
 
+static struct clk *pbsc_clk;
+static struct clk *kpm_clk, *kps_clk;
 /*
  * C0 is simple WFI state.. clears all the active events on A2 but not on A2
  * C1 is suspend retention state.  Keeps XTAL on but enters retention
@@ -454,7 +476,7 @@ u32 init_deep_sleep_registers(void)
   else
 		pr_err("%s:pbsc_clk is not null\n", __func__);
 
-	pm_config_pti_cntl(true);	/*Clock init should do this */
+	pm_config_pti_cntl(true); /*Clock init should do this */
 	return 0;
 }
 
@@ -505,6 +527,8 @@ static int pm_enable_scu_standby(int enable)
 
 static int pm_enable_mdm_self_refresh(bool enable)
 {
+#if !defined(CONFIG_CAPRI_SYSEMI_DDR3)
+	/* ***** Warning: Should we Ignore it when it's DDR3 ? */
 	u32 reg_val;
 
 	reg_val = readl_relaxed(KONA_MEMC0_NS_VA
@@ -524,6 +548,7 @@ static int pm_enable_mdm_self_refresh(bool enable)
 		reg_val |= CSR_DSP_MIN_PWR_STATE_DSP_MIN_PWR_STATE_MASK;
 	writel_relaxed(reg_val, KONA_MEMC0_NS_VA
 		       + CSR_DSP_MIN_PWR_STATE_OFFSET);
+#endif
 	return 0;
 }
 
@@ -566,6 +591,8 @@ static int pm_enable_vc4_self_refresh(bool enable)
 
 static int pm_enable_self_refresh(bool enable)
 {
+#if !defined(CONFIG_CAPRI_SYSEMI_DDR3)
+	/* ***** Warning: DDR3 doesn't uses these registers */
 	u32 reg_val;
 	if (enable == true) {
 		writel_relaxed(0, KONA_MEMC0_NS_VA
@@ -584,11 +611,14 @@ static int pm_enable_self_refresh(bool enable)
 		writel_relaxed(reg_val, KONA_MEMC0_NS_VA
 			       + CSR_HW_FREQ_CHANGE_CNTRL_OFFSET);
 	}
+#endif
 	return 0;
 }
 
 static void pm_sys_emi_low_power(void)
 {
+#if !defined(CONFIG_CAPRI_SYSEMI_DDR3)
+	/* ***** Warning: DDR3 doesn't uses these registers */
 	u32 reg_val;
 
 	reg_val = readl_relaxed(KONA_MEMC0_NS_VA
@@ -604,6 +634,7 @@ static void pm_sys_emi_low_power(void)
 	    ~CSR_HW_FREQ_CHANGE_CNTRL_DISABLE_DLL_CALIB_ON_CLK_CHANGE_MASK;
 	writel_relaxed(reg_val, KONA_MEMC0_NS_VA
 		       + CSR_HW_FREQ_CHANGE_CNTRL_OFFSET);
+#endif
 }
 
 static void pm_vc_emi_low_power(void)
@@ -795,6 +826,45 @@ static void config_wakeup_interrupts(void)
 		       CHIPREG_INTERRUPT_EVENT_4_PM_SET6_OFFSET);
 
 	spin_unlock_irqrestore(&wake_up_event_lock, flgs);
+}
+
+static void capri_pm_dbg_store(struct capri_pm_dbg *pm_dbg_ptr)
+{
+	pm_dbg_ptr->hubTM_stcs = readl_relaxed(KONA_TMR_HUB_VA +
+					KONA_GPTIMER_STCS_OFFSET);
+	pm_dbg_ptr->hubTM_stclo = readl_relaxed(KONA_TMR_HUB_VA +
+					KONA_GPTIMER_STCLO_OFFSET);
+	pm_dbg_ptr->hubTM_stchi = readl_relaxed(KONA_TMR_HUB_VA +
+					KONA_GPTIMER_STCHI_OFFSET);
+	pm_dbg_ptr->hubTM_stcm1 = readl_relaxed(KONA_TMR_HUB_VA +
+					KONA_GPTIMER_STCM1_OFFSET);
+
+	pm_dbg_ptr->pm_set[0] = readl_relaxed(KONA_CHIPREG_VA +
+		       CHIPREG_INTERRUPT_EVENT_4_PM_SET0_OFFSET);
+	pm_dbg_ptr->pm_set[1] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET1_OFFSET);
+	pm_dbg_ptr->pm_set[2] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET2_OFFSET);
+	pm_dbg_ptr->pm_set[3] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET3_OFFSET);
+	pm_dbg_ptr->pm_set[4] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET4_OFFSET);
+	pm_dbg_ptr->pm_set[5] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET5_OFFSET);
+	pm_dbg_ptr->pm_set[6] = readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET6_OFFSET);
+
+	pm_dbg_ptr->pm_event = 0;
+
+	if (pwr_mgr_is_event_active(COMMON_INT_TO_AC_EVENT))
+		pm_dbg_ptr->pm_event |= PM_WAKEUP_BY_COMMON_INT_TO_AC_EVENT;
+
+	if (pwr_mgr_is_event_active(COMMON_TIMER_1_EVENT))
+		pm_dbg_ptr->pm_event |= PM_WAKEUP_BY_COMMON_TIMER_1_EVENT;
+
+	if (pwr_mgr_is_event_active(VREQ_NONZERO_PI_MODEM_EVENT))
+		pm_dbg_ptr->pm_event |= VREQ_NONZERO_PI_MODEM_EVENT_IS_ON;
+
 }
 
 int print_sw_event_info()
@@ -1010,18 +1080,21 @@ void set_hub_autogate(bool enable)
 	}
 }
 
+struct pi *arm_sub_pi;
+
 static int capri_suspend_dormant(bool enter_dormant)
 {
+	int tmp_val;
 	suspend_debug_count = 2;
-	
+
 	if (one_shot == 0) {
 		one_shot = 1;
 		init_deep_sleep_registers();
 		arm_pll_disable(true);
 	}
 	suspend_debug_count = 3;
-	clear_wakeup_events();
 	clear_wakeup_interrupts();
+	clear_wakeup_events();
 	config_wakeup_interrupts();
 	/*set A9's to retention state status */
 
@@ -1032,9 +1105,47 @@ static int capri_suspend_dormant(bool enter_dormant)
 		capri_clock_print_act_clks();
 		capri_pi_mgr_print_act_pis();
 	}
+	if (!arm_sub_pi)
+		arm_sub_pi = pi_mgr_get(PI_MGR_PI_ID_ARM_SUB_SYSTEM);
+
+	if (kps_clk->use_cnt == 0 && kpm_clk->use_cnt == 0) {
+		tmp_val = readl_relaxed(KONA_PWRMGR_VA +
+			PWRMGR_SOFTWARE_0_VI_ARM_SUBSYSTEM_POLICY_OFFSET);
+		pr_info("%s:SW0_EVENT(arm_sub)=%d\n",
+			__func__, tmp_val);
+		if ((tmp_val & 0x07) == 0x5)
+			writel_relaxed(tmp_val&0xfb, KONA_PWRMGR_VA +
+				PWRMGR_SOFTWARE_0_VI_ARM_SUBSYSTEM_POLICY_OFFSET
+		);
+		pr_info("arm_subUseCnt = %d\n",
+			arm_sub_pi->usg_cnt);
+	} else {
+		pr_info("arm_subUseCnt = %d, kpsClkCnt = %d, kpmClkCnt = %d\n",
+			arm_sub_pi->usg_cnt, kps_clk->use_cnt,
+			kpm_clk->use_cnt);
+	}
+
+	capri_pm_dbg_store(&pre_pm_dbg);
 	suspend_debug_count = 4;
 	dormant_enter(CAPRI_DORMANT_CLUSTER_DOWN, CAPRI_DORMANT_SUSPEND_PATH);
 	suspend_debug_count = 5;
+	capri_pm_dbg_store(&post_pm_dbg);
+	/*log wake up events*/
+	if (dbg_dsm_suspend) {
+		#define MAX_LOG_EVENTID 5
+		int i;
+		int eventId[MAX_LOG_EVENTID];
+		pwr_mgr_get_wakeup_events(eventId, MAX_LOG_EVENTID);
+		for (i = 0; i < MAX_LOG_EVENTID; i++)
+			pr_info("wakeup ID:%d\n", eventId[i]);
+	}
+
+	if (kps_clk->use_cnt == 0 && kpm_clk->use_cnt == 0) {
+			if ((tmp_val & 0x07) == 0x5)
+				writel_relaxed(tmp_val, KONA_PWRMGR_VA +
+				PWRMGR_SOFTWARE_0_VI_ARM_SUBSYSTEM_POLICY_OFFSET
+		);
+	}
 	/*enable SW2 Active bit */
 	pwr_mgr_event_set(SOFTWARE_2_EVENT, 1);
 
@@ -1056,8 +1167,8 @@ static int capri_suspend_deepsleep(void)
 		arm_pll_disable(true);
 	}
 
-	clear_wakeup_events();
 	clear_wakeup_interrupts();
+	clear_wakeup_events();
 	config_wakeup_interrupts();
 	/*set A9's to retention state status */
 
@@ -1117,8 +1228,8 @@ static int capri_suspend_retention(void)
 	arm_pll_disable(true);
 
 	/*enable AUTOGATING BSC */
-	clear_wakeup_events();
 	clear_wakeup_interrupts();
+	clear_wakeup_events();
 	config_wakeup_interrupts();
 	/*set A9's to retention state status */
 
@@ -1172,8 +1283,8 @@ int enter_idle_state(struct kona_idle_state *state)
 	if ((state->flags & CPUIDLE_FLAG_XTAL_ON) || keep_xtl_on)
 		clk_set_crystal_pwr_on_idle(false);
 
-	clear_wakeup_events();
 	clear_wakeup_interrupts();
+	clear_wakeup_events();
 	config_wakeup_interrupts();
 
 	/*Enter when last CPU enters WFI */
@@ -1350,6 +1461,18 @@ int __init capri_pm_init(void)
 			BUG_ON(1);
 			return -EINVAL;
 		}
+	}
+	kpm_clk = clk_get(NULL, KPM_CCU_CLK_NAME_STR);
+	if (IS_ERR_OR_NULL(kpm_clk)) {
+		pr_err("Inavlid clock name: %s\n", __func__);
+		BUG_ON(1);
+		return -EINVAL;
+	}
+	kps_clk = clk_get(NULL, KPS_CCU_CLK_NAME_STR);
+	if (IS_ERR_OR_NULL(kps_clk)) {
+		pr_err("Inavlid clock name: %s\n", __func__);
+		BUG_ON(1);
+		return -EINVAL;
 	}
 	return kona_pm_init();
 }

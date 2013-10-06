@@ -36,6 +36,7 @@
 #include <linux/in.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/types.h>
 #include <linux/delay.h>
 #include <linux/fcntl.h>
 #include <linux/syscalls.h>
@@ -46,6 +47,7 @@
 #include <linux/completion.h>
 #include <linux/sched.h>
 #include <linux/broadcom/knllog.h>
+#include <linux/cpufreq.h>
 
 #include <mach/profile_timer.h>
 
@@ -60,6 +62,7 @@
 /* ---- Constants and Types ---------------------------------------------- */
 
 #define KNLLOG_DEFAULT_ENTRIES 1000	/* The buffer size in number of log entries */
+#define KNLLOG_CPUFREQ_TAG
 
 /*
  * MAXARGS can be temporarily changed to a lower number if logging mips
@@ -75,6 +78,7 @@
 /* A single log entry */
 typedef struct {
 	unsigned int time;	/* time of the event */
+	unsigned int tick_rate;	/* tick rate */
 #if defined ( CONFIG_SMP )
 	unsigned int cpuid;	/* cpu number */
 #endif
@@ -115,8 +119,7 @@ typedef struct {
 	int eventsDumped;	/* current dump event count */
 	int eventIdx;		/* current event index */
 	int eventsToDump;	/* number of events to dump */
-	int lasttime;		/* last timestamp */
-	int starttime;		/* time of first event dumped */
+	unsigned int tick_rate;	/* CPU tick rate */
 #if defined ( CONFIG_BCM_PERFCNT_SUPPORT )
 	int use_perfcnt;	/* include h/w performance counters in log entry */
 #endif
@@ -128,6 +131,19 @@ static long knllogThreadPid = 0;
 static struct completion knllogExited;
 DECLARE_WAIT_QUEUE_HEAD(knllogWakeQ);
 static int knllogWake;
+
+/* Update the knllog tick rate with a current CPU tick rate */
+static void knllog_update_tickrate(void);
+
+/* CPU frequency change registration callback */
+static int cpufreq_chng_notifier_cb(struct notifier_block *nb,
+		unsigned long val, void *data);
+
+static struct notifier_block cpufreq_chng_notifier = {
+		.priority = 1,
+		.notifier_call = &cpufreq_chng_notifier_cb,
+		.next = NULL
+};
 
 /*
  * The contents of the following string isn't used, just the address, to allow knllog
@@ -462,6 +478,7 @@ static int proc_do_knllog_intvec_enable(ctl_table *table, int write,
 			return rc;
 
 		if (knllog.enable) {
+			knllog_update_tickrate();
 			knllog_enable();
 			knllog_clear();
 		}
@@ -621,45 +638,92 @@ static int getTime(void)
 	return (timer_get_tick_count());
 }
 
-/* decode an event into a symbolic string */
-static void decodeEvent(KNLLOG_ENTRY * ep, char **linepp, int linelen,
-			int eventnum)
+/* Frequency change notification callback */
+static int cpufreq_chng_notifier_cb(struct notifier_block *nb,
+		unsigned long val, void *data)
+{
+	unsigned long flags;
+	struct cpufreq_freqs* freq_obj = (struct cpufreq_freqs *) data;
+
+	if ((knllog.enable) && (freq_obj->cpu == 0)) {
+		switch (val) {
+		case CPUFREQ_POSTCHANGE:
+		{
+			unsigned int new_tick_rate = timer_get_tick_rate();
+			knllog_entry("tick_rate_change", "%u -> %u",
+					knllog.tick_rate, new_tick_rate);
+			spin_lock_irqsave(&knllock, flags);
+			knllog_update_tickrate();
+			spin_unlock_irqrestore(&knllock, flags);
+			break;
+		}
+		case CPUFREQ_PRECHANGE:
+			/* do nothing */
+		default:
+			break;
+		}
+	}
+	return 0;
+}
+
+/*
+ * Decode an event into a symbolic string
+ *
+ * Input Arguments
+ *    ep          - event object pointer
+ *    ep_prev     - predecessor-event object pointer
+ *    eventnun    - (label) log event number
+ *    linelen     - ASCII string buffer size
+ *
+ * Output Arguments
+ *    linepp      - ASCII string buffer
+ *    usec_accum  - Accumulated time in micro seconds
+ */
+static void knllog_decode_event(KNLLOG_ENTRY *ep, KNLLOG_ENTRY *ep_prev,
+			char **linepp, int linelen,
+			int eventnum, long *usec_accum)
 {
 	char *line = *linepp;
 	char field[160];
+	long ticks_d, usec_d; /* delta times */
 
 	*line = '\0';
 	if (eventnum == 0) {
-		knllog.lasttime = ep->time;
-		knllog.starttime = ep->time;
+		ep_prev = ep;
 	}
 #if defined ( CONFIG_SMP )
 	snprintf(field, sizeof(field), "CPU_%u: ", ep->cpuid);
 	strlcat(line, field, linelen);
 #endif
 
-	if (knllog.msec) {
-		int ticks = ep->time - knllog.starttime;
-		int usecs = ticks / (timer_get_tick_rate() / 1000000);
-		snprintf(field, sizeof(field), "%6d.%03d: ", usecs / 1000u,
-			 usecs % 1000u);
-	} else {
-		snprintf(field, sizeof(field), "%10u: ", ep->time);
-	}
-	strlcat(line, field, linelen);
+	ticks_d = ep->time - ep_prev->time;
+	usec_d = ticks_d / (ep->tick_rate / USEC_PER_SEC);
+	*usec_accum += usec_d;
 
+	/* always dump ticks and tick rate */
+	snprintf(field, sizeof(field), "%10u: ", ep->time);
+	strlcat(line, field, linelen);
+#if defined(KNLLOG_CPUFREQ_TAG)
+	snprintf(field, sizeof(field), "%10u: ", ep->tick_rate);
+	strlcat(line, field, linelen);
+#endif
 	if (knllog.deltatime) {
-		if (knllog.msec) {
-			int deltaticks = ep->time - knllog.lasttime;
-			int deltausecs =
-			    deltaticks / (timer_get_tick_rate() / 1000000);
-			snprintf(field, sizeof(field), "%6d.%03d: ",
-				 deltausecs / 1000u, deltausecs % 1000u);
-		} else {
-			snprintf(field, sizeof(field), "%10u: ",
-				 ep->time - knllog.lasttime);
-		}
+		snprintf(field, sizeof(field), "%6ld: ", ticks_d);
 		strlcat(line, field, linelen);
+	}
+
+	if (knllog.msec) {
+		snprintf(field, sizeof(field), "%6ld.%03ld: ",
+				*usec_accum / USEC_PER_MSEC,
+				*usec_accum % USEC_PER_MSEC);
+		strlcat(line, field, linelen);
+
+		if (knllog.deltatime) {
+			snprintf(field, sizeof(field), "%6ld.%03ld: ",
+					usec_d / USEC_PER_MSEC,
+					usec_d % USEC_PER_MSEC);
+			strlcat(line, field, linelen);
+		}
 	}
 #if defined ( CONFIG_BCM_PERFCNT_SUPPORT )
 	if (knllog.use_perfcnt) {
@@ -750,12 +814,12 @@ static void decodeEvent(KNLLOG_ENTRY * ep, char **linepp, int linelen,
 #ifdef CONFIG_NET
 /****************************************************************************
 *
-*  socksend
+*  knllog_socksend
 *
 *   send on a socket.
 *
 ***************************************************************************/
-static int socksend(char *bufp, int size)
+static int knllog_socksend(char *bufp, int size)
 {
 	struct msghdr msg;
 	struct iovec iov;
@@ -771,7 +835,7 @@ static int socksend(char *bufp, int size)
 #endif
 
 /* Get a banner to print to the various output mechanisms */
-static void getBanner(char **linepp, int maxlen, int events)
+static void knllog_get_banner(char **linepp, int maxlen, int events)
 {
 	char tmp[160];
 	char *tmpp = tmp;
@@ -780,7 +844,7 @@ static void getBanner(char **linepp, int maxlen, int events)
 		 "Kernel Log Dump Start (logging disabled while dumping)...\n");
 	snprintf(tmpp, sizeof(tmp),
 		 "%u ticks/sec, %u (0x%08x) max_timestamp, %d entries\n",
-		 timer_get_tick_rate(), ~0, ~0, events);
+		 knllog.tick_rate, ~0, ~0, events);
 	strncat(*linepp, tmpp, maxlen);
 #if defined ( XCONFIG_BCM_PERFCNT_SUPPORT )
 	if (knllog.use_perfcnt) {
@@ -789,28 +853,49 @@ static void getBanner(char **linepp, int maxlen, int events)
 			 knllog.deltatime ? "/deltas" : "",
 			 perfcnt_get_evtstr0(), perfcnt_get_evtstr1());
 		strncat(*linepp, tmpp, maxlen);
-	} else
+	}
+#else
+
+#if defined(CONFIG_SMP)
+	strncat(*linepp, "cpu/", maxlen);
 #endif
+
+	strncat(*linepp, "ticks/", maxlen);
+
+#if defined(KNLLOG_CPUFREQ_TAG)
+	strncat(*linepp, "tick_rate/", maxlen);
+#endif
+
 	if (knllog.deltatime) {
-		snprintf(tmpp, sizeof(tmp), "ticks/deltas\n");
-		strncat(*linepp, tmpp, maxlen);
+		strncat(*linepp, "tick_rate_delta/", maxlen);
+	}
+
+	if (knllog.msec) {
+		strncat(*linepp, "msec/", maxlen);
+
+		if (knllog.deltatime)
+			strncat(*linepp, "msec_delta/", maxlen);
+	}
+
+	strncat(*linepp, "function/log\n", maxlen);
+#endif
+
 #if !defined ( CONFIG_ARCH_BCMHANA )
 		snprintf(tmpp, sizeof(tmp), "/bus_idle");
 		strncat(*linepp, tmpp, maxlen);
 #endif
 		snprintf(tmpp, sizeof(tmp), "\n");
 		strncat(*linepp, tmpp, maxlen);
-	}
 
 	(*linepp)[maxlen - 1] = '\0';
 }
 
 /* Output a string to one of the various output mechanisms */
-static int outputStr(char *str, int verbose)
+static int knllog_print(char *str, int verbose)
 {
 #ifdef CONFIG_NET
 	if (knllog.sock) {
-		int rc = socksend(str, strlen(str));
+		int rc = knllog_socksend(str, strlen(str));
 		if (rc != 0) {
 			return rc;
 		}
@@ -848,6 +933,9 @@ static int outputStr(char *str, int verbose)
 ***************************************************************************/
 static int knllog_thread(void *data)
 {
+	KNLLOG_ENTRY ep_prev;
+	long usec_accum = 0;
+
 	daemonize("knllog");
 
 	while (1) {
@@ -944,11 +1032,12 @@ static int knllog_thread(void *data)
 			{
 				char line[320];
 				char *linep = line;
-				getBanner(&linep, sizeof(line),
+				knllog_get_banner(&linep, sizeof(line),
 					  knllog.eventsToDump);
-				outputStr(line, 1);
+				knllog_print(line, 1);
 			}
 
+			usec_accum = 0;
 			while (knllog.dumping
 			       && (knllog.eventsDumped < knllog.eventsToDump)) {
 				KNLLOG_ENTRY *ep =
@@ -956,23 +1045,22 @@ static int knllog_thread(void *data)
 
 				char line[160];
 				char *linep = line;
-				decodeEvent(ep, &linep, sizeof(line),
-					    knllog.eventsDumped);
-				outputStr(linep, 0);
+				knllog_decode_event(ep, &ep_prev,
+					&linep, sizeof(line),
+					knllog.eventsDumped, &usec_accum);
+				knllog_print(linep, 0);
 
 				if (knllog.eventIdx >= knllog.entries) {
 					knllog.eventIdx = 0;
 				}
-				knllog.lasttime = ep->time;
-
 				knllog.eventsDumped++;
 
 				if (knllog.eventsDumped % 100 == 0) {
 					msleep(knllog.sleeptime);
 				}
-
+				memcpy(&ep_prev, ep, sizeof(KNLLOG_ENTRY));
 			}
-			outputStr("Kernel Log Dump End...\n", 1);
+			knllog_print("Kernel Log Dump End...\n", 1);
 
 cleanup:
 #ifdef CONFIG_NET
@@ -1044,6 +1132,10 @@ void knllog_init(void)
 	knllog.enable = 0;	/* Logging on by default */
 	knllog.entries = KNLLOG_DEFAULT_ENTRIES;
 	knllog.maxargs = MAXARGS;
+	knllog_update_tickrate();
+	cpufreq_register_notifier(&cpufreq_chng_notifier,
+			CPUFREQ_TRANSITION_NOTIFIER);
+
 	knllog.bufp =
 	    (KNLLOG_ENTRY *) vmalloc(sizeof(KNLLOG_ENTRY) * knllog.entries);
 	if (knllog.bufp == NULL) {
@@ -1107,6 +1199,8 @@ void knllog_exit(void)
 		vfree(knllog.bufp);
 		knllog.bufp = NULL;
 	}
+	cpufreq_unregister_notifier(&cpufreq_chng_notifier,
+			CPUFREQ_TRANSITION_NOTIFIER);
 }
 
 inline void knllog_add_entry(const char *function, const char *fmt,
@@ -1123,6 +1217,7 @@ inline void knllog_add_entry(const char *function, const char *fmt,
 	spin_lock_irqsave(&knllock, flags);
 	entryp = &knllog.bufp[knllog.idx];
 	entryp->time = getTime();
+	entryp->tick_rate = knllog.tick_rate;
 
 #if defined ( CONFIG_BCM_PERFCNT_SUPPORT )
 	perfcnt_availability_check();
@@ -1183,7 +1278,9 @@ void knllog_dump(void)
 	char banner[320];
 	char *bannerp = banner;
 	int i, start, entries;
-	knllog.lasttime = 0;
+	long usec_accum = 0;
+	KNLLOG_ENTRY ep_prev;
+
 	if (knllog.bufp == NULL) {
 		printk(KERN_ERR "Error: No log buffer allocated\n");
 		return;
@@ -1196,14 +1293,15 @@ void knllog_dump(void)
 		start = knllog.idx;
 		entries = knllog.entries;
 	}
-	getBanner(&bannerp, sizeof(banner), entries);
+	knllog_get_banner(&bannerp, sizeof(banner), entries);
 	printk(bannerp);
 
 	for (i = 0; i < entries; i++) {
 		char line[160];
 		char *linep = line;
 		KNLLOG_ENTRY *ep = &knllog.bufp[start++];
-		decodeEvent(ep, &linep, sizeof(line), i);
+		knllog_decode_event(ep, &ep_prev,
+			&linep, sizeof(line), i, &usec_accum);
 
 		/* Print the event */
 		printk(linep);
@@ -1211,7 +1309,7 @@ void knllog_dump(void)
 		if (start >= knllog.entries) {
 			start = 0;
 		}
-		knllog.lasttime = ep->time;
+		memcpy(&ep_prev, ep, sizeof(KNLLOG_ENTRY));
 	}
 	printk(KERN_NOTICE "Kernel Log Dump End...\n");
 }
@@ -1285,6 +1383,14 @@ void knllog_sleeptime(int msec)
 	spin_lock_irqsave(&knllock, flags);
 	knllog.sleeptime = msec;
 	spin_unlock_irqrestore(&knllock, flags);
+}
+
+/*
+ * Update the knllog tick rate with a current CPU tick rate
+ */
+static void knllog_update_tickrate(void)
+{
+	knllog.tick_rate = timer_get_tick_rate();
 }
 
 /****************************************************************************

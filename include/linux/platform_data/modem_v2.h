@@ -114,6 +114,9 @@ struct modem_data {
 	char *name;
 
 	unsigned gpio_cp_on;
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)
+	unsigned gpio_cp_on2;
+#endif
 	unsigned gpio_cp_off;
 	unsigned gpio_reset_req_n;
 	unsigned gpio_cp_reset;

@@ -24,7 +24,7 @@
 #endif
 
 /* GPIO */
-#define AMI_GPIO_INT                    135	/* Ball MPHI_RUN1 */
+#define AMI_GPIO_INT                    0 /* INT is not used, even though is connected to GPIO 135 (Ball MPHI_RUN1) */
 #define AMI_GPIO_DRDY                   0
 
 /* sensor position */

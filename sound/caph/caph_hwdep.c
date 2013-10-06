@@ -429,6 +429,7 @@ static int hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
 	int data;
 	static UserCtrl_data_t *dataptr;
 	brcm_alsa_chip_t *pChip = NULL;
+	struct treq_sysparm_t *eq;
 
 	pChip = (brcm_alsa_chip_t *)hw->card->private_data;
 
@@ -849,6 +850,79 @@ static int hwdep_ioctl(struct snd_hwdep *hw, struct file *file,
 		    AUDDRV_User_CtrlDSP(AUDDRV_USER_EQ_CTRL, enable, size,
 					(void *)&(dataptr->data[2]));
 		if (!enable) {
+			kfree(dataptr);
+			dataptr = NULL;
+		}
+		break;
+	case Ctrl_Ioctl_SWEQParm:
+		aTrace(LOG_ALSA_INTERFACE,
+			"ALSA-CAPH hwdep_ioctl Ctrl_Ioctl_SWEQParm");
+		eq = kzalloc(sizeof(*eq), GFP_KERNEL);
+		if (eq == NULL) {
+			aError("treq_sysparm_t mem alloc failed");
+			return -ENOMEM;
+		}
+
+		/* get the sysparm from driver
+		 SW EQ is only for music playback for now*/
+		if (copy_from_user(eq, (int __user *)arg,
+			sizeof(struct treq_sysparm_t)))
+			return -EFAULT;
+
+		ret = AUDDRV_Get_TrEqParm((void *)eq,
+			sizeof(*eq), AUDIO_APP_MUSIC,
+			(eq->data)[TREQ_DATA_SIZE-1]);
+
+		if (!ret) {
+			if (copy_to_user((void __user *)arg, eq,
+			sizeof(*eq))) {
+				if (eq != NULL) {
+					kfree(eq);
+					eq = NULL;
+				}
+				return -EFAULT;
+			}
+		}
+
+		if (eq != NULL) {
+			kfree(eq);
+			eq = NULL;
+		}
+		break;
+
+	case Ctrl_Ioctl_MBCParm:
+		aTrace(LOG_ALSA_INTERFACE,
+			"ALSA-CAPH hwdep_ioctl Ctrl_Ioctl_MBCParm");
+		if (dataptr == NULL)
+			dataptr = kzalloc(sizeof(UserCtrl_data_t), GFP_KERNEL);
+		else
+			memset(dataptr, 0, sizeof(UserCtrl_data_t));
+
+		if (dataptr == NULL) {
+			aError("UserCtrl_data_t mem alloc failed");
+			return -ENOMEM;
+		}
+
+		/* get the sysparm from driver */
+		if (copy_from_user
+		    (dataptr, (int __user *)arg, sizeof(UserCtrl_data_t)))
+			return -EFAULT;
+
+		size = dataptr->data[0];
+		ret = AUDDRV_Get_MBCParm((void *)(&dataptr->data[1]), size);
+
+		if (!ret) {
+			if (copy_to_user((void __user *)arg, dataptr,
+			sizeof(UserCtrl_data_t))) {
+				if (dataptr != NULL) {
+					kfree(dataptr);
+					dataptr = NULL;
+				}
+				return -EFAULT;
+			}
+		}
+
+		if (dataptr != NULL) {
 			kfree(dataptr);
 			dataptr = NULL;
 		}

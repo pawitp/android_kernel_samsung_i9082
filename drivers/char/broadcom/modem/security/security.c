@@ -74,6 +74,8 @@ the GPL, without Broadcom's express prior written consent
 
 MODULE_LICENSE("GPL");
 
+//#define USE_BRCM_SIMCLOCK_SOLUTION
+//jseseo Samsung use BCM 2nd MEP solution.
 /**
  *  module data
  */
@@ -88,11 +90,26 @@ struct _SEC_Module_t {
 static SEC_Module_t sModule = { 0 };
 
 /**
+ * module device
+ */
+static struct device *drvdata;
+
+
+#define PAGE_SIZE_UP(addr)	(((addr)+((PAGE_SIZE)-1))&(~((PAGE_SIZE)-1)))
+#define IS_PAGE_ALIGNED(addr)	(!((addr) & (~PAGE_MASK)))
+
+/**
  *  private data for each session
  */
 struct _SEC_PrivData_t {
 	struct file *mUserfile;
+	/* Lock for the allocation list and ioctl/mmap */
+	struct mutex lock;
+	dma_addr_t handle;
+	void *dma_addr;
+	unsigned long size;
 	/* **FIXME** MAG - anything else needed? */
+
 };
 #define SEC_PrivData_t struct _SEC_PrivData_t
 
@@ -108,6 +125,7 @@ static ssize_t sec_write(struct file *filep, const char __user *buf, size_t len,
 			 loff_t *off);
 static long sec_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 static unsigned int sec_poll(struct file *filp, poll_table *wait);
+static int sec_mmap(struct file *filp, struct vm_area_struct *vma);
 
 /*****************************************************************/
 static long handle_is_lock_on_ioc(struct file *filp, unsigned int cmd,
@@ -123,12 +141,14 @@ static long handle_get_remain_attempt_info_ioc(struct file *filp,
 					       unsigned long param);
 static long handle_get_imei_ioc(struct file *filp, unsigned int cmd,
 				unsigned long param);
+static long handle_set_lock_state_ioc(struct file *filp, unsigned int cmd,
+				unsigned long param);
 static long handle_hdcp_aes_ioc(struct file *filp,
 					unsigned int cmd, unsigned long param);
 static Boolean read_imei(UInt8 *imeiStr1, UInt8 *imeiStr2);
 
-static long handle_set_lock_state_ioc(struct file *filp, unsigned int cmd,
-				unsigned long param);
+static int handle_sec_mem_req(struct file *filp, unsigned int cmd,
+						 unsigned long param);
 
 /*****************************************************************/
 
@@ -142,6 +162,7 @@ static const struct file_operations sec_ops = {
 	.write = sec_write,
 	.unlocked_ioctl = sec_ioctl,
 	.poll = sec_poll,
+	.mmap = sec_mmap,
 	.release = sec_release,
 };
 
@@ -154,7 +175,7 @@ static int sec_open(struct inode *inode, struct file *file)
 
 	pr_info("sec_open begin file=%x\n", (int)file);
 
-	priv = kmalloc(sizeof(SEC_PrivData_t), GFP_KERNEL);
+	priv = kzalloc(sizeof(SEC_PrivData_t), GFP_KERNEL);
 
 	if (!priv) {
 		pr_info("rpcipc_open mem allocation fail file=%x\n", (int)file);
@@ -162,6 +183,7 @@ static int sec_open(struct inode *inode, struct file *file)
 	} else {
 		priv->mUserfile = file;
 		file->private_data = priv;
+		mutex_init(&priv->lock);
 	}
 
 	return ret;
@@ -176,6 +198,12 @@ static int sec_release(struct inode *inode, struct file *file)
 
 	pr_info("sec_release begin file=%x\n", (int)file);
 
+	if (!priv->size || !priv->dma_addr || !priv->handle)
+		goto out_free;
+
+	dma_free_coherent(drvdata, priv->size, priv->dma_addr, priv->handle);
+
+out_free:
 	kfree(priv);
 
 	return 0;
@@ -211,44 +239,57 @@ static long sec_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case SEC_SIMLOCK_IS_LOCK_ON_IOC:
 		{
+			pr_info("SEC_SIMLOCK_IS_LOCK_ON_IOC\n");
 			retVal = handle_is_lock_on_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_SIMLOCK_SET_LOCK_IOC:
 		{
+			pr_info("SEC_SIMLOCK_SET_LOCK_IOC\n");
 			retVal = handle_set_lock_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_SIMLOCK_UNLOCK_SIM_IOC:
 		{
+			pr_info("SEC_SIMLOCK_UNLOCK_SIM_IOC\n");
 			retVal = handle_unlock_sim_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_SIMLOCK_GET_LOCK_STATE_IOC:
 		{
+			pr_info("SEC_SIMLOCK_GET_LOCK_STATE_IOC\n");
 			retVal = handle_get_lock_state_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_SIMLOCK_GET_REMAIN_ATTMPT_IOC:
 		{
+			pr_info("SEC_SIMLOCK_GET_REMAIN_ATTMPT_IOC\n");
 			retVal =
 			    handle_get_remain_attempt_info_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_GET_IMEI_IOC:
 		{
-			retVal =
-				handle_get_imei_ioc(filp, cmd, arg);
+			pr_info("SEC_GET_IMEI_IOC\n");
+			retVal = handle_get_imei_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_SIMLOCK_SET_LOCK_STATE_IOC:
 		{
+			pr_info("SEC_SIMLOCK_SET_LOCK_STATE_IOC\n");
 			retVal = handle_set_lock_state_ioc(filp, cmd, arg);
 			break;
 		}
 	case SEC_HDCP_AES_IOC:
 		{
+			pr_info("SEC_HDCP_AES_IOC\n");
 			retVal = handle_hdcp_aes_ioc(filp, cmd, arg);
+			break;
+		}
+	case SEC_MEM_ALLOC:
+		{
+			pr_info("SEC_MEM_ALLOC\n");
+			retVal = handle_sec_mem_req(filp, cmd, arg);
 			break;
 		}
 	default:
@@ -258,6 +299,48 @@ static long sec_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 
 	return retVal;
+}
+
+
+static int sec_mmap(struct file *filp, struct vm_area_struct *vma)
+{
+	int ret = 0;
+	SEC_PrivData_t *priv = (SEC_PrivData_t *)filp->private_data;
+	unsigned long vma_size;
+
+	BUG_ON(!priv);
+
+	if (!priv->size || !priv->dma_addr || !priv->handle) {
+		pr_err("sec_mmap - no memory to be mmaped for this file"
+				"size(%lu), dma_addr(%p), handle(%u)\n",
+				priv->size, priv->dma_addr, priv->handle);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	if (vma->vm_pgoff) {
+		pr_err("sec_mmap - don't support mmaping from an offset\n");
+		ret = -EINVAL;
+		goto out;
+	}
+
+	vma_size = vma->vm_end - vma->vm_start;
+	if (!IS_PAGE_ALIGNED(vma_size) || vma_size != priv->size) {
+		pr_err("sec_mmap - vma_size (%lu) is either not page aligned"
+				"or not equal to allocation size (%lu)\n",
+				vma_size, priv->size);
+		ret = -EINVAL;
+		goto out;
+	}
+
+	/* always create dma_coherent (uncached) mappings */
+	vma->vm_page_prot = pgprot_dmacoherent(vma->vm_page_prot);
+
+	ret = io_remap_pfn_range(vma, vma->vm_start,
+			virt_to_phys(priv->dma_addr) >> PAGE_SHIFT,
+			vma_size, vma->vm_page_prot);
+out:
+	return ret;
 }
 
 static long handle_is_lock_on_ioc(struct file *filp, unsigned int cmd,
@@ -304,10 +387,10 @@ static long handle_set_lock_ioc(struct file *filp, unsigned int cmd,
 
 	/* try setting lock */
 	ioc_param.set_lock_status = SIMLockSetLock(ioc_param.sim_id,
-						   (UInt8)ioc_param.action,
-						   ioc_param.full_lock_on ? TRUE
-						   : FALSE, ioc_param.lock_type,
-						   ioc_param.key);
+					(UInt8)ioc_param.action,
+					ioc_param.full_lock_on ? TRUE
+					: FALSE, ioc_param.lock_type,
+					ioc_param.key);
 
 	if (ioc_param.set_lock_status != SEC_SIMLOCK_FAILURE) {
 		ioc_param.remain_attempt =
@@ -343,44 +426,6 @@ static long handle_set_lock_ioc(struct file *filp, unsigned int cmd,
 		pr_err("handle_set_lock_ioc - copy_to_user() had error\n");
 		return -EFAULT;
 	}
-
-	return 0;
-}
-
-static long handle_set_lock_state_ioc(struct file *filp, unsigned int cmd,
-				unsigned long param)
-{
-	sec_simlock_state_t ioc_param = { 0 };
-	SYS_SIMLOCK_STATE_t sys_lock_status = { 0 };
-
-	if (copy_from_user
-	    (&ioc_param, (sec_simlock_state_t *) param,
-	     sizeof(sec_simlock_state_t)) != 0) {
-		pr_err
-		("handle_set_lock_state_ioc - copy_from_user() had error\n");
-		return -EFAULT;
-	}
-	
-
-	/* setting lock status*/
-
-	sys_lock_status.network_lock_enabled = (UInt8)ioc_param.network_lock_enabled;
-	sys_lock_status.network_subset_lock_enabled = (UInt8)ioc_param.network_subset_lock_enabled;
-	sys_lock_status.service_provider_lock_enabled =	(UInt8)ioc_param.service_provider_lock_enabled;
-	sys_lock_status.corporate_lock_enabled = (UInt8)ioc_param.corporate_lock_enabled;
-	sys_lock_status.phone_lock_enabled = (UInt8)ioc_param.phone_lock_enabled;
-	sys_lock_status.network_lock =
-				ioc_param.network_lock;
-	sys_lock_status.network_subset_lock =
-				ioc_param.network_subset_lock;
-	sys_lock_status.service_provider_lock =
-				ioc_param.service_provider_lock;
-	sys_lock_status.corporate_lock = ioc_param.corporate_lock;
-	sys_lock_status.phone_lock = ioc_param.phone_lock;
-
-	SIMLOCKApi_SetStatusEx(ioc_param.sim_id, &sys_lock_status);
-
-	
 
 	return 0;
 }
@@ -451,8 +496,7 @@ static long handle_get_lock_state_ioc(struct file *filp, unsigned int cmd,
 	if (copy_from_user
 	    (&ioc_param, (sec_simlock_state_t *)param,
 	     sizeof(sec_simlock_state_t)) != 0) {
-		pr_err
-		    ("handle_get_lock_state_ioc - copy_from_user() had error\n");
+		pr_err("handle_get_lock_state_ioc - copy_from_user() had error\n");
 		return -EFAULT;
 	}
 
@@ -463,8 +507,7 @@ static long handle_get_lock_state_ioc(struct file *filp, unsigned int cmd,
 	if (copy_to_user
 	    ((sec_simlock_state_t *)param, &ioc_param,
 	     sizeof(sec_simlock_state_t)) != 0) {
-		pr_err
-		    ("handle_get_lock_state_ioc - copy_to_user() had error\n");
+		pr_err("handle_get_lock_state_ioc - copy_to_user() had error\n");
 		return -EFAULT;
 	}
 
@@ -479,8 +522,7 @@ static long handle_get_remain_attempt_info_ioc(struct file *filp,
 
 	if (copy_from_user(&ioc_param, (sec_simlock_remain_t *) param,
 			   sizeof(sec_simlock_remain_t)) != 0) {
-		pr_err
-		    ("handle_get_remain_attempt_info_ioc: copy_from_user error\n");
+		pr_err("handle_get_remain_attempt_info_ioc: copy_from_user error\n");
 		return -EFAULT;
 	}
 
@@ -490,8 +532,7 @@ static long handle_get_remain_attempt_info_ioc(struct file *filp,
 
 	if (copy_to_user((sec_simlock_remain_t *) param,
 			 &ioc_param, sizeof(sec_simlock_remain_t)) != 0) {
-		pr_err
-		    ("handle_get_remain_attempt_info_ioc: copy_to_user error\n");
+		pr_err("handle_get_remain_attempt_info_ioc: copy_to_user error\n");
 		return -EFAULT;
 	}
 
@@ -524,7 +565,7 @@ static long handle_get_imei_ioc(struct file *filp, unsigned int cmd,
 	}
 
 	if (FALSE == SetImeiData(SEC_SimLock_SIM_DUAL_FIRST,
-				 (UInt8 *)ioc_param.imei1_string)) {
+		 (UInt8 *)ioc_param.imei1_string)) {
 		pr_err("SetImei IMEI 1:%s Failed!!!", ioc_param.imei1_string);
 		kernel_power_off();
 		return -EFAULT;
@@ -540,6 +581,51 @@ static long handle_get_imei_ioc(struct file *filp, unsigned int cmd,
 	return 0;
 }
 
+static long handle_set_lock_state_ioc(struct file *filp, unsigned int cmd,
+				unsigned long param)
+{
+#ifdef USE_BRCM_SIMCLOCK_SOLUTION
+	pr_err("SET_LOCK_STATE_IOC is not allowed.\n");
+	return -EFAULT;
+#else
+/* To support customer implement SIMLOCK on user space*/
+	sec_simlock_state_t ioc_param = { 0 };
+	SYS_SIMLOCK_STATE_t sys_lock_status = { 0 };
+
+	if (copy_from_user
+		(&ioc_param, (sec_simlock_state_t *) param,
+		 sizeof(sec_simlock_state_t)) != 0) {
+		pr_err("handle_set_lock_state_ioc - copy_from_user() had error\n");
+		return -EFAULT;
+	}
+
+	/* setting lock status*/
+
+	sys_lock_status.network_lock_enabled =
+				(UInt8)ioc_param.network_lock_enabled;
+	sys_lock_status.network_subset_lock_enabled =
+				(UInt8)ioc_param.network_subset_lock_enabled;
+	sys_lock_status.service_provider_lock_enabled =
+				(UInt8)ioc_param.service_provider_lock_enabled;
+	sys_lock_status.corporate_lock_enabled =
+				(UInt8)ioc_param.corporate_lock_enabled;
+	sys_lock_status.phone_lock_enabled =
+				(UInt8)ioc_param.phone_lock_enabled;
+	sys_lock_status.network_lock =
+				ioc_param.network_lock;
+	sys_lock_status.network_subset_lock =
+				ioc_param.network_subset_lock;
+	sys_lock_status.service_provider_lock =
+				ioc_param.service_provider_lock;
+	sys_lock_status.corporate_lock = ioc_param.corporate_lock;
+	sys_lock_status.phone_lock = ioc_param.phone_lock;
+
+	SIMLOCKApi_SetStatusEx(ioc_param.sim_id, &sys_lock_status);
+
+	return 0;
+#endif
+}
+
 #if 0 //build error handle_hdcp_aes_ioc func (DV4.2)
 static long handle_hdcp_aes_ioc(struct file *filp, unsigned int cmd,
 						   unsigned long param)
@@ -548,15 +634,13 @@ static long handle_hdcp_aes_ioc(struct file *filp, unsigned int cmd,
 
 	ioc_param = kmalloc(sizeof(sec_hdcp_aes_data_t), GFP_KERNEL);
 	if (!ioc_param) {
-		pr_err
-		("handle_hdcp_aes_ioc: allocate memory error\n");
+		pr_err("handle_hdcp_aes_ioc: allocate memory error\n");
 		return -ENOMEM;
 	}
 
 	if (copy_from_user(ioc_param, (sec_hdcp_aes_data_t *) param,
 			   sizeof(sec_hdcp_aes_data_t)) != 0) {
-		pr_err
-		("handle_hdcp_aes_ioc: copy_from_user error\n");
+		pr_err("handle_hdcp_aes_ioc: copy_from_user error\n");
 		kfree(ioc_param);
 		return -EFAULT;
 	}
@@ -573,8 +657,7 @@ static long handle_hdcp_aes_ioc(struct file *filp, unsigned int cmd,
 
 	if (copy_to_user((sec_hdcp_aes_data_t *) param,
 			 ioc_param, sizeof(sec_hdcp_aes_data_t)) != 0) {
-		pr_err
-		 ("handle_hdcp_aes_ioc: copy_to_user error\n");
+		pr_err("handle_hdcp_aes_ioc: copy_to_user error\n");
 		kfree(ioc_param);
 		return -EFAULT;
 	}
@@ -655,6 +738,65 @@ static long handle_hdcp_aes_ioc(struct file *filp, unsigned int cmd,
 	return 0;
 }
 
+static int handle_sec_mem_req(struct file *filp, unsigned int cmd,
+						 unsigned long param)
+{
+	int ret = 0;
+	unsigned long kparam;
+	SEC_PrivData_t *priv = (SEC_PrivData_t *)filp->private_data;
+
+	BUG_ON(!priv);
+
+	mutex_lock(&priv->lock);
+
+	switch (cmd) {
+	case SEC_MEM_ALLOC:
+		/*
+		 * check if allocation is already done for this file descriptor
+		 */
+		if (priv->dma_addr || priv->handle || priv->size) {
+			pr_err("handle_sec_mem_Req - Allocation Exists\n");
+			ret = -EEXIST;
+			goto out_unlock;
+		}
+
+		if (copy_from_user(&kparam,
+			(unsigned long *)param, sizeof(unsigned long)) != 0) {
+			pr_err("handle_sec_mem_Req - copy_from_user() had error\n");
+			ret = -EFAULT;
+			goto out_unlock;
+		}
+
+		/* check if the size is valid */
+		if (!kparam) {
+			pr_err("handle_sec_mem_Req - invalid parameter passed\n");
+			ret = -EINVAL;
+			goto out_unlock;
+		}
+
+		/* Make sure size is page aligned */
+		kparam = PAGE_SIZE_UP(kparam);
+
+		priv->dma_addr = dma_alloc_coherent(drvdata, kparam,
+						&priv->handle, GFP_KERNEL);
+		if (priv->dma_addr == NULL) {
+			pr_err("handle_sec_mem_Req - dma allocation failed for size(%lukB)\n",
+					kparam/SZ_1K);
+			ret = -ENOMEM;
+			goto out_unlock;
+		}
+
+		priv->size = kparam;
+		break;
+	default:
+		ret = -ENOIOCTLCMD;
+	}
+
+out_unlock:
+	mutex_unlock(&priv->lock);
+	return ret;
+}
+
 
 /***************************************************************************/
 /**
@@ -676,11 +818,13 @@ Boolean read_imei(UInt8 *imeiStr1, UInt8 *imeiStr2)
 		goto ERROR;
 	}
 
-	if (read_imei1(imeiStr1, imeiMacStr1, IMEI_DIGITS, IMEI_MAC_DIGITS) < 0) {
+	if (read_imei1(imeiStr1, imeiMacStr1, IMEI_DIGITS,
+		IMEI_MAC_DIGITS) < 0) {
 		pr_err("ReadIMEIHexData: read_imei 1 is fail\n");
 	}
 
-	if (read_imei2(imeiStr2, imeiMacStr2, IMEI_DIGITS, IMEI_MAC_DIGITS) < 0) {
+	if (read_imei2(imeiStr2, imeiMacStr2, IMEI_DIGITS,
+		IMEI_MAC_DIGITS) < 0) {
 		pr_err("ReadIMEIHexData: read_imei 2 is fail\n");
 	}
 
@@ -715,7 +859,7 @@ int sec_simlock_get_status(sec_simlock_sim_data_t *sim_data,
 	pr_err("%s:SIM%d; is_test_sim = %d\n", __func__, simID, is_test_sim);
 	if (!sim_data || !sim_lock_state) {
 		pr_err("%s: invalid sim_data or sim_lock_state ptrs, exit\n",
-		       __func__);
+								__func__);
 		result = -1;
 	} else {
 		/* cache current SIM data */
@@ -730,7 +874,7 @@ int sec_simlock_get_status(sec_simlock_sim_data_t *sim_data,
 		sim_lock_state->network_lock = SEC_SIMLOCK_SECURITY_OPEN;
 		sim_lock_state->network_subset_lock = SEC_SIMLOCK_SECURITY_OPEN;
 		sim_lock_state->service_provider_lock =
-		    SEC_SIMLOCK_SECURITY_OPEN;
+					SEC_SIMLOCK_SECURITY_OPEN;
 		sim_lock_state->corporate_lock = SEC_SIMLOCK_SECURITY_OPEN;
 		sim_lock_state->phone_lock = SEC_SIMLOCK_SECURITY_OPEN;
 
@@ -738,13 +882,9 @@ int sec_simlock_get_status(sec_simlock_sim_data_t *sim_data,
 		pr_info("%s: SIM SECURE enabled\n", __func__);
 		/* update lock state */
 		SIMLockCheckAllLocks(simID,
-				     sim_data->imsi_string,
-				     (0 !=
-				      sim_data->gid1_len ? sim_data->
-				      gid1 : NULL),
-				     (0 !=
-				      sim_data->gid2_len ? sim_data->
-				      gid2 : NULL));
+			sim_data->imsi_string,
+			(0 != sim_data->gid1_len ? sim_data->gid1 : NULL),
+			(0 != sim_data->gid2_len ? sim_data->gid2 : NULL));
 		SIMLockUpdateSIMLockState(simID);
 
 		/* retrieve current SIM lock state for this SIM */
@@ -753,20 +893,20 @@ int sec_simlock_get_status(sec_simlock_sim_data_t *sim_data,
 		pr_info("%s: SIM SECURE not enabled\n", __func__);
 #endif
 		pr_info("%s enabled: %d, %d, %d, %d, %d\n",
-			__func__,
-			sim_lock_state->network_lock_enabled,
-			sim_lock_state->network_subset_lock_enabled,
-			sim_lock_state->service_provider_lock_enabled,
-			sim_lock_state->corporate_lock_enabled,
-			sim_lock_state->phone_lock_enabled);
+		  __func__,
+		  sim_lock_state->network_lock_enabled,
+		  sim_lock_state->network_subset_lock_enabled,
+		  sim_lock_state->service_provider_lock_enabled,
+		  sim_lock_state->corporate_lock_enabled,
+		  sim_lock_state->phone_lock_enabled);
 
 		pr_info("%s status: %d, %d, %d, %d, %d\n",
-			__func__,
-			sim_lock_state->network_lock,
-			sim_lock_state->network_subset_lock,
-			sim_lock_state->service_provider_lock,
-			sim_lock_state->corporate_lock,
-			sim_lock_state->phone_lock);
+		  __func__,
+		  sim_lock_state->network_lock,
+		  sim_lock_state->network_subset_lock,
+		  sim_lock_state->service_provider_lock,
+		  sim_lock_state->corporate_lock,
+		  sim_lock_state->phone_lock);
 	}
 
 	return result;
@@ -782,7 +922,6 @@ static int major;
  */
 static int __init bcm_sec_ModuleInit(void)
 {
-	struct device *drvdata;
 	pr_info("enter bcm_sec_ModuleInit()\n");
 
 	major = register_chrdev(0, BCM_SEC_NAME, &sec_ops);
@@ -807,6 +946,9 @@ static int __init bcm_sec_ModuleInit(void)
 		class_destroy(sModule.mDriverClass);
 		return PTR_ERR(drvdata);
 	}
+
+	/* Need to set this if we are going to dma allocations */
+	drvdata->coherent_dma_mask = ((u64)~0);
 
 	pr_info("exit bcm_sec_ModuleInit()\n");
 	return 0;

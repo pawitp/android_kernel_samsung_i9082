@@ -109,7 +109,7 @@ void bq24272_stop_chg()
 	
 	bq24272_test_read(client);
 }
-void bq24272_start_chg()
+void bq24272_start_chg(int type)
 {
 	struct i2c_client * client;
 	u8 data=0;
@@ -117,13 +117,22 @@ void bq24272_start_chg()
 	client = global_client;
 	if( !client) return;
 
-	pr_info("%s\n",__func__);
+	pr_info("%s : %s\n",__func__,(type?"TA":"USB"));
 	
-	data = CHG_VOLTAGE_4_4V | INLIMIT_IN_2_5A;
+	data = CHG_VOLTAGE_4_36V | INLIMIT_IN_2_5A;
 	bq24272_write_reg(client,RQ24272_VOLTAGE,data);
 
-	data = CHG_CURRENT_1600mA|EOC_100MA|BASE_EOC_50MA;
-	bq24272_write_reg(client,RQ24272_CHG_CURRENT,data);		
+	if( type ) // TA
+	{
+		data = CHG_CURRENT_1750mA|EOC_100MA|BASE_EOC_50MA;
+		bq24272_write_reg(client,RQ24272_CHG_CURRENT,data);		
+	}
+	else  // USB
+	{
+		data = CHG_550MA|EOC_100MA|BASE_EOC_50MA;
+		bq24272_write_reg(client,RQ24272_CHG_CURRENT,data);		
+	
+	}
 
 
 	bq24272_read_reg(client, RQ24272_CONTROL, &data);
@@ -142,7 +151,7 @@ bool bq24272_chg_init(struct i2c_client *client)
 {
 	u8 data=0;
 	
-	data = CHG_VOLTAGE_4_4V | INLIMIT_IN_2_5A;
+	data = CHG_VOLTAGE_4_36V | INLIMIT_IN_2_5A;
 	bq24272_write_reg(client,RQ24272_VOLTAGE,data);
 
 	data = DISABLE_SAFE_TIMERS|TS_DISABLE;

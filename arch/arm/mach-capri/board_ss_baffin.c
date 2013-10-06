@@ -12,7 +12,7 @@
 * consent.
 *****************************************************************************/
 
-#define CAPRI_BOARD_ID CAPRI_SS
+#define CAPRI_BOARD_ID CAPRI_SS_BAFFIN
 #include "board_template.c"
 
 #if defined (CONFIG_CAPRI_28145)

@@ -27,6 +27,9 @@
 
 #include <mach/vc_pmu_request.h>
 
+#include <linux/io.h>
+
+
 #define VC_PMU_REG_COUNT 4
 
 # undef ENABLE_LOG_DBG
@@ -63,6 +66,8 @@ struct vc_pmu_req_state {
 
 static struct vc_pmu_req_state *vc_pmu_req_stt;
 
+static unsigned int vir_addr;
+
 /*============================================================================*/
 static int vc_pmu_req_parse(struct vc_pmu_req_state *s)
 {
@@ -72,6 +77,7 @@ static int vc_pmu_req_parse(struct vc_pmu_req_state *s)
 	size_t len = strlen(s->names);
 
 	size_t name_idx;
+
 
 	/* The name list is a comma and whitespace separated list. */
 	for (name_idx = 0; name_idx <= len; name_idx++) {
@@ -87,7 +93,7 @@ static int vc_pmu_req_parse(struct vc_pmu_req_state *s)
 				LOG_INFO("%s : got regulator %s",
 					__func__, reg_name);
 				s->regulators[reg_idx++].supply = reg_name;
-				reg_name = NULL;
+				
 			}
 		} else if (in_separator) {
 			/* Start of new entry. */
@@ -165,7 +171,20 @@ static int vc_pmu_req_probe(struct platform_device *p_dev)
 		vc_pmu_req_resume();
 	}
 
+	/*update N.C GPIOs to input, will move to VC later */
+#if 0 //defined(CONFIG_MACH_CAPRI_SS_CRATER)
+	gpio_direction_input(14);
+	gpio_direction_input(45);
+	gpio_direction_input(46);
+#endif
+
 	LOG_INFO("%s: end, ret=%d", __func__, ret);
+	
+	vir_addr=0;
+#if defined(CONFIG_MACH_CAPRI_SS_CRATER_REV02A) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03A)
+	vir_addr = (unsigned int)ioremap(0x35004800, 4096);
+	writel(0x303, vir_addr+0x148);
+#endif
 	return ret;
 }
 
@@ -219,10 +238,15 @@ int vc_pmu_req_suspend(void)
 	struct vc_pmu_req_state *s = vc_pmu_req_stt;
 
 	LOG_DBG("%s: start", __func__);
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN) || defined(CONFIG_MACH_CAPRI_SS_CRATER)
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV00)
 	gpio_request(3,"lcd_1v8");
 	gpio_direction_output(3,0);
 	gpio_free(3);
+#elif defined(CONFIG_MACH_CAPRI_SS_CRATER_REV02A) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03A)
+	gpio_request(16,"lcd_1v8");
+	gpio_direction_output(16,0);
+	gpio_free(16);
+	LOG_DBG("%s: Disable GPIO 16", __func__);
 #endif
 
 	if (!s)
@@ -246,10 +270,15 @@ int vc_pmu_req_resume(void)
 
 	LOG_DBG("%s: start", __func__);
 
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN) || defined(CONFIG_MACH_CAPRI_SS_CRATER)
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV00)
         gpio_request(3,"lcd_1v8");
         gpio_direction_output(3,1);
         gpio_free(3);
+#elif defined(CONFIG_MACH_CAPRI_SS_CRATER_REV02A) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03) || defined(CONFIG_MACH_CAPRI_SS_CRATER_REV03A)
+        gpio_request(16,"lcd_1v8");
+        gpio_direction_output(16,1);
+        gpio_free(16);
+		LOG_DBG("%s: enable GPIO 16", __func__);
 #endif
 
 	if (!s)

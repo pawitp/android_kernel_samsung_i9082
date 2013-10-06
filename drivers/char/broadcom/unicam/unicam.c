@@ -427,9 +427,8 @@ static void unicam_open_csi(unsigned int port, unsigned int clk_src)
 		reg_write(padctl_base, PADCTRLREG_DCLK1_OFFSET, value);
 
 		dig_chan_clk = clk_get(NULL, "dig_ch0_clk");
-		if (!dig_chan_clk) {
+		if (IS_ERR(dig_chan_clk))
 			err_print("%s: error get clock\n", __func__);
-		}
 
 		ret = clk_enable(dig_chan_clk);
 		if (ret) {
@@ -455,9 +454,8 @@ static void unicam_open_csi(unsigned int port, unsigned int clk_src)
 		reg_write(padctl_base, PADCTRLREG_GPIO32_OFFSET, value);
 
 		dig_chan_clk = clk_get(NULL, "dig_ch1_clk");
-		if (!dig_chan_clk) {
+		if (IS_ERR(dig_chan_clk))
 			err_print("%s: error get clock\n", __func__);
-		}
 
 		ret = clk_enable(dig_chan_clk);
 		if (ret) {
@@ -509,14 +507,14 @@ static void unicam_close_csi(unsigned int port, unsigned int clk_src)
 	if (clk_src == 0) {
 		// Disable Dig Clk0
 		dig_chan_clk = clk_get(NULL, "dig_ch0_clk");
-		if (!dig_chan_clk)
+		if (IS_ERR(dig_chan_clk))
 			return;
 
 		clk_disable(dig_chan_clk);
 	} else {
 		// Disable Dig Clk1
 		dig_chan_clk = clk_get(NULL, "dig_ch1_clk");
-		if (!dig_chan_clk)
+		if (IS_ERR(dig_chan_clk))
 			return;
 
 		clk_disable(dig_chan_clk);
@@ -541,9 +539,9 @@ static int enable_unicam_clock(void)
 	struct clk *unicam_clk;
 
 	unicam_clk = clk_get(NULL, "csi0_axi_clk");
-	if (!unicam_clk) {
+	if (IS_ERR(unicam_clk)) {
 		err_print("%s: error get clock\n", __func__);
-		return -EIO;
+		return PTR_ERR(unicam_clk);
 	}
 
 	ret = clk_enable(unicam_clk);
@@ -569,7 +567,7 @@ static void disable_unicam_clock(void)
 	struct clk *unicam_clk;
 
 	unicam_clk = clk_get(NULL, "csi0_axi_clk");
-	if (!unicam_clk)
+	if (IS_ERR(unicam_clk))
 		return;
 
 	clk_disable(unicam_clk);

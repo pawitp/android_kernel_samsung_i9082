@@ -61,6 +61,9 @@ struct alarm_queue {
 };
 
 static struct rtc_device *alarm_rtc_dev;
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+static struct rtc_device *powerup_rtc_dev;
+#endif
 static DEFINE_SPINLOCK(alarm_slock);
 static DEFINE_MUTEX(alarm_setrtc_mutex);
 static struct wake_lock alarm_rtc_wake_lock;
@@ -294,11 +297,81 @@ int alarm_set_rtc(struct timespec new_time)
 	if (ret < 0)
 		pr_alarm(ERROR, "alarm_set_rtc: "
 			"Failed to set RTC, time will be lost on reboot\n");
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+	if (powerup_rtc_dev) {
+		pr_alarm(TSET, "alarm_set_rtc: save rtc on ext RTC\n");
+		rtc_set_time(powerup_rtc_dev, &rtc_new_rtc_time);
+	}
+#endif
+
 err:
 	wake_unlock(&alarm_rtc_wake_lock);
 	mutex_unlock(&alarm_setrtc_mutex);
 	return ret;
 }
+
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+int alarm_powerup_cancel(void)
+{
+	struct rtc_wkalrm alarm;
+	int ret;
+
+	wake_lock(&alarm_rtc_wake_lock);
+
+	if (!powerup_rtc_dev) {
+		pr_alarm(ERROR,
+			"alarm_powerup_cancel: no powerup RTC\n");
+		ret = -ENODEV;
+		goto err;
+	}
+
+	alarm.enabled = 0;
+	ret = rtc_set_alarm(powerup_rtc_dev, &alarm);
+	if (ret < 0)
+		pr_alarm(ERROR, "alarm_powerup_cancel: "
+			"failed to set powerup-alarm\n");
+
+err:
+	wake_unlock(&alarm_rtc_wake_lock);
+	return ret;
+}
+
+int alarm_powerup_set_alarm(struct timespec new_time)
+{
+	struct rtc_wkalrm alarm;
+	int ret;
+
+	wake_lock(&alarm_rtc_wake_lock);
+
+	rtc_time_to_tm(new_time.tv_sec, &alarm.time);
+	alarm.enabled = 1;
+
+	pr_alarm(TSET, "set powerup-alarm %ld %ld - "
+		"rtc %02d:%02d:%02d %02d/%02d/%04d\n",
+		new_time.tv_sec, new_time.tv_nsec,
+		alarm.time.tm_hour, alarm.time.tm_min,
+		alarm.time.tm_sec, alarm.time.tm_mon + 1,
+		alarm.time.tm_mday,
+		alarm.time.tm_year + 1900);
+
+	if (!powerup_rtc_dev) {
+		pr_alarm(ERROR,
+			"alarm_powerup_set_alarm: no powerup RTC\n");
+		ret = -ENODEV;
+		goto err;
+	}
+
+	ret = rtc_set_alarm(powerup_rtc_dev, &alarm);
+	if (ret < 0)
+		pr_alarm(ERROR, "alarm_powerup_set_alarm: "
+			"failed to set powerup-alarm\n");
+
+err:
+	wake_unlock(&alarm_rtc_wake_lock);
+	return ret;
+}
+#endif
+
 #if defined(CONFIG_RTC_CHN_ALARM_BOOT)
 #define BOOTALM_BIT_EN       0
 #define BOOTALM_BIT_YEAR     1
@@ -546,10 +619,26 @@ static int rtc_alarm_add_device(struct device *dev,
 
 	mutex_lock(&alarm_setrtc_mutex);
 
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+	if (alarm_rtc_dev) {
+		if (!powerup_rtc_dev) {
+			powerup_rtc_dev = rtc;
+			pr_alarm(INIT_STATUS, "using rtc device %s,"
+				"for powerup-alarms", rtc->name);
+			mutex_unlock(&alarm_setrtc_mutex);
+			return 0;
+		} else {
+			err = -EBUSY;
+			goto err1;
+		}
+	}
+#else
 	if (alarm_rtc_dev) {
 		err = -EBUSY;
 		goto err1;
 	}
+#endif /* CONFIG_BCM_RTC_ALARM_BOOT */`
+
 
 	alarm_platform_dev =
 		platform_device_register_simple("alarm", -1, NULL, 0);

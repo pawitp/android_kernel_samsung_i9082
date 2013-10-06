@@ -38,4 +38,5 @@ obj-$(CONFIG_BACKLIGHT_ADP8870)	+= adp8870_bl.o
 obj-$(CONFIG_BACKLIGHT_88PM860X) += 88pm860x_bl.o
 obj-$(CONFIG_BACKLIGHT_PCF50633)	+= pcf50633-backlight.o
 obj-$(CONFIG_BACKLIGHT_KTD3102) += ktd_bl.o
+obj-$(CONFIG_BACKLIGHT_KTD3103) += ktd3103_bl.o
 obj-$(CONFIG_TOUCHKEY_BACKLIGHT)	+= bcm_touchkey_led.o

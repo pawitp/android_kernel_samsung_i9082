@@ -718,9 +718,11 @@ static int bcm_fuse_net_poll(struct napi_struct *napi, int budget)
 		data_len = RPC_PACKET_GetBufferLength(curBuf);
 		skb = dev_alloc_skb(data_len);
 		if (skb == NULL) {
-			BNET_DEBUG(DBG_ERROR,
+			if (printk_ratelimit()) {
+				BNET_DEBUG(DBG_ERROR,
 				   "%s: dev_alloc_skb() failed, just return\n",
-			 __func__);
+				__func__);
+			}
 			spin_unlock(&g_dev_lock);
 
 			/*as there is no more memory left, we just return*/

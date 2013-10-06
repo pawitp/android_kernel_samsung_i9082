@@ -76,7 +76,7 @@ static ssize_t mode_store(struct device *dev, struct device_attribute *attr,
  error:
 	return ret;
 }
-extern int fsa9485_get_vbus_status();
+//extern int fsa9485_get_vbus_status();
 static ssize_t booster_show(struct device *dev, struct device_attribute *attr,
 			    char *buf)
 {
@@ -84,11 +84,11 @@ static ssize_t booster_show(struct device *dev, struct device_attribute *attr,
 	    dev_get_drvdata(dev);
 	char *booster;
 
-       if( fsa9485_get_vbus_status())
+/*       if( fsa9485_get_vbus_status())
         	ndev->booster=NOTIFY_POWER_ON;
 	   else
 	   	ndev->booster=NOTIFY_POWER_OFF;
-
+*/
 	switch (ndev->booster) {
 	case NOTIFY_POWER_ON:
 		booster = "ON";
@@ -99,7 +99,7 @@ static ssize_t booster_show(struct device *dev, struct device_attribute *attr,
 		break;
 	}
 
-	printk(KERN_INFO "host_notify: read booster %s\n", booster);
+	printk(KERN_INFO "USBD] host_notify: read booster %s\n", booster);
 	return sprintf(buf, "%s\n", booster);
 }
 
@@ -122,13 +122,13 @@ static ssize_t booster_store(struct device *dev, struct device_attribute *attr,
 		printk(KERN_INFO "host_notify: set booster %s\n", booster);
 		if (!strcmp(booster, "ON")) {
 			ndev->mode = NOTIFY_TEST_MODE;
-			ndev->set_booster(NOTIFY_SET_ON);
+			//ndev->set_booster(NOTIFY_SET_ON);
 			ndev->booster = NOTIFY_POWER_ON;
 			
 		} else if (!strcmp(booster, "OFF")) {
 			ndev->mode = NOTIFY_NONE_MODE;
 			ndev->booster = NOTIFY_POWER_OFF;
-			ndev->set_booster(NOTIFY_SET_OFF);
+			//ndev->set_booster(NOTIFY_SET_OFF);
 		}
 	}
 	ret = size;

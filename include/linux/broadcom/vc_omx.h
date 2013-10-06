@@ -29,8 +29,9 @@
 #define OMX_PLUGIN__COMPONENT_SUPPORTED__WVC1            "wvc1"
 #define OMX_PLUGIN__COMPONENT_SUPPORTED__VPX             "vpx"
 #define OMX_PLUGIN__COMPONENT_SUPPORTED__SPARK           "spark"
+#define OMX_PLUGIN__COMPONENT_SUPPORTED__MIRACAST        "miracast"
 
-#define OMX_PLUGIN__COMPONENT_SUPPORTED__NUM             11
+#define OMX_PLUGIN__COMPONENT_SUPPORTED__NUM             12
 
 #define OMX_PLUGIN__MKNAME(a, b)                         a"."b
 

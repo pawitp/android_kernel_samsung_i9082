@@ -49,6 +49,7 @@ the GPL, without Broadcom's express prior written consent.
 #include <linux/proc_fs.h>	/* Necessary because we use proc fs */
 #include <linux/seq_file.h>	/* for seq_file */
 
+#include <linux/broadcom/mobcom_types.h>
 #include <linux/broadcom/bcm_major.h>
 #include <linux/broadcom/ipc_sharedmemory.h>
 #include <linux/broadcom/ipcinterface.h>
@@ -66,6 +67,7 @@ the GPL, without Broadcom's express prior written consent.
 #include "rpc_debug.h"
 
 #include <linux/broadcom/rpc_ipc_kernel.h>
+#include <linux/time.h>
 
 MODULE_LICENSE("GPL");
 
@@ -154,7 +156,7 @@ typedef struct {
 	UInt8 channel;
 	PACKET_BufHandle_t dataBufHandle;
 	RPC_FlowCtrlEvent_t event;
-	RPC_CPResetEvent_t cpResetEvent;
+	struct RpcNotificationEvent_t rpcNotificationEvent;
 } RpcCbkElement_t;
 
 typedef struct {
@@ -163,7 +165,7 @@ typedef struct {
 } RpcPktkElement_t;
 
 typedef struct {
-	UInt32 ts;
+	struct timeval ts;
 	UInt8 state;
 	UInt8 clientId;
 	int notresponding;
@@ -222,8 +224,7 @@ struct page *rpcipc_vma_nopage(struct vm_area_struct *vma,
 			       unsigned long address, int *type);
 
 /*****************************************************************/
-static void RPC_ServerCPResetCallback(RPC_CPResetEvent_t event,
-				      PACKET_InterfaceType_t interfaceType);
+static void RPC_ServerNotification(struct RpcNotificationEvent_t event);
 RPC_Result_t RPC_ServerRxCbk(PACKET_InterfaceType_t interfaceType,
 			     UInt8 channel, PACKET_BufHandle_t dataBufHandle);
 static long handle_pkt_rx_buffer_ioc(struct file *filp, unsigned int cmd,
@@ -546,9 +547,10 @@ static long rpcipc_ioctl(struct file *filp, unsigned int cmd, UInt32 arg)
 	return retVal;
 }
 
-RPC_Result_t RPC_ServerDispatchCPResetMsg(PACKET_InterfaceType_t interfaceType,
-					  UInt8 clientId,
-					  RPC_CPResetEvent_t eventType)
+RPC_Result_t RPC_ServerDispatchNotificationMsg(
+	PACKET_InterfaceType_t interfaceType,
+	UInt8 clientId,
+	struct RpcNotificationEvent_t eventType)
 {
 	RpcCbkElement_t *elem;
 	RpcClientInfo_t *cInfo;
@@ -556,22 +558,23 @@ RPC_Result_t RPC_ServerDispatchCPResetMsg(PACKET_InterfaceType_t interfaceType,
 	cInfo = gRpcClientList[clientId];
 
 	if (!cInfo) {
-		_DBG(RPC_TRACE
-		     ("k:RPC_ServerDispatchCPResetMsg invalid clientID = %d\n",
+		_DBG(RPC_TRACE(
+"k:RPC_ServerDispatchNotificationMsg invalid clientID = %d\n",
 		      clientId));
 		return RPC_RESULT_ERROR;
 	}
 
 	if (clientId == 0) {
-		_DBG(RPC_TRACE("k:RPC_ServerDispatchCPResetMsg Error !!!\n"));
+		_DBG(RPC_TRACE(
+	"k:RPC_ServerDispatchNotificationMsg Error !!!\n"));
 		return RPC_RESULT_ERROR;
 	}
 
 	elem = kmalloc(sizeof(RpcCbkElement_t), in_interrupt()?
 		       GFP_ATOMIC : GFP_KERNEL);
 	if (!elem) {
-		_DBG(RPC_TRACE
-		     ("k:RPC_ServerDispatchCPResetMsg Allocation error\n"));
+		_DBG(RPC_TRACE(
+"k:RPC_ServerDispatchNotificationMsg Allocation error\n"));
 		return RPC_RESULT_ERROR;
 	}
 	memset(elem, 0, sizeof(RpcCbkElement_t));
@@ -580,10 +583,10 @@ RPC_Result_t RPC_ServerDispatchCPResetMsg(PACKET_InterfaceType_t interfaceType,
 	elem->channel = 0;
 	elem->dataBufHandle = 0;
 	elem->event = 0;
-	elem->cpResetEvent = eventType;
+	elem->rpcNotificationEvent = eventType;
 
 	_DBG(RPC_TRACE
-	     ("RPC_ServerDispatchCPResetMsg: add to queue for client %d\n",
+	     ("RPC_ServerDispatchNotificationMsg: add to queue for client %d\n",
 	      clientId));
 
 	/* add to queue */
@@ -594,7 +597,7 @@ RPC_Result_t RPC_ServerDispatchCPResetMsg(PACKET_InterfaceType_t interfaceType,
 	cInfo->availData = 1;
 	wake_up_interruptible(&cInfo->mWaitQ);
 	_DBG(RPC_TRACE
-	     ("RPC_ServerDispatchCPResetMsg: done if:%d client:%d\n",
+	     ("RPC_ServerDispatchNotificationMsg: done if:%d client:%d\n",
 	      interfaceType, clientId));
 
 	return RPC_RESULT_OK;
@@ -856,39 +859,50 @@ RPC_Result_t RPC_ServerRxCbk(PACKET_InterfaceType_t interfaceType,
 }
 
 /* handle notifcations of CP reset from rpc_ipc layer */
-void RPC_ServerCPResetCallback(RPC_CPResetEvent_t event,
-			       PACKET_InterfaceType_t interfaceType)
+void RPC_ServerNotification(struct RpcNotificationEvent_t event)
 {
 	int k;
+	PACKET_InterfaceType_t interfaceType = event.ifType;
 
-	_DBG(RPC_TRACE("RPC_ServerCPResetCallback: event %d interface %d\n",
-		       event, interfaceType));
+	switch (event.event) {
+	case RPC_CPRESET_EVT:
+		_DBG(RPC_TRACE(
+	"RPC_ServerNotification: event %d interface %d\n",
+		       (int) event.event, interfaceType));
 
 	/* if we're already in process of resetting, just return */
-	if ((gCPResetting && (event == RPC_CPRESET_START)) ||
-	    (!gCPResetting && (event == RPC_CPRESET_COMPLETE))) {
+	if ((gCPResetting && (event.param == RPC_CPRESET_START)) ||
+	    (!gCPResetting && (event.param == RPC_CPRESET_COMPLETE))) {
 		_DBG(RPC_TRACE
-		     ("RPC_ServerCPResetCallback already handling event\n"));
+		     ("RPC_ServerNotification already handling event\n"));
 		return;
 	}
 
 	RPC_READ_LOCK;
 
 	/* start of CP reset process; notify all user space clients */
-	gCPResetting = (event == RPC_CPRESET_START);
+	gCPResetting = (event.param == RPC_CPRESET_START);
 
 	for (k = 0; k < 0xFF; k++)
 		if (gRpcClientList[k]) {
 			_DBG(RPC_TRACE
-			     ("RPC_ServerCPResetCallback: client %d\n", k));
-			if (event == RPC_CPRESET_START)
+			     ("RPC_ServerNotification: client %d\n", k));
+			if (event.param == RPC_CPRESET_START)
 				gRpcClientList[k]->ackdCPReset = 0;
-			RPC_ServerDispatchCPResetMsg(gRpcClientList[k]->info.
-						     interfaceType, k, event);
+			RPC_ServerDispatchNotificationMsg(
+				gRpcClientList[k]->info.interfaceType,
+				k, event);
 		}
 
-	_DBG(RPC_TRACE("RPC_ServerCPResetCallback: done\n"));
+	_DBG(RPC_TRACE("RPC_ServerNotification: done\n"));
 	RPC_READ_UNLOCK;
+		break;
+	default:
+		_DBG(RPC_TRACE(
+		"RPC_ServerNotification: Unsupported event %d\n",
+		(int) event.event));
+		break;
+	}
 }
 
 static unsigned int rpcipc_poll(struct file *filp, poll_table *wait)
@@ -921,7 +935,7 @@ static unsigned int rpcipc_poll(struct file *filp, poll_table *wait)
 		_DBG(RPC_TRACE("k:rpcipc_poll() precheck list not empty\n"));
 		return mask;
 	}
-	cInfo->ts = jiffies_to_msecs(jiffies);
+	do_gettimeofday(&(cInfo->ts));
 	cInfo->state = 1;
 
 	spin_unlock_bh(&cInfo->mLock);
@@ -939,7 +953,7 @@ static unsigned int rpcipc_poll(struct file *filp, poll_table *wait)
 	_DBG(RPC_TRACE("rpcipc_poll: mask = %x\n", (int)mask));
 
 	cInfo->state = 2;
-	cInfo->ts = jiffies_to_msecs(jiffies);
+	do_gettimeofday(&(cInfo->ts));
 	cInfo->availData = 0;
 
 	spin_unlock_bh(&cInfo->mLock);
@@ -965,7 +979,10 @@ static long handle_pkt_poll_ioc(struct file *filp, unsigned int cmd,
 		     ("k:handle_pkt_poll_ioc - copy_from_user() had error\n"));
 		return -EFAULT;
 	}
-	//Coverity [TAINTED_SCALAR]
+
+	if (ioc_param.clientId >= ARRAY_SIZE(gRpcClientList))
+		return -EINVAL;
+
 	cInfo = gRpcClientList[ioc_param.clientId];
 	if (!cInfo) {
 		_DBG(RPC_TRACE
@@ -980,7 +997,7 @@ static long handle_pkt_poll_ioc(struct file *filp, unsigned int cmd,
 	if (ioc_param.isEmpty)
 		cInfo->availData = 0;
 
-	cInfo->ts = jiffies_to_msecs(jiffies);
+	do_gettimeofday(&(cInfo->ts));
 	cInfo->state = 1;
 	cInfo->tid = current->pid;
 
@@ -1007,8 +1024,8 @@ static long handle_pkt_poll_ioc(struct file *filp, unsigned int cmd,
 		spin_lock_bh(&cInfo->mLock);
 		ioc_param.isEmpty = (Boolean)list_empty(&cInfo->mQ.mList);
 		cInfo->state = 2;
-		cInfo->ts = jiffies_to_msecs(jiffies);
-		spin_unlock_bh(&cInfo->mLock);
+		do_gettimeofday(&(cInfo->ts));
+	    spin_unlock_bh(&cInfo->mLock);
 	}
 
 	_DBG(RPC_TRACE
@@ -1054,7 +1071,9 @@ static long handle_pkt_rx_buffer_ioc(struct file *filp, unsigned int cmd,
 	_DBG(RPC_TRACE
 	     ("k:handle_pkt_rx_buffer_ioc client=%d\n", ioc_param.clientId));
 
-	//Coverity [TAINTED_SCALAR]
+	if (ioc_param.clientId >= ARRAY_SIZE(gRpcClientList))
+		return -EINVAL;
+
 	cInfo = gRpcClientList[ioc_param.clientId];
 
 	if (!cInfo) {
@@ -1091,7 +1110,7 @@ static long handle_pkt_rx_buffer_ioc(struct file *filp, unsigned int cmd,
 	list_add_tail(&pktElem->mList, &cInfo->pktQ.mList);
 
 	cInfo->state = 2;
-	cInfo->ts = jiffies_to_msecs(jiffies);
+	do_gettimeofday(&(cInfo->ts));
 	cInfo->notresponding = 0;
 
 	spin_unlock_bh(&cInfo->mLock);
@@ -1566,7 +1585,7 @@ static long handle_pkt_register_data_ind_ioc(struct file *filp,
 	cInfo->infoEx.interfaceType = cInfo->info.interfaceType;
 	cInfo->infoEx.dataIndFuncEx = NULL;
 	cInfo->infoEx.flowIndFunc = cInfo->info.flowIndFunc;
-	cInfo->infoEx.cpResetFunc = cInfo->info.cpResetFunc;
+	cInfo->infoEx.rpcNotificationFunc = cInfo->info.rpcNotificationFunc;
 
 	cInfo->clientId = clientId;
 	cInfo->filep = filp;
@@ -1590,7 +1609,7 @@ static long handle_pkt_register_data_ind_ioc(struct file *filp,
 	RPC_PACKET_RegisterFilterCbk(ioc_param.rpcClientID,
 				     ioc_param.interfaceType,
 				     RPC_ServerRxCbk,
-				     RPC_ServerCPResetCallback);
+				     RPC_ServerNotification);
 
 	return 0;
 }
@@ -1703,7 +1722,7 @@ static long handle_pkt_register_data_ind_ex_ioc(struct file *filp,
 	cInfo->info.interfaceType = cInfo->infoEx.interfaceType;
 	cInfo->info.dataIndFunc = NULL;
 	cInfo->info.flowIndFunc = cInfo->infoEx.flowIndFunc;
-	cInfo->info.cpResetFunc = cInfo->infoEx.cpResetFunc;
+	cInfo->info.rpcNotificationFunc = cInfo->infoEx.rpcNotificationFunc;
 
 	cInfo->clientId = clientId;
 	cInfo->filep = filp;
@@ -1726,7 +1745,7 @@ static long handle_pkt_register_data_ind_ex_ioc(struct file *filp,
 	RPC_PACKET_RegisterFilterCbk(ioc_param_ex.rpcClientID,
 				     ioc_param_ex.interfaceType,
 				     RPC_ServerRxCbk,
-				     RPC_ServerCPResetCallback);
+				     RPC_ServerNotification);
 
 	return 0;
 }
@@ -1738,10 +1757,12 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 	struct list_head *entry;
 	RpcCbkElement_t *Item = NULL;
 	rpc_pkt_rx_buf_ex_t ioc_param;
-	int jiffyBefore = jiffies;
+	unsigned int tsBefore = 0, tsnow = 0;
 	RpcPktkElement_t *pktElem = NULL;
-
-	/* coverity[ -tainted_data_argument : arg-0 ] */
+	struct timeval ts;
+	do_gettimeofday(&ts);
+	tsBefore = ts.tv_usec;
+	/* coverity[ -tainted_data_argument : arg-0 ]*/
 	if (copy_from_user
 	    (&ioc_param, (rpc_pkt_rx_buf_ex_t *) param,
 	     sizeof(rpc_pkt_rx_buf_ex_t)) != 0) {
@@ -1763,7 +1784,7 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 	if (ioc_param.isEmpty)
 		cInfo->availData = 0;
 	cInfo->state = 1;
-	cInfo->ts = jiffies_to_msecs(jiffies);
+	do_gettimeofday(&(cInfo->ts));
 	cInfo->tid = current->pid;
 	spin_unlock_bh(&cInfo->mLock);
 
@@ -1778,7 +1799,9 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 		RPC_READ_LOCK;
 
 		/* Re-evaluate cInfo after wait */
-		//Coverity [TAINTED_SCALAR]
+		if (ioc_param.clientId >= ARRAY_SIZE(gRpcClientList))
+			return -EINVAL;
+
 		cInfo = gRpcClientList[ioc_param.clientId];
 		if (!cInfo) {
 			_DBG(RPC_TRACE
@@ -1790,7 +1813,7 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 		spin_lock_bh(&cInfo->mLock);
 		ioc_param.isEmpty = (UInt8)list_empty(&cInfo->mQ.mList);
 		cInfo->state = 2;
-		cInfo->ts = jiffies_to_msecs(jiffies);
+		do_gettimeofday(&(cInfo->ts));
 		spin_unlock_bh(&cInfo->mLock);
 	}
 
@@ -1818,13 +1841,15 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 		ioc_param.isEmpty = 0;
 		ioc_param.type = Item->type;
 		ioc_param.event = Item->event;
-		ioc_param.cpResetEvent = Item->cpResetEvent;
+		ioc_param.rpcNotificationEvent = Item->rpcNotificationEvent;
 		ioc_param.dataIndFuncEx = cInfo->infoEx.dataIndFuncEx;
 		ioc_param.dataIndFunc = cInfo->info.dataIndFunc;
 		ioc_param.flowIndFunc = (cInfo->infoEx.flowIndFunc) ?
-		    cInfo->infoEx.flowIndFunc : cInfo->info.flowIndFunc;
-		ioc_param.cpResetFunc = (cInfo->infoEx.cpResetFunc) ?
-		    cInfo->infoEx.cpResetFunc : cInfo->info.cpResetFunc;
+		cInfo->infoEx.flowIndFunc : cInfo->info.flowIndFunc;
+		ioc_param.rpcNotificationFunc =
+			(cInfo->infoEx.rpcNotificationFunc) ?
+			cInfo->infoEx.rpcNotificationFunc :
+			cInfo->info.rpcNotificationFunc;
 		ioc_param.bufInfo.interfaceType = Item->interfaceType;
 		ioc_param.bufInfo.channel = Item->channel;
 		ioc_param.bufInfo.dataBufHandle = Item->dataBufHandle;
@@ -1851,20 +1876,23 @@ static long handle_pkt_poll_ex_ioc(struct file *filp, unsigned int cmd,
 		} else {
 			kfree(pktElem);
 		}
+		do_gettimeofday(&(cInfo->ts));
+		tsnow = cInfo->ts.tv_usec;
 		_DBG(RPC_TRACE
 		     ("k:handle_pkt_poll_ex_ioc cid=%d item=%x len=%d pkt=%d wait=%d\n",
 		      ioc_param.clientId, (int)Item,
 		      (int)ioc_param.bufInfo.bufferLen,
 		      (int)Item->dataBufHandle,
-		      jiffies_to_msecs(jiffies - jiffyBefore)));
+		      tsnow - tsBefore));
 
 		kfree(entry);
 
 	} else {
+		do_gettimeofday(&(cInfo->ts));
+		tsnow = cInfo->ts.tv_usec;
 		_DBG(RPC_TRACE
 		     ("k:handle_pkt_poll_ex_ioc EMPTY cid=%d wait=%d\n",
-		      (int)ioc_param.clientId,
-		      jiffies_to_msecs(jiffies - jiffyBefore)));
+		      (int)ioc_param.clientId, tsnow - tsBefore));
 	}
 
 	if (copy_to_user
@@ -2100,9 +2128,10 @@ static long handle_pkt_ack_cp_reset_ioc(struct file *filp, unsigned int cmd,
 			cInfo = gRpcClientList[k];
 			if (cInfo &&
 			    (cInfo->info.interfaceType == INTERFACE_CAPI2) &&
-			    cInfo->info.cpResetFunc && !cInfo->ackdCPReset) {
-				_DBG(RPC_TRACE
-				     ("k:handle_pkt_ack_cp_reset_ioc not ackd %d\n",
+				cInfo->info.rpcNotificationFunc &&
+					!cInfo->ackdCPReset) {
+					_DBG(RPC_TRACE(
+		"k:handle_pkt_ack_cp_reset_ioc not ackd %d\n",
 				      k));
 				bComplete = 0;
 				break;
@@ -2354,15 +2383,20 @@ int RpcDbgListClientMsgs(RpcOutputContext_t *c)
 			continue;
 
 		RpcDbgDumpStr(c,
-			      "%s cid:%d state:%s ts:%u RxData:%d Active:%d if:%d\n",
+			      "%s cid:%d state:%s ts:%u:%u RxData:%d Active:%d if:%d\n",
 			      cInfo->pidName, (int)clientId,
 			      (cInfo->state == 1) ? "Wait" : "Active",
-			      (unsigned int)cInfo->ts, (int)cInfo->availData,
+			      (unsigned int)cInfo->ts.tv_sec,
+				  (unsigned int)cInfo->ts.tv_usec,
+				  (int)cInfo->availData,
 			      (int)cInfo->notresponding,
 			      (int)cInfo->info.interfaceType);
 		RpcDumpTaskState(c, cInfo->tid, cInfo->pid);
 
-		spin_lock_bh(&cInfo->mLock);
+		if (c->protected)
+			spin_lock(&cInfo->mLock);
+		else
+			spin_lock_bh(&cInfo->mLock);
 
 		list_for_each_safe(listptr, pos, &cInfo->pktQ.mList) {
 			pktItem = list_entry(listptr, RpcPktkElement_t, mList);
@@ -2380,7 +2414,10 @@ int RpcDbgListClientMsgs(RpcOutputContext_t *c)
 				      (int)cbkItem->dataBufHandle);
 		}
 
-		spin_unlock_bh(&cInfo->mLock);
+		if (c->protected)
+			spin_unlock(&cInfo->mLock);
+		else
+			spin_unlock_bh(&cInfo->mLock);
 
 	}
 	return 0;
@@ -2399,7 +2436,7 @@ typedef struct {
 
 static void *log_seq_start(struct seq_file *s, loff_t *pos)
 {
-	static RpcLogContext_t context = { 0, 0, 0, {1, NULL, {0}} };
+	static RpcLogContext_t context = {0, 0, 0, {1, FALSE, NULL, {0} } };
 
 	context.out.type = 1;
 	context.out.seq = s;
@@ -2510,10 +2547,8 @@ void log_proc_cleanup(void)
 
 int RpcDbgDumpHistoryLogging(int type, int level)
 {
-	RpcOutputContext_t outContext;
+	RpcOutputContext_t outContext = {0, TRUE, NULL, {0} };
 	int offset = 0;
-
-	memset(&outContext, 0, sizeof(RpcOutputContext_t));
 
 	outContext.type = type;
 
@@ -2549,8 +2584,8 @@ static int __init rpcipc_ModuleInit(void)
 	int k;
 	struct device *drvdata;
 	_DBG(RPC_TRACE("enter rpcipc_ModuleInit()\n"));
-	printk(KERN_INFO"enter rpcipc_ModuleInit()\n");
-	
+	printk(KERN_DEBUG "enter rpcipc_ModuleInit()\n");
+
 	for (k = 0; k < 0xFF; k++)
 		gRpcClientList[k] = NULL;
 
@@ -2586,7 +2621,7 @@ static int __init rpcipc_ModuleInit(void)
 	DEFINE_RPC_LOCK;
 
 	_DBG(RPC_TRACE("exit rpcipc_ModuleInit()\n"));
-	printk(KERN_INFO"exit rpcipc_ModuleInit()\n");
+	printk(KERN_DEBUG "exit rpcipc_ModuleInit()\n");
 	return 0;
 }
 

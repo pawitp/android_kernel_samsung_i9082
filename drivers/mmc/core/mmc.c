@@ -110,6 +110,26 @@ static int mmc_decode_cid(struct mmc_card *card)
 		return -EINVAL;
 	}
 
+
+	/*
+	 * Vendor specification
+	 */
+	switch (card->cid.manfid) {
+	case 0x15:
+//		printk("%s, %d : %x - Samsung semi device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		break;
+
+	case 0x45:
+//		printk("%s, %d : %x - Sandisk device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		card->quirks	|= MMC_QUIRK_RESET_FOR_CARD_INIT;
+		break;
+
+	default:
+//		printk("%s, %d : %x - Unknown device\n", __FUNCTION__, __LINE__, card->cid.manfid);
+		break;
+	}
+
+
 	return 0;
 }
 
@@ -264,7 +284,7 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	card->ext_csd.rev = ext_csd[EXT_CSD_REV];
 #ifdef CONFIG_MMC_BCM_SD
-	if (card->ext_csd.rev > 6) {
+	if (card->ext_csd.rev > 7) {
 #else
 	if (card->ext_csd.rev > 3) {
 #endif
@@ -951,8 +971,18 @@ static int mmc_suspend(struct mmc_host *host)
 	BUG_ON(!host->card);
 
 	mmc_claim_host(host);
-	if (!mmc_host_is_spi(host))
+
+	if (!mmc_host_is_spi(host)) {
+		if ( host->card->quirks & MMC_QUIRK_RESET_FOR_CARD_INIT ) {
+//			printk("%s, %d : %s - Reset bus width before suspend\n", __FUNCTION__, __LINE__, mmc_hostname(host));
+			mmc_switch(host->card, EXT_CSD_CMD_SET_NORMAL, EXT_CSD_BUS_WIDTH, EXT_CSD_BUS_WIDTH_1, 0);
+		} else {
+//			printk("%s, %d : %s - Nothing do before suspend\n", __FUNCTION__, __LINE__, mmc_hostname(host));
+		}
+
 		mmc_deselect_cards(host);
+	}
+
 	host->card->state &= ~MMC_STATE_HIGHSPEED;
 	mmc_release_host(host);
 

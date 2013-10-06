@@ -28,9 +28,6 @@
 #include <linux/gpio.h>
 #include <linux/proc_fs.h>
 
-#include <linux/pm_qos_params.h>
-
-
 #ifdef CONFIG_ARCH_KONA
 
 #include <chal/chal_ipc.h>
@@ -64,6 +61,9 @@
 #include "vchiq_memdrv.h"
 #include "vchiq_build_info.h"
 
+#ifdef CONFIG_BCM_HDMI_DET
+#include <linux/broadcom/hdmi.h>
+#endif
 
 #include <vc_mem.h>
 
@@ -105,7 +105,6 @@ typedef struct {
 struct platform_state {
 	struct timer_list suspend_failure_timer;
 	atomic_t          suspend_failure_timer_state;
-	struct pm_qos_request_list qos_request;
 
 	VCHIQ_ARM_STATE_T arm_state;
 };
@@ -214,9 +213,6 @@ vchiq_platform_init_state(VCHIQ_STATE_T *state)
 	failure_timer->data = (unsigned long)(state);
 	failure_timer->function = suspend_failure_timer_callback;
 	atomic_set(&plat_state->suspend_failure_timer_state, 0);
-
-	pm_qos_add_request(&plat_state->qos_request,
-					PM_QOS_CPU_DMA_LATENCY, DMA_QOS_VAL);
 
 out:
 	return status;
@@ -424,8 +420,6 @@ void
 vchiq_platform_paused(VCHIQ_STATE_T *state)
 {
 	VCHIQ_ARM_STATE_T *arm_state = vchiq_platform_get_arm_state(state);
-	struct platform_state *plat_state =
-				(struct platform_state *)state->platform_state;
 	unsigned int *wakeaddr_p = (unsigned int *)
 					&g_vchiq_slot_zero->platform_data[0];
 	unsigned long expiry, early_expiry;
@@ -488,13 +482,15 @@ vchiq_platform_paused(VCHIQ_STATE_T *state)
 	vc_pmu_req_suspend();
 #endif
 
+#ifdef CONFIG_BCM_HDMI_DET
+	hdmi_detection_power_ctrl(false);
+#endif
+
 #ifdef CONFIG_ARCH_KONA
 	msleep(1);
 	/* indicate to the PMU that videocore is in reset */
 	pwr_mgr_mm_crystal_clk_is_idle(true);
 #endif
-
-	pm_qos_remove_request(&plat_state->qos_request);
 
 	write_lock_bh(&arm_state->susp_res_lock);
 	if (arm_state->wake_address == 0) {
@@ -548,8 +544,6 @@ vchiq_platform_resume(VCHIQ_STATE_T *state)
 {
 	VCHIQ_STATUS_T status = VCHIQ_SUCCESS;
 	VCHIQ_ARM_STATE_T *arm_state = vchiq_platform_get_arm_state(state);
-	struct platform_state *plat_state =
-				(struct platform_state *)state->platform_state;
 
 	vchiq_log_trace(vchiq_susp_log_level, "%s", __func__);
 
@@ -557,12 +551,13 @@ vchiq_platform_resume(VCHIQ_STATE_T *state)
 		arm_state->wake_address);
 	arm_state->resume_start_time = cpu_clock(0);
 
-	pm_qos_add_request(&plat_state->qos_request,
-					PM_QOS_CPU_DMA_LATENCY, DMA_QOS_VAL);
-
 #ifdef CONFIG_ARCH_KONA
 	/* indicate to the PMU that videocore is about to come out of reset */
 	pwr_mgr_mm_crystal_clk_is_idle(false);
+#endif
+
+#ifdef CONFIG_BCM_HDMI_DET
+	hdmi_detection_power_ctrl(true);
 #endif
 
 #ifdef CONFIG_BCM_VC_PMU_REQUEST
@@ -798,6 +793,17 @@ static int vchiq_control_cfg_parse(struct file *file,
 	kbuf[count - 1] = 0;
 
 	command = kbuf;
+
+	if (!g_vchiq_ipc_shared_mem_size) {
+		if (!((strncmp("connect", command, strlen("connect")) == 0) ||
+		(strncmp("version", command, strlen("version")) == 0))) {
+			vchiq_log_warning(vchiq_arm_log_level,
+			"%s: VC is not connected, dropping command: %s",
+			__func__, command);
+			/* Early exit. */
+			return count;
+		}
+	}
 
 	if (strncmp("connect", command, strlen("connect")) == 0) {
 		if (vchiq_memdrv_initialise() != VCHIQ_SUCCESS)
@@ -1265,6 +1271,15 @@ service_gpio(uint32_t irq_status)
  * Local functions
  */
 
+#define VCHIQ_IPC_MASK (\
+	IPC_INTERRUPT_SOURCE_4 | \
+	IPC_INTERRUPT_SOURCE_3 | \
+	IPC_INTERRUPT_SOURCE_2 | \
+	IPC_INTERRUPT_SOURCE_1 | \
+	IPC_INTERRUPT_SOURCE_0)
+
+#define VCHIQ_IPC_SOURCE_MAX (IPC_INTERRUPT_SOURCE_4+1)
+
 static irqreturn_t
 vchiq_doorbell_irq(int irq, void *dev_id)
 {
@@ -1275,9 +1290,12 @@ vchiq_doorbell_irq(int irq, void *dev_id)
 	/* get the interrupt status value */
 	chal_ipc_get_int_status(ipcHandle, &status);
 
+	if ((status & VCHIQ_IPC_MASK) == 0)
+		return IRQ_NONE;
+
 	/* clear all the interrupts first */
 	for (source = IPC_INTERRUPT_SOURCE_0;
-		source < IPC_INTERRUPT_SOURCE_MAX; source++) {
+		source < VCHIQ_IPC_SOURCE_MAX; source++) {
 		if (status & (IPC_INTERRUPT_STATUS_ENABLED << source))
 			chal_ipc_int_clr(ipcHandle, source);
 	}
@@ -1294,7 +1312,7 @@ vchiq_doorbell_irq(int irq, void *dev_id)
 		/* this is a GPIO request */
 		service_gpio(status);
 
-	return IRQ_HANDLED;
+	return (status & ~VCHIQ_IPC_MASK) ? IRQ_NONE : IRQ_HANDLED;
 }
 
 static int
@@ -1500,7 +1518,7 @@ VCHIQ_STATUS_T vchiq_memdrv_initialise(void)
 		chal_ipc_int_clr(ipcHandle, i);
 
 	err = request_irq(VCHIQ_DOORBELL_IRQ, vchiq_doorbell_irq,
-		IRQF_DISABLED, "IPC driver", state);
+		IRQF_DISABLED | IRQF_SHARED, "IPC driver", state);
 	if (err != 0) {
 		vchiq_log_error(vchiq_arm_log_level,
 			"%s: failed to register irq=%d err=%d",

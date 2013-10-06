@@ -33,6 +33,6 @@
 extern int dump_start_ui_on;
 
 /* ---- Function Prototypes ---------------------------------------------- */
-void display_crash_dump_start_ui(void);
+void display_crash_dump_start_ui(const char *mode);
 
 #endif /* LINUX_BROADCOM_DUMP_MEM_H */

@@ -854,6 +854,10 @@ static int nl80211_send_wiphy(struct sk_buff *msg, u32 pid, u32 seq, int flags,
 	CMD(set_wds_peer, SET_WDS_PEER);
 	if (dev->wiphy.flags & WIPHY_FLAG_SUPPORTS_SCHED_SCAN)
 		CMD(sched_scan_start, START_SCHED_SCAN);
+	if (dev->wiphy.flags & WIPHY_FLAG_REPORTS_OBSS) {
+		i++;
+		NLA_PUT_U32(msg, i, NL80211_CMD_REGISTER_BEACONS);
+	}
 
 #undef CMD
 
@@ -961,6 +965,10 @@ static int nl80211_send_wiphy(struct sk_buff *msg, u32 pid, u32 seq, int flags,
 
 	if (nl80211_put_iface_combinations(&dev->wiphy, msg))
 		goto nla_put_failure;
+
+	if (dev->wiphy.flags & WIPHY_FLAG_HAVE_AP_SME)
+		NLA_PUT_U32(msg, NL80211_ATTR_DEVICE_AP_SME,
+			dev->wiphy.ap_sme_capa);
 
 	return genlmsg_end(msg, hdr);
 
@@ -5410,6 +5418,38 @@ static int nl80211_set_wowlan(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
+static int nl80211_register_unexpected_frame(struct sk_buff *skb,
+					struct genl_info *info)
+{
+	struct net_device *dev = info->user_ptr[1];
+	struct wireless_dev *wdev = dev->ieee80211_ptr;
+
+	if (wdev->iftype != NL80211_IFTYPE_AP &&
+		wdev->iftype != NL80211_IFTYPE_P2P_GO)
+		return -EINVAL;
+
+	if (wdev->ap_unexpected_nlpid)
+		return -EBUSY;
+
+	wdev->ap_unexpected_nlpid = info->snd_pid;
+	return 0;
+}
+
+static int nl80211_register_beacons(struct sk_buff *skb, struct genl_info *info)
+{
+	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+
+	if (!(rdev->wiphy.flags & WIPHY_FLAG_REPORTS_OBSS))
+		return -EOPNOTSUPP;
+
+	if (rdev->ap_beacons_nlpid)
+		return -EBUSY;
+
+	rdev->ap_beacons_nlpid = info->snd_pid;
+
+	return 0;
+}
+
 #define NL80211_FLAG_NEED_WIPHY		0x01
 #define NL80211_FLAG_NEED_NETDEV	0x02
 #define NL80211_FLAG_NEED_RTNL		0x04
@@ -5939,6 +5979,22 @@ static struct genl_ops nl80211_ops[] = {
 		.flags = GENL_ADMIN_PERM,
 		.internal_flags = NL80211_FLAG_NEED_WIPHY |
 				  NL80211_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL80211_CMD_UNEXPECTED_FRAME,
+		.doit = nl80211_register_unexpected_frame,
+		.policy = nl80211_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL80211_FLAG_NEED_NETDEV |
+			NL80211_FLAG_NEED_RTNL,
+	},
+	{
+		.cmd = NL80211_CMD_REGISTER_BEACONS,
+		.doit = nl80211_register_beacons,
+		.policy = nl80211_policy,
+		.flags = GENL_ADMIN_PERM,
+		.internal_flags = NL80211_FLAG_NEED_WIPHY |
+			NL80211_FLAG_NEED_RTNL,
 	},
 };
 
@@ -6942,9 +6998,12 @@ static int nl80211_netlink_notify(struct notifier_block * nb,
 
 	rcu_read_lock();
 
-	list_for_each_entry_rcu(rdev, &cfg80211_rdev_list, list)
+	list_for_each_entry_rcu(rdev, &cfg80211_rdev_list, list) {
 		list_for_each_entry_rcu(wdev, &rdev->netdev_list, list)
 			cfg80211_mlme_unregister_socket(wdev, notify->pid);
+		if (rdev->ap_beacons_nlpid == notify->pid)
+			rdev->ap_beacons_nlpid = 0;
+	}
 
 	rcu_read_unlock();
 

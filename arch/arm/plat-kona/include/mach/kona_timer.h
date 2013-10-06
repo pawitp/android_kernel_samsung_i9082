@@ -219,6 +219,20 @@ int kona_timer_stop (struct kona_timer* kt);
 int kona_timer_free (struct kona_timer* kt);
 
 /*
+ * kona_timer_suspend - Suspend the timer by shutting off its clock source.
+ *
+ * kt - Timer context.
+ */
+int kona_timer_suspend(struct kona_timer *kt);
+
+/*
+ * kona_timer_resume - Resume the timer by re-enabling its clock source.
+ *
+ * kt - Timer context.
+ */
+int kona_timer_resume(struct kona_timer *kt);
+
+/*
  * kona_hubtimer_get_counter - Returns the counter value of aon hub timer
  */
 unsigned long kona_hubtimer_get_counter(void);

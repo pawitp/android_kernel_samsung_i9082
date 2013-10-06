@@ -70,3 +70,4 @@ obj-$(CONFIG_TOUCHSCREEN_EGALAX_I2C)	+= egalax_i2c_ts.o
 obj-$(CONFIG_KEYBOARD_CYPRESS_TOUCH)  += cypress_touchkey/
 obj-$(CONFIG_KEYBOARD_TC360L_TOUCHKEY)  += coreriver_touchkey/
 obj-$(CONFIG_TOUCHSCREEN_CYPRESS_TMA46X)	+= cyttsp4_core.o	cyttsp4_i2c.o  cyttsp4_bus.o  cyttsp4_mtb.o  cyttsp4_mt_common.o cyttsp4_btn.o  cyttsp4_device_access.o cyttsp4_loader.o
+obj-$(CONFIG_TOUCHSCREEN_ZINITIX_BT532)	+= zinitix_touch.o

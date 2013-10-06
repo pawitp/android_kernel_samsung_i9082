@@ -128,6 +128,7 @@ static UInt32 curCallSampleRate = AUDIO_SAMPLING_RATE_8000;
 static int isIHFDL48k = 1; /*set to enable 48k IHF call DL*/
 
 struct completion audioEnableDone;
+struct completion arm2spHqDLInitDone;
 
 struct AUDCTRL_SPKR_Mapping_t {
 	AUDIO_SINK_Enum_t spkr;
@@ -183,6 +184,50 @@ MIC_Mapping_Table[AUDIO_SOURCE_TOTAL_COUNT] = {
 	{AUDIO_SOURCE_SPEECH_DIGI, CSL_CAPH_DEV_DIGI_MIC},
 	{AUDIO_SOURCE_MEM, CSL_CAPH_DEV_MEMORY},
 	{AUDIO_SOURCE_DSP, CSL_CAPH_DEV_DSP}
+};
+
+struct AUDCTRL_SPKR_MIC_Mapping_t {
+	AUDIO_SINK_Enum_t spkr;
+	AUDIO_SOURCE_Enum_t pri_mic;
+	AUDIO_SOURCE_Enum_t sec_mic;
+};
+
+/* must match AUDIO_SINK_Enum_t */
+static struct AUDCTRL_SPKR_MIC_Mapping_t \
+SPKR_MIC_Mapping_Table[AUDIO_SINK_TOTAL_COUNT] = {
+	/* sink info            primary MIC ID             Secondary MIC ID */
+	[AUDIO_SINK_HANDSET] = {AUDIO_SINK_HANDSET,
+		AUDIO_SOURCE_ANALOG_MAIN, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_HEADSET] = {AUDIO_SINK_HEADSET,
+		AUDIO_SOURCE_ANALOG_AUX, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_HANDSFREE] = {AUDIO_SINK_HANDSFREE,
+		AUDIO_SOURCE_ANALOG_MAIN, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_BTM] = {AUDIO_SINK_BTM,
+		AUDIO_SOURCE_BTM, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_LOUDSPK] = {AUDIO_SINK_LOUDSPK,
+		AUDIO_SOURCE_ANALOG_MAIN, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_TTY] = {AUDIO_SINK_TTY,
+		AUDIO_SOURCE_ANALOG_AUX, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_HAC] = {AUDIO_SINK_HAC,
+		AUDIO_SOURCE_ANALOG_MAIN, AUDIO_SOURCE_DIGI2},
+	[AUDIO_SINK_USB] = {AUDIO_SINK_USB,
+		AUDIO_SOURCE_USB, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_BTS] = {AUDIO_SINK_BTS,
+		AUDIO_SOURCE_BTM, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_I2S] = {AUDIO_SINK_I2S,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_VIBRA] = {AUDIO_SINK_VIBRA,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_HEADPHONE] = {AUDIO_SINK_HEADPHONE,
+		AUDIO_SOURCE_ANALOG_MAIN, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_VALID_TOTAL] = {AUDIO_SINK_VALID_TOTAL,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_MEM] = {AUDIO_SINK_MEM,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_DSP] = {AUDIO_SINK_DSP,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED},
+	[AUDIO_SINK_UNDEFINED] = {AUDIO_SINK_UNDEFINED,
+		AUDIO_SOURCE_UNDEFINED, AUDIO_SOURCE_UNDEFINED}
 };
 
 /*=============================================================================
@@ -289,7 +334,6 @@ SysMultimediaAudioParm_t *MMAudParmP(void)
 	return &mmaudio_parm_table[0];
 #endif
 }
-
 static UInt32 *AUDIO_GetIHF48KHzBufferBaseAddress(void);
 
 static void AUDDRV_Telephony_InitHW(AUDIO_SOURCE_Enum_t mic,
@@ -302,6 +346,7 @@ static void AUDDRV_HW_SetFilter(AUDDRV_HWCTRL_FILTER_e filter,
 static void AUDDRV_HW_EnableSideTone(AudioMode_t audio_mode);
 static void AUDDRV_HW_DisableSideTone(AudioMode_t audio_mode);
 static void AP_ProcessAudioEnableDone(UInt16 enabled_path);
+static void AP_ProcessArm2spHqDLInitDone(void);
 
 /*Vikash.s1 - SPK -> LOUDMIC : START [[ */
 #define CONFIG_LOUDMIC_FEATURE 1
@@ -363,10 +408,15 @@ void AUDDRV_Init(void)
 		AUDIO_MODEM(CSL_RegisterAudioEnableDoneHandler
 			((AudioEnableDoneStatusCB_t)
 			&AP_ProcessAudioEnableDone);)
+		AUDIO_MODEM(CSL_RegisterARM2SP_HQ_DL_InitDoneHandler
+			((ARM2SP_HQ_DL_InitDoneStatusCB_t)
+			&AP_ProcessArm2spHqDLInitDone);)
+
 
 	    Audio_InitRpc();
 	sAudDrv.isRunning = TRUE;
 	init_completion(&audioEnableDone);
+	init_completion(&arm2spHqDLInitDone);
 }
 
 /**********************************************************************
@@ -480,6 +530,9 @@ void AUDDRV_Telephony_Init(AUDIO_SOURCE_Enum_t mic, AUDIO_SINK_Enum_t speaker,
 		dma_mic_spk = ((UInt16)(DSP_AADMAC_PRI_MIC_EN)) | ((UInt16)
 			(DSP_AADMAC_IHF_SPKR_EN)) |
 			((UInt16)DSP_AADMAC_RETIRE_DS_CMD);
+
+		if (bNeedDualMic)
+			dma_mic_spk |= (UInt16) (DSP_AADMAC_SEC_MIC_EN);
 
 		csl_dsp_caph_control_aadmac_enable_path(dma_mic_spk);
 #endif
@@ -974,9 +1027,11 @@ void AUDDRV_SetAudioMode(AudioMode_t audio_mode, AudioApp_t audio_app,
 			"%s mode==%d, app=%d\n\r", __func__,
 			audio_mode, audio_app);
 
+#if defined(CONFIG_BCM_MODEM)
 	RPC_SetProperty(RPC_PROP_AUDIO_MODE,
 		(UInt32) (audio_mode +
 		audio_app * AUDIO_MODE_NUMBER));
+#endif
 
 	audio_control_generic(AUDDRV_CPCMD_PassAudioMode,
 			      (UInt32) audio_mode, (UInt32) audio_app, 0, 0, 0);
@@ -1043,6 +1098,7 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 	int mixInGainR, mixOutGainR, mixBitSelR;	/* Register value. */
 	CSL_CAPH_HWConfig_Table_t *path = NULL;
 	CSL_CAPH_MIXER_e outChnl = CSL_CAPH_SRCM_CH_NONE;
+	CSL_CAPH_MIXER_e outChnl_select = CSL_CAPH_SRCM_CH_NONE;
 
 	SysMultimediaAudioParm_t *p1;
 
@@ -1081,6 +1137,10 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 	default:
 		break;
 	}
+
+	// store outChnl.
+	outChnl_select = outChnl;
+	aTrace(LOG_AUDIO_DRIVER,  "%s outChnl=%d\n", __func__, outChnl);
 
 	/*Load HW Mixer gains from sysparm */
 	if (param.mixInGain_mB == GAIN_SYSPARM &&
@@ -1131,7 +1191,8 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 		int i, j;
 		for (i = 0; i < MAX_SINK_NUM; i++)
 			for (j = 0; j < MAX_BLOCK_NUM; j++)
-				if (path->srcmRoute[i][j].outChnl != CSL_CAPH_SRCM_CH_NONE) {
+				// if (path->srcmRoute[i][j].outChnl != CSL_CAPH_SRCM_CH_NONE) {
+				if (path->srcmRoute[i][j].outChnl & outChnl_select) {
 					outChnl = path->srcmRoute[i][j].outChnl;
 
 					aTrace(LOG_AUDIO_DRIVER, "%s pathID %d outChnl 0x%x inChnl 0x%x\n",
@@ -1140,6 +1201,7 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 					aTrace(LOG_AUDIO_DRIVER, "mixInGain 0x%x, mixInGainR 0x%x\n",
 						mixInGain, mixInGainR);
 
+#ifdef CONFIG_AUDIO_MIXSTEREO_MONOOUT
 					if (path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_L
 						|| path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_R) {
 						/*mono output*/
@@ -1152,6 +1214,10 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 						}
 					}
 
+					aTrace(LOG_AUDIO_DRIVER, "compensated (-6 dB): mixInGain 0x%x, mixInGainR 0x%x\n",
+						mixInGain, mixInGainR);
+#endif
+
 					csl_srcmixer_setMixInGain(
 						  path->srcmRoute[i][j].inChnl,
 						  path->srcmRoute[i][j].outChnl,
@@ -1161,6 +1227,10 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 		aError(
 		"AUDDRV_SetAudioMode_Speaker can not find path\n");
 	}
+
+	// restore outChnl.
+	outChnl = outChnl_select;
+
 	if (outChnl) {
 		if (param.mixOutGain_mB == GAIN_SYSPARM &&
 			param.mixOutGainR_mB == GAIN_SYSPARM) {
@@ -1216,9 +1286,9 @@ void AUDDRV_SetAudioMode_Multicast(SetAudioMode_Sp_t param)
 		/* bit_shift */
 
 		aTrace(LOG_AUDIO_DRIVER,
-			"%s : mixOutGain 0x%x, mixOutGainR 0x%x, "
+			"%s : (outChnl %d) mixOutGain 0x%x, mixOutGainR 0x%x, "
 			"mixBitSel %d, mixBitSelR %d\n",
-			__func__, mixOutGain, mixOutGainR,
+			__func__, outChnl, mixOutGain, mixOutGainR,
 			mixBitSel, mixBitSelR);
 		csl_srcmixer_setMixBitSel(outChnl, mixBitSel, mixBitSelR);
 		csl_srcmixer_setMixOutGain(outChnl, mixOutGain, mixOutGainR);
@@ -1257,6 +1327,8 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 {
 	int mixInGain, mixOutGain, mixBitSel;	/* Register value. */
 	int mixInGainR, mixOutGainR, mixBitSelR;	/* Register value. */
+	int ihf_prot_enable, niir_coeff, gain_attack_step;
+	int gain_attack_thres, gain_attack_slope, gain_decay_slope;
 	CSL_CAPH_HWConfig_Table_t *path = NULL;
 	CSL_CAPH_MIXER_e outChnl = CSL_CAPH_SRCM_CH_NONE;
 	CSL_CAPH_MIXER_e outChnl_select = CSL_CAPH_SRCM_CH_NONE;
@@ -1283,6 +1355,13 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 
 	mixInGain = mixOutGain = mixBitSel = 0;
 	mixInGainR = mixOutGainR = mixBitSelR = 0;
+	ihf_prot_enable = 0;
+	niir_coeff = 0;
+	gain_attack_step = 0;
+	gain_attack_thres = 0;
+	gain_attack_slope = 0;
+	gain_decay_slope = 0;
+
 	/* Load the speaker gains form sysparm. */
 
 	/*determine which mixer output to apply the gains to */
@@ -1317,6 +1396,7 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 
 	// store outChnl.
 	outChnl_select = outChnl;
+	aTrace(LOG_AUDIO_DRIVER,  "%s outChnl=%d\n", __func__, outChnl);
 
 	/*Load HW Mixer gains from sysparm */
 
@@ -1366,15 +1446,12 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 		path = csl_caph_FindPath(param.pathID);
 
 	if (path != 0) {
-		/*if (path->sink[0] == CSL_CAPH_DEV_DSP_throughMEM)
-			outChnl = path->srcmRoute[0][0].outChnl;*/
-
 		int i, j, found;
 		found = 0;
-
 		for (i = 0; i < MAX_SINK_NUM; i++)
 			for (j = 0; j < MAX_BLOCK_NUM; j++)
-				if (path->srcmRoute[i][j].outChnl != CSL_CAPH_SRCM_CH_NONE) {
+				// if (path->srcmRoute[i][j].outChnl != CSL_CAPH_SRCM_CH_NONE) {
+				if (path->srcmRoute[i][j].outChnl & outChnl_select) {
 					/*and supposedly path->srcmRoute[i][j].sink matches this speaker*/
 					outChnl = path->srcmRoute[i][j].outChnl;
 
@@ -1384,6 +1461,7 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 					aTrace(LOG_AUDIO_DRIVER, "mixInGain 0x%x, mixInGainR 0x%x\n",
 						mixInGain, mixInGainR);
 
+#ifdef CONFIG_AUDIO_MIXSTEREO_MONOOUT
 					if (path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_L
 					|| path->srcmRoute[i][j].outChnl == CSL_CAPH_SRCM_STEREO_CH2_R) {
 						/*mono output*/
@@ -1395,6 +1473,10 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 							mixInGainR = mixInGainR - 600;
 					}
 					}
+
+					aTrace(LOG_AUDIO_DRIVER, "compensated (-6 dB): mixInGain 0x%x, mixInGainR 0x%x\n",
+						mixInGain, mixInGainR);
+#endif
 
 					csl_srcmixer_setMixInGain(
 						  path->srcmRoute[i][j].inChnl,
@@ -1473,10 +1555,43 @@ void AUDDRV_SetAudioMode_Speaker(SetAudioMode_Sp_t param)
 		mixBitSelR = mixBitSelR / 24;
 		/* bit_shift */
 
-		aTrace(LOG_AUDIO_DRIVER, "%s : mixOutGain 0x%x, mixOutGainR 0x%x, mixBitSel %d, mixBitSelR %d\n",
-			__func__, mixOutGain, mixOutGainR, mixBitSel, mixBitSelR);
+		aTrace(LOG_AUDIO_DRIVER, "%s : (outChnl %d) mixOutGain 0x%x, mixOutGainR 0x%x, mixBitSel %d, mixBitSelR %d\n",
+			__func__, outChnl, mixOutGain, mixOutGainR, mixBitSel, mixBitSelR);
 		csl_srcmixer_setMixBitSel(outChnl, mixBitSel, mixBitSelR);
 		csl_srcmixer_setMixOutGain(outChnl, mixOutGain, mixOutGainR);
+
+		/* hardware compressor initialization */
+		if (param.app >= AUDIO_APP_NUMBER)
+			ihf_prot_enable = (short)p1->ihf_protection_enable;
+
+		if (ihf_prot_enable) {
+			csl_srcmixer_aldc_control(outChnl, TRUE);
+			csl_srcmixer_spkrgain_compresser_control(outChnl, TRUE);
+			niir_coeff = (short)p1->mpm_niir_coeff;
+			csl_srcmixer_load_spkrgain_iir_coeff(outChnl,
+							(UInt8 *)&niir_coeff);
+			gain_attack_step = (short)p1->mpm_gain_attack_step;
+			gain_attack_thres = (short)p1->mpm_gain_attack_thre;
+			csl_srcmixer_set_spkrgain_compresser_attack(outChnl,
+					gain_attack_step, gain_attack_thres);
+			gain_attack_slope = p1->mpm_gain_attack_slope;
+			csl_srcmixer_set_spkrgain_compresser_attackslope
+					(outChnl, gain_attack_slope);
+			csl_srcmixer_spkrgain_compresser_attackslope_control
+							(outChnl, TRUE);
+			gain_decay_slope = p1->mpm_gain_decay_slope;
+			csl_srcmixer_set_spkrgain_compresser_decayslope
+					(outChnl, gain_decay_slope);
+			csl_srcmixer_spkrgain_compresser_decayslope_control
+							(outChnl, TRUE);
+			aTrace(LOG_AUDIO_DRIVER,
+			"%s : ihf_prot_enable %d, niir_coeff 0x%x, "
+			"gain_attack_step 0x%x, gain_attack_thres 0x%x, "
+			"gain_attack_slope 0x%x, gain_decay_slope 0x%x\n",
+			__func__, ihf_prot_enable, niir_coeff,
+			gain_attack_step, gain_attack_thres,
+			gain_attack_slope, gain_decay_slope);
+		}
 	}
 
 	if (path != 0) {
@@ -1765,6 +1880,7 @@ void AUDDRV_SetULSpeechRecordGain(Int16 gain)
 void AUDDRV_SetTuningFlag(int flag)
 {
 	audio_tuning_flag = flag;
+	csl_caph_SetTuningFlag(audio_tuning_flag);
 }
 
 /******************************************************************************
@@ -1801,6 +1917,7 @@ static void AUDDRV_Telephony_InitHW(AUDIO_SOURCE_Enum_t mic,
 	AUDIO_BITS_PER_SAMPLE_t bits = 24;
 	CSL_CAPH_PathID pathID;
 	int dl_sink;
+	AUDIO_SOURCE_Enum_t sec_mic = AUDDRV_GetSecMicFromSpkr(speaker);
 
 #if defined(ENABLE_BT16)
 	if (speaker == AUDIO_SINK_BTM)
@@ -1819,6 +1936,7 @@ static void AUDDRV_Telephony_InitHW(AUDIO_SOURCE_Enum_t mic,
 	/* DL */
 	config.streamID = CSL_CAPH_STREAM_NONE;
 	config.pathID = 0;
+	config.secMic = FALSE;
 	config.source = CSL_CAPH_DEV_DSP;
 	config.sink = AUDDRV_GetDRVDeviceFromSpkr(speaker);
 	config.dmaCH = CSL_CAPH_DMA_NONE;
@@ -1866,7 +1984,25 @@ static void AUDDRV_Telephony_InitHW(AUDIO_SOURCE_Enum_t mic,
 	if (bNeedDualMic) {
 		config.streamID = CSL_CAPH_STREAM_NONE;
 		config.pathID = 0;
-		config.source = csl_caph_hwctrl_GetDualMic_NoiseRefMic();
+		config.secMic = TRUE;
+		config.micClockPhaseRev = FALSE;
+		/* check to see if need to swap clock phase definition for
+		   2ndary mic.  By default, we use rising edge for dmic1
+		   and falling edge for dmic2.  If the primary mic is
+		   analog mic and 2ndary mic is DMIC1, then we need to define
+		   risging edge for dmic2 and falling edge for dmic1, enable
+		   DMIC2 as 2ndary mic instead */
+		if ((mic == AUDIO_SOURCE_ANALOG_MAIN) ||
+			(mic == AUDIO_SOURCE_ANALOG_AUX)) {
+			if (sec_mic == AUDIO_SOURCE_DIGI1) {
+				config.micClockPhaseRev = TRUE;
+				sec_mic = AUDIO_SOURCE_DIGI2;
+			}
+		}
+		config.source = AUDDRV_GetDRVDeviceFromMic(sec_mic);
+		aTrace(LOG_AUDIO_DRIVER, "%s dualmic: 1st mic=%d, 2nd mic=%d, "
+			"clockPhaseRev=%d\n", __func__, mic, sec_mic,
+			   config.micClockPhaseRev);
 		config.sink = CSL_CAPH_DEV_DSP;
 		config.dmaCH = CSL_CAPH_DMA_NONE;
 		config.src_sampleRate = AUDIO_SAMPLING_RATE_48000;
@@ -1880,7 +2016,26 @@ static void AUDDRV_Telephony_InitHW(AUDIO_SOURCE_Enum_t mic,
 	/* Primary mic */
 	config.streamID = CSL_CAPH_STREAM_NONE;
 	config.pathID = 0;
+	config.secMic = FALSE;
+	config.micClockPhaseRev = FALSE;
+	/* check to see if need to swap clock phase definition for
+	   digital mic.  By default, we use rising edge for dmic1
+	   and falling edge for dmic2.  If the primary mic is
+	   DMIC1 and 2ndary mic is analog mic, then we need to define
+	   risging edge for dmic2 and falling edge for dmic1, enable
+	   DMIC2 as primary mic instead */
+	if (bNeedDualMic) {
+		if ((mic == AUDIO_SOURCE_DIGI1) &&
+			((sec_mic == AUDIO_SOURCE_ANALOG_MAIN) ||
+			(sec_mic == AUDIO_SOURCE_ANALOG_AUX))) {
+			config.micClockPhaseRev = TRUE;
+			mic = AUDIO_SOURCE_DIGI2;
+		}
+	}
 	config.source = AUDDRV_GetDRVDeviceFromMic(mic);
+	aTrace(LOG_AUDIO_DRIVER, "%s pri mic: 1st mic=%d, "
+			"clockPhaseRev=%d\n", __func__, mic,
+			   config.micClockPhaseRev);
 	config.sink = CSL_CAPH_DEV_DSP;
 	config.dmaCH = CSL_CAPH_DMA_NONE;
 	config.src_sampleRate = AUDIO_SAMPLING_RATE_48000;
@@ -2038,6 +2193,126 @@ CSL_CAPH_DEVICE_e AUDDRV_GetDRVDeviceFromMic(AUDIO_SOURCE_Enum_t mic)
 
 /*==========================================================================
 //
+// Function Name: AUDDRV_GetSecMicDRVDeviceFromSpkr
+//
+// Description: Get the audio driver Device for secondary MIC from the
+// speaker selection.
+//
+// =========================================================================
+*/
+CSL_CAPH_DEVICE_e AUDDRV_GetSecMicDRVDeviceFromSpkr(AUDIO_SINK_Enum_t spkr)
+{
+	AUDIO_SOURCE_Enum_t mic = SPKR_MIC_Mapping_Table[spkr].sec_mic;
+	CSL_CAPH_DEVICE_e dev = AUDDRV_GetDRVDeviceFromMic(mic);
+
+	aTrace(LOG_AUDIO_DRIVER,
+		"AUDDRV_GetSecMicDRVDeviceFromSpkr::spkr=%d, "
+		"sec mic dev=%d\n", spkr, dev);
+
+	return dev;
+}
+
+/*==========================================================================
+//
+// Function Name: AUDDRV_SetPrimaryMicFromSpkr
+//
+// Description: Set the primary mic based on the
+// speaker selection.
+//
+// =========================================================================
+*/
+void AUDDRV_SetPrimaryMicFromSpkr(AUDIO_SINK_Enum_t spkr,
+		AUDIO_SOURCE_Enum_t mic)
+{
+	SPKR_MIC_Mapping_Table[spkr].pri_mic = mic;
+
+	aTrace(LOG_AUDIO_DRIVER,
+		"AUDDRV_SetPrimaryMicFromSpkr::spkr=%d, pri mic=%d\n",
+		   spkr, mic);
+}
+
+/*==========================================================================
+//
+// Function Name: AUDDRV_GetPrimaryMicFromSpkr
+//
+// Description: Get the primary mic based on the
+// speaker selection.
+//
+// =========================================================================
+*/
+AUDIO_SOURCE_Enum_t AUDDRV_GetPrimaryMicFromSpkr(AUDIO_SINK_Enum_t spkr)
+{
+	AUDIO_SOURCE_Enum_t pri_mic = SPKR_MIC_Mapping_Table[spkr].pri_mic;
+
+	aTrace(LOG_AUDIO_DRIVER,
+		"AUDDRV_GetPrimaryMicFromSpkr::spkr=%d, "
+		"pri mic=%d\n", spkr, pri_mic);
+
+	return pri_mic;
+}
+
+/*==========================================================================
+//
+// Function Name: AUDDRV_SetSecMicFromSpkr
+//
+// Description: Set the secondary mic based on the
+// speaker selection.
+//
+// =========================================================================
+*/
+void AUDDRV_SetSecMicFromSpkr(AUDIO_SINK_Enum_t spkr,
+		AUDIO_SOURCE_Enum_t mic)
+{
+	SPKR_MIC_Mapping_Table[spkr].sec_mic = mic;
+
+	aTrace(LOG_AUDIO_DRIVER,
+		"AUDDRV_SetSecMicFromSpkr::spkr=%d, sec mic=%d\n", spkr, mic);
+}
+
+/*==========================================================================
+//
+// Function Name: AUDDRV_GetSecMicFromSpkr
+//
+// Description: Get the secondary MIC from the speaker selection.
+//
+// =========================================================================
+*/
+AUDIO_SOURCE_Enum_t AUDDRV_GetSecMicFromSpkr(AUDIO_SINK_Enum_t spkr)
+{
+	AUDIO_SOURCE_Enum_t sec_mic = SPKR_MIC_Mapping_Table[spkr].sec_mic;
+
+	aTrace(LOG_AUDIO_DRIVER,
+		"AUDDRV_GetSecMicFromSpkr::spkr=%d, "
+		"sec mic=%d\n", spkr, sec_mic);
+
+	return sec_mic;
+}
+
+/****************************************************************************
+// Function Name: AUDDRV_PrintAllMics
+//
+// Description: Print all primary and secondary mic selection for all sinks
+//
+*****************************************************************************/
+void AUDDRV_PrintAllMics(void)
+{
+	int i;
+
+	aTrace(LOG_AUDIO_DRIVER,
+		   "AUDDRV_PrintAllMics:: print primary and secondary"
+		   " mics for each sink\n");
+
+	for (i = 0; i < AUDIO_SINK_VALID_TOTAL; i++) {
+		aTrace(LOG_AUDIO_DRIVER,
+			   "sink %d:: pri mic=%d, sec mic=%d\n",
+			   i,
+			   SPKR_MIC_Mapping_Table[i].pri_mic,
+			   SPKR_MIC_Mapping_Table[i].sec_mic);
+	}
+}
+
+/*==========================================================================
+//
 // Function Name: AUDDRV_GetDRVDeviceFromSpkr
 //
 // Description: Get the audio driver Device from the Speaker selection.
@@ -2096,6 +2371,18 @@ static void AP_ProcessAudioEnableDone(UInt16 enabled_path)
 	/*aError("i_f");*/
 }
 
+static void AP_ProcessArm2spHqDLInitDone()
+{
+	aTrace(LOG_AUDIO_DRIVER,
+	"%s, Got Arm2spHqDL RESP FROM DSP\n", __func__);
+
+	/*aError("i_e");*/
+
+	complete(&arm2spHqDLInitDone);
+
+	/*aError("i_f");*/
+}
+
 /****************************************************************************
 *
 * Function Name: AUDDRV_GetTelephonyPath
@@ -2121,12 +2408,8 @@ void AUDDRV_SetCallMode(Int32 callMode)
 void AUDDRV_ConnectDL(void)
 {
 	aTrace(LOG_AUDIO_DRIVER,  "%s PTT CONNECT_DL\n", __func__);
-#if defined(ENABLE_DMA_VOICE)
+
 	audio_control_dsp(AUDDRV_DSPCMD_AUDIO_CONNECT_DL, TRUE, 0, 0, 0, 0);
-#else
-	audio_control_dsp(AUDDRV_DSPCMD_AUDIO_CONNECT_DL, TRUE,
-			  AUDCTRL_Telephony_HW_16K(mode), 0, 0, 0);
-#endif
 }
 
 void AUDDRV_CPResetCleanup(void)
@@ -2160,4 +2443,64 @@ void AUDDRV_SetIHFDLSampleRate(int mode)
 	aTrace(LOG_AUDIO_DRIVER,  "%s isIHFDL48k %d->%d\n",
 		__func__, isIHFDL48k, mode);
 	isIHFDL48k = mode;
+}
+
+int AUDDRV_Get_TrEqParm(void *param, unsigned int size, AudioApp_t app,
+	unsigned int sample_rate)
+{
+#ifndef CONFIG_BCM_MODEM
+		return -EINVAL;
+#else
+		SysIndMultimediaAudioParm_t *p;
+
+		if (app != AUDIO_APP_MUSIC)
+			return -EINVAL;
+
+		/* Sample rate added to input param */
+		if (size > (sizeof(*p) + sizeof(unsigned int))) {
+			aError("SysIndMultimediaAudioParm_t"
+				"structure got changed %s", __func__);
+			BUG();
+			return -EINVAL;
+		}
+		p = APSYSPARM_GetIndMultimediaAudioParmAccessPtr();
+		if (p == NULL) {
+			aError("%s cannot read TREQ param", __func__);
+			return -EINVAL;
+		}
+
+		/* 44.1 uses IHF mode, 48 uses AUDIO_MODE_RESERVE */
+		if ((AUDIO_SAMPLING_RATE_t)sample_rate
+			== AUDIO_SAMPLING_RATE_44100)
+			memcpy(param, p+AUDIO_MODE_SPEAKERPHONE,
+				(size - sizeof(unsigned int)));
+		else if ((AUDIO_SAMPLING_RATE_t)sample_rate
+			== AUDIO_SAMPLING_RATE_48000)
+			memcpy(param, p+AUDIO_MODE_RESERVE,
+				(size - sizeof(unsigned int)));
+
+		return 0;
+#endif
+}
+
+int AUDDRV_Get_MBCParm(void *param, int size)
+{
+#ifndef CONFIG_BCM_MODEM
+	return -EINVAL;
+#else
+	SysIndMultimediaAudioParm_t *p;
+
+	if (param == NULL)
+		return -EINVAL;
+
+	p = APSYSPARM_GetIndMultimediaAudioParmAccessPtr();
+	if (p == NULL) {
+		aError("%s cannot read MBC param", __func__);
+		return -EINVAL;
+	}
+
+	memcpy(param, &((p+AUDIO_MODE_SPEAKERPHONE)->t2lin[0]), size);
+
+	return 0;
+#endif
 }

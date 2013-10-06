@@ -24,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wlioctl.h 362236 2012-10-11 13:29:56Z $
+ * $Id: wlioctl.h 384901 2013-02-13 14:23:41Z $
  */
 
 #ifndef _wlioctl_h_
@@ -304,7 +304,7 @@ typedef struct wl_clm_dload_info wl_clm_dload_info_t;
 
 typedef struct wlc_ssid {
 	uint32		SSID_len;
-	uchar		SSID[32];
+	uchar		SSID[DOT11_MAX_SSID_LEN];
 } wlc_ssid_t;
 
 #ifndef LINUX_POSTMOGRIFY_REMOVAL

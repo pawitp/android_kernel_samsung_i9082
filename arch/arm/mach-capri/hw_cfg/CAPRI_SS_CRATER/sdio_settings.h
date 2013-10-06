@@ -36,7 +36,7 @@
 { \
 	{ /* SDIO1 */ \
 		.id = 0, \
-		.peri_clk_rate = 52000000, \
+		.peri_clk_rate = 48000000, \
 		.devtype = SDIO_DEV_TYPE_WIFI, \
 		.register_status_notify = capri_wifi_status_register, \
 	}, \
@@ -63,7 +63,7 @@
 { \
 	{ /* SDIO1 */ \
 		.id = 0, \
-		.peri_clk_rate = 52000000, \
+		.peri_clk_rate = 48000000, \
 		.devtype = SDIO_DEV_TYPE_WIFI, \
 	}, \
 	{ /* SDIO2 */ \

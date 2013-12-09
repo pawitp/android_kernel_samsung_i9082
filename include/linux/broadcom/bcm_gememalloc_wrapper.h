@@ -22,7 +22,7 @@ struct gememalloc_logic {
 	int (*AllocMemory) (GEMEMALLOC_HDL hdl, unsigned long *busaddr,
 			    unsigned int size);
 	int (*FreeMemory) (GEMEMALLOC_HDL hdl, unsigned long *busaddr);
-	int (*open) (GEMEMALLOC_HDL * hdlp);
+	int (*open) (GEMEMALLOC_HDL *hdlp);
 	int (*release) (GEMEMALLOC_HDL hdl);
 	int (*mmap) (unsigned long size, unsigned long pgoff);
 	int (*init) (unsigned int memory_size, unsigned int phy_start_address);

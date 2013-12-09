@@ -18,18 +18,18 @@
 *  @brief   HAL Audio API definitions
 *
 *****************************************************************************/
-#if !defined( HALAUDIO_H )
+#if !defined(HALAUDIO_H)
 #define HALAUDIO_H
 
 /* ---- Include Files ---------------------------------------------------- */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
 #endif
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/broadcom/csx.h>	/* Needed for CSX hooks */
 #endif
 
@@ -105,7 +105,8 @@ enum {
 *
 *  Bit field breakdown:
 *
-*  | reserved (b31-b16) | codec (b15-b8) | hwsel (b7-b4) | digital (b3) | sidetone (b2) | dir (b1-b0) |
+*  | reserved (b31-b16) | codec (b15-b8) | hwsel (b7-b4) | digital (b3) |
+*  sidetone (b2) | dir (b1-b0) |
 */
 typedef unsigned int HALAUDIO_BLOCK;
 
@@ -121,105 +122,113 @@ typedef unsigned int HALAUDIO_BLOCK;
 #define HALAUDIO_BLOCK_SIDETONE_BSHIFT          2
 #define HALAUDIO_BLOCK_DIR_BSHIFT               0
 
-#define HALAUDIO_CREATE_BLOCK( codec, hwsel, digital, sidetone, dir ) \
-   ((( (codec) << HALAUDIO_BLOCK_CODEC_BSHIFT ) & HALAUDIO_BLOCK_CODEC_BMASK ) | \
-    (( (hwsel) << HALAUDIO_BLOCK_HWSEL_BSHIFT ) & HALAUDIO_BLOCK_HWSEL_BMASK ) | \
-    (( (digital) << HALAUDIO_BLOCK_DIGITAL_BSHIFT ) & HALAUDIO_BLOCK_DIGITAL_BMASK ) | \
-    (( (sidetone) << HALAUDIO_BLOCK_SIDETONE_BSHIFT ) & HALAUDIO_BLOCK_SIDETONE_BMASK ) | \
-    (( (dir) << HALAUDIO_BLOCK_DIR_BSHIFT ) & HALAUDIO_BLOCK_DIR_BMASK ))
+#define HALAUDIO_CREATE_BLOCK(codec, hwsel, digital, sidetone, dir) \
+((((codec) << HALAUDIO_BLOCK_CODEC_BSHIFT) & HALAUDIO_BLOCK_CODEC_BMASK) | \
+(((hwsel) << HALAUDIO_BLOCK_HWSEL_BSHIFT) & HALAUDIO_BLOCK_HWSEL_BMASK) | \
+(((digital) << HALAUDIO_BLOCK_DIGITAL_BSHIFT) & HALAUDIO_BLOCK_DIGITAL_BMASK) | \
+(((sidetone) << HALAUDIO_BLOCK_SIDETONE_BSHIFT) & HALAUDIO_BLOCK_SIDETONE_BMASK) | \
+(((dir) << HALAUDIO_BLOCK_DIR_BSHIFT) & HALAUDIO_BLOCK_DIR_BMASK))
 
 /* Helpers to create or operate on block ID */
-#define HALAUDIO_BLOCK_ANA_ID( codec,sel,dir )  HALAUDIO_CREATE_BLOCK( codec, sel, 0, 0, dir )
-#define HALAUDIO_BLOCK_DIG_ID( codec, dir )     HALAUDIO_CREATE_BLOCK( codec, 0,   1, 0, dir )
-#define HALAUDIO_BLOCK_SIDETONE_ID( codec )     HALAUDIO_CREATE_BLOCK( codec, 0,   0, 1, 0   )
-#define HALAUDIO_BLOCK_GET_CODEC( block )       (( block & HALAUDIO_BLOCK_CODEC_BMASK ) >> HALAUDIO_BLOCK_CODEC_BSHIFT )
-#define HALAUDIO_BLOCK_GET_HWSEL( block )       (( block & HALAUDIO_BLOCK_HWSEL_BMASK ) >> HALAUDIO_BLOCK_HWSEL_BSHIFT )
-#define HALAUDIO_BLOCK_GET_DIR( block )         (( block & HALAUDIO_BLOCK_DIR_BMASK   ) >> HALAUDIO_BLOCK_DIR_BSHIFT   )
-#define HALAUDIO_BLOCK_IS_DIGITAL( block )      ( block & HALAUDIO_BLOCK_DIGITAL_BMASK )
-#define HALAUDIO_BLOCK_IS_SIDETONE( block )     ( block & HALAUDIO_BLOCK_SIDETONE_BMASK )
+#define HALAUDIO_BLOCK_ANA_ID(codec, sel, dir)\
+	HALAUDIO_CREATE_BLOCK(codec, sel, 0, 0, dir)
+#define HALAUDIO_BLOCK_DIG_ID(codec, dir)\
+	HALAUDIO_CREATE_BLOCK(codec, 0,   1, 0, dir)
+#define HALAUDIO_BLOCK_SIDETONE_ID(codec)\
+	HALAUDIO_CREATE_BLOCK(codec, 0,   0, 1, 0)
+#define HALAUDIO_BLOCK_GET_CODEC(block)\
+	((block & HALAUDIO_BLOCK_CODEC_BMASK) >> HALAUDIO_BLOCK_CODEC_BSHIFT)
+#define HALAUDIO_BLOCK_GET_HWSEL(block)\
+	((block & HALAUDIO_BLOCK_HWSEL_BMASK) >> HALAUDIO_BLOCK_HWSEL_BSHIFT)
+#define HALAUDIO_BLOCK_GET_DIR(block)\
+	((block & HALAUDIO_BLOCK_DIR_BMASK) >> HALAUDIO_BLOCK_DIR_BSHIFT)
+#define HALAUDIO_BLOCK_IS_DIGITAL(block)\
+	(block & HALAUDIO_BLOCK_DIGITAL_BMASK)
+#define HALAUDIO_BLOCK_IS_SIDETONE(block)\
+	(block & HALAUDIO_BLOCK_SIDETONE_BMASK)
 
 /* Useful pre-defined HAL Audio block IDs. Users may create their block IDs
  * using the appropriate helper macros instead of using the following.
  */
-#define HALAUDIO_CODEC0A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC0B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC0C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC0A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC0B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC0C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC0, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC0_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC0, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC0_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC0, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC0_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC0 )
+#define HALAUDIO_CODEC0A_SPKR		HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC0B_SPKR           HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC0C_SPKR           HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC0A_MIC            HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC0B_MIC            HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC0C_MIC            HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC0, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC0_ADC_DGAIN       HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC0, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC0_DAC_DGAIN       HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC0, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC0_SIDETONE        HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC0)
 
-#define HALAUDIO_CODEC1A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC1B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC1C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC1A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC1B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC1C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC1, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC1_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC1, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC1_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC1, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC1_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC1 )
+#define HALAUDIO_CODEC1A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC1B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC1C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC1A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC1B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC1C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC1, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC1_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC1, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC1_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC1, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC1_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC1)
 
-#define HALAUDIO_CODEC2A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC2B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC2C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC2A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC2B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC2C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC2, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC2_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC2, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC2_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC2, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC2_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC2 )
+#define HALAUDIO_CODEC2A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC2B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC2C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC2A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC2B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC2C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC2, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC2_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC2, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC2_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC2, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC2_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC2)
 
-#define HALAUDIO_CODEC3A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC3B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC3C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC3A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC3B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC3C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC3, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC3_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC3, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC3_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC3, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC3_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC3 )
+#define HALAUDIO_CODEC3A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC3B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC3C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC3A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC3B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC3C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC3, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC3_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC3, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC3_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC3, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC3_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC3)
 
-#define HALAUDIO_CODEC4A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC4B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC4C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC4A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC4B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC4C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC4, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC4_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC4, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC4_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC4, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC4_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC4 )
+#define HALAUDIO_CODEC4A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC4B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC4C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC4A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC4B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC4C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC4, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC4_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC4, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC4_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC4, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC4_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC4)
 
-#define HALAUDIO_CODEC5A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC5B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC5C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC5A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC5B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC5C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC5, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC5_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC5, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC5_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC5, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC5_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC5 )
+#define HALAUDIO_CODEC5A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC5B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC5C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC5A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC5B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC5C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC5, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC5_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC5, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC5_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC5, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC5_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC5)
 
-#define HALAUDIO_CODEC6A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC6B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC6C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC6A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC6B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC6C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC6, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC6_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC6, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC6_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC6, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC6_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC6 )
+#define HALAUDIO_CODEC6A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC6B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC6C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC6A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC6B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC6C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC6, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC6_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC6, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC6_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC6, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC6_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC6)
 
-#define HALAUDIO_CODEC7A_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC7B_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC7C_SPKR                   HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC7A_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC7B_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC7C_MIC                    HALAUDIO_BLOCK_ANA_ID( HALAUDIO_CODEC7, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC7_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC7, HALAUDIO_DIR_ADC )
-#define HALAUDIO_CODEC7_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID( HALAUDIO_CODEC7, HALAUDIO_DIR_DAC )
-#define HALAUDIO_CODEC7_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID( HALAUDIO_CODEC7 )
+#define HALAUDIO_CODEC7A_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_A, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC7B_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_B, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC7C_SPKR                   HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_C, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC7A_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_A, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC7B_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_B, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC7C_MIC                    HALAUDIO_BLOCK_ANA_ID(HALAUDIO_CODEC7, HALAUDIO_HWSEL_C, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC7_ADC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC7, HALAUDIO_DIR_ADC)
+#define HALAUDIO_CODEC7_DAC_DGAIN               HALAUDIO_BLOCK_DIG_ID(HALAUDIO_CODEC7, HALAUDIO_DIR_DAC)
+#define HALAUDIO_CODEC7_SIDETONE                HALAUDIO_BLOCK_SIDETONE_ID(HALAUDIO_CODEC7)
 
 /**
 *  There are three power levels: deep sleep, digital only, and full power.
@@ -320,8 +329,8 @@ typedef struct halaudio_freqs {
 */
 #define HALAUDIO_EQU_COEFS_MAX_NUM       256
 typedef struct halaudio_equ {
-	int len;		/* Number of filter coefficents, 0 is to disable */
-	int32_t coeffs[HALAUDIO_EQU_COEFS_MAX_NUM];	/* 32-bit coefficients */
+	int len;	/* Number of filter coefficents, 0 is to disable */
+	int32_t coeffs[HALAUDIO_EQU_COEFS_MAX_NUM];/* 32-bit coefficients */
 	void *extra;		/* Platform specific extra data */
 } HALAUDIO_EQU;
 
@@ -331,7 +340,7 @@ typedef struct halaudio_equ {
 */
 typedef struct halaudio_hw_info {
 	int interfaces;		/* Number of register audio interfaces */
-	int codecs;		/* Total number of audio codecs across all interfaces */
+	int codecs;	/* Total number of audio codecs across all interfaces */
 	int frame_period_us;	/* Default period between interrupts in usec */
 } HALAUDIO_HW_INFO;
 
@@ -342,7 +351,7 @@ typedef struct halaudio_hw_info {
 typedef struct halaudio_if_info {
 	char name[32];		/* Interface name */
 	int codecs;		/* Number of audio codecs in this interface */
-	int frame_period_us;	/* Period between interrupts in usec for interface */
+	int frame_period_us;/*Period between interrupts in usec for interface*/
 	int enabled;		/* 1 if enabled, otherwise 0 */
 	int sync;		/* 1 if synchronized with others */
 } HALAUDIO_IF_INFO;
@@ -354,14 +363,14 @@ typedef struct halaudio_if_info {
 typedef struct halaudio_codec_info {
 	char name[32];		/* Codec name */
 	HALAUDIO_FREQS freqs;	/* Supported sampling frequencies */
-	int channels_tx;	/* # of channels for tx (mic), 1=mono, 2=stereo, etc. */
-	int channels_rx;	/* # of channels for rx (spk), 1=mono, 2=stereo, etc. */
-	int equlen_tx;		/* max # of tx equalizer coeffs, 0 = equ unsupported */
-	int equlen_rx;		/* max # of rx equalizer coeffs, 0 = equ unsupported */
+	int channels_tx;/* # of channels for tx (mic), 1=mono, 2=stereo, etc. */
+	int channels_rx;/* # of channels for rx (spk), 1=mono, 2=stereo, etc. */
+	int equlen_tx;	/* max # of tx equalizer coeffs, 0 = equ unsupported */
+	int equlen_rx;	/* max # of rx equalizer coeffs, 0 = equ unsupported */
 	int sample_width;	/* sample size width in bytes */
 	int mics;		/* # of mic paths. 0 means no ADC */
 	int spkrs;		/* # of speaker paths. 0 means no DAC */
-	int bulk_delay;		/* Echo bulk delay in samples, -1 = not calibrated */
+	int bulk_delay;	/* Echo bulk delay in samples, -1 = not calibrated */
 	unsigned long locked;	/* non-zero if in locked state, otherwise 0 */
 	HALAUDIO_IF parent_id;	/* Parent interface id */
 	HALAUDIO_FMT read_format;	/* Read format */
@@ -381,13 +390,13 @@ typedef struct halaudio_gain_info {
 } HALAUDIO_GAIN_INFO;
 
 /* HAL Audio handle for client. */
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 typedef void *HALAUDIO_HDL;
 #else
 typedef int HALAUDIO_HDL;
 #endif
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 /* MakeDefs: Off */
 
 /* ---- Kernel Constants, Types, and Definitions ------------------------- */
@@ -423,7 +432,7 @@ typedef void (*HALAUDIO_CODEC_IORW_CB) (int bytes,
 				    /**< (i) Number of bytes transacted */
 					void *data
 				    /**< (i) User data */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -437,7 +446,7 @@ typedef int (*HALAUDIO_CODEC_SET_FREQ_OP) (int chno,
 				    /**< (i) Codec channel number */
 					   int freqhz
 				    /**< (i) Sampling frequency in Hz */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -451,7 +460,7 @@ typedef int (*HALAUDIO_CODEC_GET_FREQ_OP) (int chno,
 				    /**< (i) Codec channel number */
 					   int *freqhz
 				    /**< (o) Ptr to sampling frequency in Hz */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -479,7 +488,7 @@ typedef int (*HALAUDIO_CODEC_SET_ANA_OP) (int chno,
 				    /**< (i) Direction path */
 					  HALAUDIO_HWSEL hwsel
 				    /**< (i) Hardware mux selection */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -498,7 +507,7 @@ typedef int (*HALAUDIO_CODEC_GET_ANA_OP) (int chno,
 				    /**< (i) Direction path */
 					  HALAUDIO_HWSEL hwsel
 				    /**< (i) Hardware mux selection */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -515,7 +524,7 @@ typedef int (*HALAUDIO_CODEC_SET_DIG_OP) (int chno,
 				    /**< (i) Gain in db */
 					  HALAUDIO_DIR dir
 				    /**< (i) Direction path */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -532,7 +541,7 @@ typedef int (*HALAUDIO_CODEC_GET_DIG_OP) (int chno,
 				    /**< (o) Ptr to gain info structure */
 					  HALAUDIO_DIR dir
 				    /**< (i) Direction path */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -546,7 +555,7 @@ typedef int (*HALAUDIO_CODEC_SET_SIDETONE_OP) (int chno,
 				    /**< (i) Codec channel number */
 					       int db
 				    /**< (i) Gain in db */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -561,7 +570,7 @@ typedef int (*HALAUDIO_CODEC_GET_SIDETONE_OP) (int chno,
 				    /**< (i) codec channel number */
 					       HALAUDIO_GAIN_INFO * info
 				    /**< (o) Ptr to gain info structure */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -578,7 +587,7 @@ typedef int (*HALAUDIO_CODEC_SET_EQU_OP) (int chno,
 				    /**< (i) Direction path */
 					  const HALAUDIO_EQU * equ
 				    /**< (i) Ptr to equalizer parameters */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -595,7 +604,7 @@ typedef int (*HALAUDIO_CODEC_GET_EQU_OP) (int chno,
 				    /**< (i) Direction path */
 					  HALAUDIO_EQU * equ
 				    /**< (0) Ptr to equalizer parameters */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -607,16 +616,16 @@ typedef int (*HALAUDIO_CODEC_GET_EQU_OP) (int chno,
 *     -ve      Error code
 */
 typedef int (*HALAUDIO_CODEC_READ_OP) (int chno,
-				    /**< (i) Codec channel number */
-				       int bytes,
-				    /**< (i) Number of bytes to read */
-				       char *audiobuf,
-				    /**< (o) Ptr to buffer to store samples */
-				       HALAUDIO_CODEC_IORW_CB cb,
-				    /**< (i) Callback to call when more samples are avail */
-				       void *data
-				    /**< (i) User data to pass to callback */
-    );
+		    /**< (i) Codec channel number */
+		       int bytes,
+		    /**< (i) Number of bytes to read */
+		       char *audiobuf,
+		    /**< (o) Ptr to buffer to store samples */
+		       HALAUDIO_CODEC_IORW_CB cb,
+		    /**< (i) Callback to call when more samples are avail */
+		       void *data
+		    /**< (i) User data to pass to callback */
+);
 
 /***************************************************************************/
 /**
@@ -628,16 +637,16 @@ typedef int (*HALAUDIO_CODEC_READ_OP) (int chno,
 *     -ve      Error code
 */
 typedef int (*HALAUDIO_CODEC_WRITE_OP) (int chno,
-				    /**< (i) Codec channel number */
-					int bytes,
-				    /**< (i) Number of bytes to read */
-					const char *audiobuf,
-				    /**< (o) Ptr to buffer to store samples */
-					HALAUDIO_CODEC_IORW_CB cb,
-				    /**< (i) Callback to call when more samples are avail */
-					void *data
-				    /**< (i) User data to pass to callback */
-    );
+		    /**< (i) Codec channel number */
+			int bytes,
+		    /**< (i) Number of bytes to read */
+			const char *audiobuf,
+		    /**< (o) Ptr to buffer to store samples */
+			HALAUDIO_CODEC_IORW_CB cb,
+		    /**< (i) Callback to call when more samples are avail */
+			void *data
+		    /**< (i) User data to pass to callback */
+);
 
 /***************************************************************************/
 /**
@@ -652,7 +661,7 @@ typedef int (*HALAUDIO_CODEC_GET_INFO_OP) (int chno,
 				    /**< (i) Codec channel number */
 					   HALAUDIO_CODEC_INFO * codec_info
 				    /**< (o) Ptr to codec info structure */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -664,14 +673,14 @@ typedef int (*HALAUDIO_CODEC_GET_INFO_OP) (int chno,
 *     -ve      Error code
 */
 typedef int (*HALAUDIO_CODEC_SET_CSX_OP) (int chno,
-				    /**< (i) Codec channel number */
-					  HALAUDIO_CSX_POINT_ID point,
-				       /**< (i) Point ID to install the CSX point */
-					  const CSX_IO_POINT_FNCS *fncp,
-				    /**< (i) Ptr to CSX callbacks */
-					  void *data
-				    /**< (i) User data to pass back to callbacks */
-    );
+			    /**< (i) Codec channel number */
+				  HALAUDIO_CSX_POINT_ID point,
+			       /**< (i) Point ID to install the CSX point */
+				  const CSX_IO_POINT_FNCS * fncp,
+			    /**< (i) Ptr to CSX callbacks */
+				  void *data
+			    /**< (i) User data to pass back to callbacks */
+);
 
 /**
 * HAL Audio Codec structure of operations. Not all operations are
@@ -692,7 +701,7 @@ typedef struct halaudio_codec_ops {
 	HALAUDIO_CODEC_READ_OP read;	/* Read digital samples from ADC */
 	HALAUDIO_CODEC_WRITE_OP write;	/* Write digital samples to DAC */
 	HALAUDIO_CODEC_GET_INFO_OP info;	/* Retrieve codec information */
-	HALAUDIO_CODEC_SET_CSX_OP setcsx;	/* Set CSX inject and capture points */
+	HALAUDIO_CODEC_SET_CSX_OP setcsx;/* Set CSX inject and capture points */
 } HALAUDIO_CODEC_OPS;
 
 /***************************************************************************/
@@ -729,10 +738,10 @@ typedef void (*HALAUDIO_IF_FRAME_ELAPSED) (void *data);
 *  Audio interface constructor
 */
 typedef int (*HALAUDIO_IF_INIT_OP) (HALAUDIO_IF_FRAME_ELAPSED isrcb,
-				    /**< (i) Callback to indicate when a frame tick has elapsed */
-				    void *data
-				    /**< (i) User data */
-    );
+		  /**< (i) Callback to indicate when a frame tick has elapsed */
+		  void *data
+		  /**< (i) User data */
+);
 
 /***************************************************************************/
 /**
@@ -756,7 +765,7 @@ typedef int (*HALAUDIO_IF_ENABLE_OP) (void);
 /***************************************************************************/
 /**
 *  Prepare an interface before enabling. This operation is allowed
-*  to block and may configure and allocated such things as hardware 
+*  to block and may configure and allocated such things as hardware
 *  parameters, and DMA resources.
 *
 *  @return
@@ -767,7 +776,7 @@ typedef int (*HALAUDIO_IF_PREPARE_OP) (void);
 
 /***************************************************************************/
 /**
-*  Disable an interface. Interrupts and resources associated with the 
+*  Disable an interface. Interrupts and resources associated with the
 *  interface will be stopped and released.
 *
 *  @return
@@ -786,7 +795,7 @@ typedef int (*HALAUDIO_IF_DISABLE_OP) (void);
 */
 typedef int (*HALAUDIO_IF_ANA_POWERDN_OP) (int powerdn
 				    /**< (i) 1 to power down, 0 to power up */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -825,11 +834,15 @@ typedef struct halaudio_if_ops {
 	HALAUDIO_IF_INIT_OP init;	/* Initialize entire interface */
 	HALAUDIO_IF_EXIT_OP exit;	/* Terminate entire interface */
 	HALAUDIO_IF_PREPARE_OP prepare;	/* Prepare interface before enabling */
-	HALAUDIO_IF_ENABLE_OP enable;	/* Enable interface. WARNING: Runs in atomic context. Must not block! */
+	HALAUDIO_IF_ENABLE_OP enable;	/* Enable interface. WARNING:
+				Runs in atomic context. Must not block! */
 	HALAUDIO_IF_DISABLE_OP disable;	/* Disable interface */
-	HALAUDIO_IF_ANA_POWERDN_OP ana_powerdn;	/* Power down analog for interface */
-	HALAUDIO_IF_PM_SHUTDOWN pm_shutdown;	/* Shutdown interface for power management */
-	HALAUDIO_IF_PM_RESUME pm_resume;	/* Resume interface after shutdown for power management */
+	HALAUDIO_IF_ANA_POWERDN_OP ana_powerdn;
+			/* Power down analog for interface */
+	HALAUDIO_IF_PM_SHUTDOWN pm_shutdown;
+			/* Shutdown interface for power management */
+	HALAUDIO_IF_PM_RESUME pm_resume;
+		/* Resume interface after shutdown for power management */
 
 	HALAUDIO_CODEC_OPS codec_ops;	/* Default codec ops */
 } HALAUDIO_IF_OPS;
@@ -841,7 +854,8 @@ typedef struct halaudio_if_ops {
 *  functionality to control external op-amps or LEDs.
 */
 typedef struct halaudio_extensions_ops {
-	int (*setgain) (HALAUDIO_BLOCK block, int db);	/* Set analog (PGA) gains */
+	int (*setgain) (HALAUDIO_BLOCK block, int db);
+	/* Set analog (PGA) gains */
 } HALAUDIO_EXTENSIONS_OPS;
 
 /**
@@ -850,7 +864,9 @@ typedef struct halaudio_extensions_ops {
 *  including power up/down, etc.
 */
 typedef struct halaudio_pm_ops {
-	int (*suspend) (void);	/* achieve lowest power state by setting power level to deep sleep and disabling clocks */
+	int (*suspend) (void);
+	/* achieve lowest power state by setting power level to deep sleep
+	and disabling clocks */
 	int (*resume) (void);	/* restore power level and re-enable clocks */
 } HALAUDIO_PM_OPS;
 
@@ -859,11 +875,11 @@ typedef void *HALAUDIO_IF_HDL;
 
 /**
 *  Structure containing function pointer types for the HAL Audio API. This
-*  structure is used to install a proprietary implementation of the HAL 
+*  structure is used to install a proprietary implementation of the HAL
 *  Audio framework.
 *
 *  The function pointer type must match the parameters of the actual API.
-*  Refer to the API function prototypes for the explanation of the 
+*  Refer to the API function prototypes for the explanation of the
 *  parameters and description of the API.
 */
 typedef struct halaudio_api_funcs {
@@ -911,7 +927,7 @@ typedef struct halaudio_api_funcs {
 
 /* ---- Variable Externs ------------------------------------------ */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /* Controls the amount of delay in msec before going to deep sleep. */
 extern int gHalAudioSleepDelayMsec;
@@ -924,14 +940,14 @@ extern int gHalAudioSleepDelayMsec;
 extern "C" {
 #endif
 
-#if !defined( SWIG ) && !defined( MAKEDEFS )
+#if !defined(SWIG) && !defined(MAKEDEFS)
 /***************************************************************************/
 /**
 *  Allocate a client handle to make use of HAL Audio
 *
 *  @return for user applications
 *     >= 0     Client handle
-*     -1       Failed to open driver. 
+*     -1       Failed to open driver.
 *
 *  @return for kernel applications
 *     != NULL  Successfully opened driver handle
@@ -963,7 +979,7 @@ extern "C" {
 				    /**< (i) Client handle */
 					 const char *name,
 				    /**< (i) Name of interface */
-					 HALAUDIO_IF * id
+					 HALAUDIO_IF *id
 				    /**< (i) Ptr to store found interface ID */
 	    );
 
@@ -979,7 +995,7 @@ extern "C" {
 				    /**< (i) Client handle */
 				     const char *name,
 				    /**< (i) Name of codec channel */
-				     HALAUDIO_CODEC * id
+				     HALAUDIO_CODEC *id
 				    /**< (i) Ptr to store found codec ID */
 	    );
 
@@ -1008,7 +1024,7 @@ extern "C" {
 
 /***************************************************************************/
 /**
-*  Acquire lock for an audio codec channel by name. Refer to 
+*  Acquire lock for an audio codec channel by name. Refer to
 *  halAudioLockCodec for more information.
 *
 *  @return
@@ -1024,9 +1040,9 @@ extern "C" {
 		HALAUDIO_CODEC cid;
 		int err;
 		 err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioLockCodec(client_hdl, cid);
 	}
 
@@ -1064,9 +1080,9 @@ extern "C" {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioUnlockCodec(client_hdl, cid);
 	}
 
@@ -1081,11 +1097,11 @@ extern "C" {
 *     -ve      Failure code
 */
 	int halAudioGetGainInfo(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-				HALAUDIO_BLOCK block,
-				    /**< (i) Block id for digital or analog gain */
-				HALAUDIO_GAIN_INFO * info
-				    /**< (o) Pointer to returned gain information */
+			    /**< (i) Client handle */
+			HALAUDIO_BLOCK block,
+			    /**< (i) Block id for digital or analog gain */
+			HALAUDIO_GAIN_INFO *info
+			    /**< (o) Pointer to returned gain information */
 	    );
 
 /***************************************************************************/
@@ -1100,10 +1116,10 @@ extern "C" {
 *     -ve      Failure code
 */
 	int halAudioSetGain(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-			    HALAUDIO_BLOCK block,
-				    /**< (i) Block id for digital or analog gain */
-			    int db  /**< (i) Gain in dB to set */
+			    /**< (i) Client handle */
+		    HALAUDIO_BLOCK block,
+			    /**< (i) Block id for digital or analog gain */
+		    int db  /**< (i) Gain in dB to set */
 	    );
 
 /***************************************************************************/
@@ -1121,12 +1137,12 @@ extern "C" {
 *     -EBUSY   Codec is locked by another user
 */
 	int halAudioAlterGain(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-			      HALAUDIO_BLOCK block,
-				    /**< (i) Block id for digital or analog gain */
-			      int delta
-				    /**< (i) Number of notches to adjust gain by in unitless notches */
-	    );
+	/**< (i) Client handle */
+		HALAUDIO_BLOCK block,
+	/**< (i) Block id for digital or analog gain */
+		int delta
+	/**< (i) Number of notches to adjust gain by in unitless notches */
+	);
 
 /***************************************************************************/
 /**
@@ -1155,7 +1171,7 @@ extern "C" {
 */
 	int halAudioGetPower(HALAUDIO_HDL client_hdl,
 				    /**< (i) Client handle */
-			     HALAUDIO_POWER_LEVEL * level
+			     HALAUDIO_POWER_LEVEL *level
 				    /**< (o) Pointer to store power level */
 	    );
 
@@ -1192,22 +1208,22 @@ extern "C" {
 *     -ve      Error code
 */
 	static inline int halAudioWriteByName(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-					      const char *name,
-				    /**< (i) Name of codec channel to write to */
-					      HALAUDIO_FMT format,
-				    /**< (i) Format of samples */
-					      const uint8_t *audio,
-				    /**< (i) Ptr to data buffer to playback */
-					      int bytes
-				    /**< (i) Number of bytes contained in buffer */
+				/**< (i) Client handle */
+				      const char *name,
+				/**< (i) Name of codec channel to write to */
+				      HALAUDIO_FMT format,
+				/**< (i) Format of samples */
+				      const uint8_t *audio,
+				/**< (i) Ptr to data buffer to playback */
+				      int bytes
+				/**< (i) Number of bytes contained in buffer */
 	    ) {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioWrite(client_hdl, cid, format, audio, bytes);
 	}
 
@@ -1257,9 +1273,9 @@ extern "C" {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioRead(client_hdl, cid, format, audio, bytes);
 	}
 
@@ -1274,9 +1290,9 @@ extern "C" {
 *     -1       Super user privileges not permitted
 */
 	int halAudioSetSuperUser(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-				 int enable
-				    /**< (i) 1 to enable super user, 0 to disable */
+			/**< (i) Client handle */
+			int enable
+			/**< (i) 1 to enable super user, 0 to disable */
 	    );
 
 /***************************************************************************/
@@ -1324,9 +1340,9 @@ extern "C" {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioSetFreq(client_hdl, cid, freqhz);
 	}
 
@@ -1366,9 +1382,9 @@ extern "C" {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioGetFreq(client_hdl, cid, freqhz);
 	}
 
@@ -1388,7 +1404,7 @@ extern "C" {
 				    /**< (i) Codec channel */
 				HALAUDIO_DIR dir,
 				    /**< (i) Select equalizer direction */
-				const HALAUDIO_EQU * equ
+				const HALAUDIO_EQU *equ
 				    /**< (i) Pointer to equalizer parameters */
 	    );
 
@@ -1408,15 +1424,15 @@ extern "C" {
 				    /**< (i) Name of codec */
 						    HALAUDIO_DIR dir,
 				    /**< (i) Select equalizer direction */
-						    const HALAUDIO_EQU * equ
+						    const HALAUDIO_EQU *equ
 				    /**< (i) Pointer to equalizer parameters */
 	    ) {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioSetEquParms(client_hdl, cid, dir, equ);
 	}
 
@@ -1430,13 +1446,13 @@ extern "C" {
 *     -EPERM   Parent interface is disabled
 */
 	int halAudioGetEquParms(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-				HALAUDIO_CODEC cid,
-				    /**< (i) Codec channel */
-				HALAUDIO_DIR dir,
-				    /**< (i) Select equalizer direction */
-				HALAUDIO_EQU * equ
-				    /**< (o) Ptr to store equalizer parameters */
+			    /**< (i) Client handle */
+			HALAUDIO_CODEC cid,
+			    /**< (i) Codec channel */
+			HALAUDIO_DIR dir,
+			    /**< (i) Select equalizer direction */
+			HALAUDIO_EQU *equ
+			    /**< (o) Ptr to store equalizer parameters */
 	    );
 
 /***************************************************************************/
@@ -1449,20 +1465,20 @@ extern "C" {
 *     -EPERM   Parent interface is disabled
 */
 	static inline int halAudioGetEquParmsByName(HALAUDIO_HDL client_hdl,
-				    /**< (i) Client handle */
-						    const char *name,
-				    /**< (i) Name of codec channel */
-						    HALAUDIO_DIR dir,
-				    /**< (i) Select equalizer direction */
-						    HALAUDIO_EQU * equ
-				    /**< (o) Ptr to store equalizer parameters */
+			/**< (i) Client handle */
+					    const char *name,
+			/**< (i) Name of codec channel */
+					    HALAUDIO_DIR dir,
+			/**< (i) Select equalizer direction */
+					    HALAUDIO_EQU *equ
+			/**< (o) Ptr to store equalizer parameters */
 	    ) {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioGetEquParms(client_hdl, cid, dir, equ);
 	}
 
@@ -1478,7 +1494,7 @@ extern "C" {
 */
 	int halAudioGetHardwareInfo(HALAUDIO_HDL client_hdl,
 				    /**< (i) Client handle */
-				    HALAUDIO_HW_INFO * info
+				    HALAUDIO_HW_INFO *info
 				    /**< (o) Ptr to store hardware info */
 	    );
 
@@ -1494,7 +1510,7 @@ extern "C" {
 				    /**< (i) Client handle */
 				     HALAUDIO_IF id,
 				    /**< (i) Interface id */
-				     HALAUDIO_IF_INFO * info
+				     HALAUDIO_IF_INFO *info
 				    /**< (o) Ptr to store interface info */
 	    );
 
@@ -1506,19 +1522,20 @@ extern "C" {
 *     0        Success
 *     -EINVAL  Invalid parameters
 */
-	static inline int halAudioGetInterfaceInfoByName(HALAUDIO_HDL client_hdl,
+	static inline int halAudioGetInterfaceInfoByName(
+					HALAUDIO_HDL client_hdl,
 				    /**< (i) Client handle */
 							 const char *name,
 				    /**< (i) Interface name */
-							 HALAUDIO_IF_INFO * info
+							 HALAUDIO_IF_INFO *info
 				    /**< (o) Ptr to store interface info */
 	    ) {
 		HALAUDIO_IF id;
 		int err;
 		err = halAudioQueryInterfaceByName(client_hdl, name, &id);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioGetInterfaceInfo(client_hdl, id, info);
 	}
 
@@ -1535,7 +1552,7 @@ extern "C" {
 				    /**< (i) Client handle */
 				 HALAUDIO_CODEC cid,
 				    /**< (i) Codec channel */
-				 HALAUDIO_CODEC_INFO * info
+				 HALAUDIO_CODEC_INFO *info
 				    /**< (o) Ptr to store codec info */
 	    );
 
@@ -1552,15 +1569,15 @@ extern "C" {
 				    /**< (i) Client handle */
 						     const char *name,
 				    /**< (i) Name of codec channel */
-						     HALAUDIO_CODEC_INFO * info
+						     HALAUDIO_CODEC_INFO *info
 				    /**< (o) Ptr to store codec info */
 	    ) {
 		HALAUDIO_CODEC cid;
 		int err;
 		err = halAudioQueryCodecByName(client_hdl, name, &cid);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioGetCodecInfo(client_hdl, cid, info);
 	}
 
@@ -1605,9 +1622,9 @@ extern "C" {
 		HALAUDIO_IF id;
 		int err;
 		err = halAudioQueryInterfaceByName(client_hdl, name, &id);
-		if (err) {
+		if (err)
 			return err;
-		}
+
 		return halAudioEnableInterface(client_hdl, id, enable);
 	}
 
@@ -1615,7 +1632,7 @@ extern "C" {
 }
 #endif
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /***************************************************************************/
 /**
@@ -1632,18 +1649,20 @@ extern "C" {
 *     limitations or other reasons. To opt out of synchronization, set
 *     the frame period to 0.
 */
-int halAudioAddInterface(HALAUDIO_IF_OPS * ops,
-				    /**< (i) Interface operations */
-			 unsigned int codecs,
-				    /**< (i) Total number of audio codec channels */
-			 const char *name,
-				    /**< (i) Name string */
-			 int frame_usec,
-				    /**< (i) Interrupt period in usec. 0 means not synchronized */
-			 int sync,	/*<< (i) Requests to synchronize with other interfaces */
-			 HALAUDIO_IF_HDL * hdlp
-				    /**< (o) Ptr to store handle */
-    );
+int halAudioAddInterface(HALAUDIO_IF_OPS *ops,
+			/**< (i) Interface operations */
+		 unsigned int codecs,
+			/**< (i) Total number of audio codec channels */
+		 const char *name,
+			/**< (i) Name string */
+		 int frame_usec,
+			/**< (i) Interrupt period in usec.
+				0 means not synchronized */
+		 int sync,
+		 /*<< (i) Requests to synchronize with other interfaces */
+		 HALAUDIO_IF_HDL *hdlp
+			/**< (o) Ptr to store handle */
+);
 
 /***************************************************************************/
 /**
@@ -1658,7 +1677,7 @@ int halAudioAddInterface(HALAUDIO_IF_OPS * ops,
 */
 int halAudioDelInterface(HALAUDIO_IF_HDL handle
 				    /**< (i) interface to delete */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -1676,8 +1695,8 @@ int halAudioDelInterface(HALAUDIO_IF_HDL handle
 *  @remarks
 */
 int halAudioSetSyncFlag(HALAUDIO_IF_HDL handle,	/*<< (i) interface to delete */
-			int sync	/*<< (i) 1 requests to sync with other interfaces */
-    );
+	int sync	/*<< (i) 1 requests to sync with other interfaces */
+);
 
 /***************************************************************************/
 /**
@@ -1690,14 +1709,14 @@ int halAudioSetSyncFlag(HALAUDIO_IF_HDL handle,	/*<< (i) interface to delete */
 *     -ve      Other error codes
 */
 int halAudioSetCsxIoPoints(HALAUDIO_CODEC cid,
-				    /**< (i) Codec to install CSX callbacks */
+			    /**< (i) Codec to install CSX callbacks */
 			   HALAUDIO_CSX_POINT_ID point,
-				    /**< (i) Point ID selected for CSX callbacks */
+			    /**< (i) Point ID selected for CSX callbacks */
 			   const CSX_IO_POINT_FNCS *fncp,
 				    /**< (i) List of callbacks */
 			   void *data
 				    /**< (i) User data */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -1712,18 +1731,18 @@ int halAudioSetCsxFrameSync(CSX_FRAME_SYNC_FP fncp,
 			      /**< (i) Frame sync callback */
 			    void *data
 			      /**< (i) User data */
-    );
+);
 
 /***************************************************************************/
 /**
-*  Set platform extension operations. This routine is called to setup platform 
+*  Set platform extension operations. This routine is called to setup platform
 *  specific extensions.
 *
 *  @return Nothing
 */
 void halAudioSetExtensionsOps(const HALAUDIO_EXTENSIONS_OPS * extensions_ops
 						  /**< (in) Extensions ops */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -1734,9 +1753,9 @@ void halAudioSetExtensionsOps(const HALAUDIO_EXTENSIONS_OPS * extensions_ops
 *     -ve   - error code
 */
 int halAudioSetPowerManageOps(HALAUDIO_PM_OPS * pm_ops
-				    /**< (i) Power management callbacks 
-                                             If NULL, clears registration */
-    );
+				/**< (i) Power management callbacks
+				If NULL, clears registration */
+);
 
 /***************************************************************************/
 /**
@@ -1745,9 +1764,9 @@ int halAudioSetPowerManageOps(HALAUDIO_PM_OPS * pm_ops
 *  @return    none
 */
 void halAudioSetApiFuncs(const HALAUDIO_API_FUNCS * funcs
-				    /**< (i) Ptr to API functions. 
-                                             If NULL, clears registration */
-    );
+		/**< (i) Ptr to API functions.
+			If NULL, clears registration */
+);
 
 #endif /* __KERNEL__ */
 #endif /* SWIG */

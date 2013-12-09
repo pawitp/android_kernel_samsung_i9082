@@ -50,7 +50,12 @@ struct bcmpmu_chrgr_fifo {
 extern bq24272_start_chg();
 extern bq24272_stop_chg();
 #endif
-
+#ifdef CONFIG_SMB358_CHARGER
+extern smb358_start_chg();
+extern smb358_stop_chg();
+extern void smb358_set_chg_current(int chg_current);
+extern void smb358_suspend(bool onoff);
+#endif
 static int debug_mask = BCMPMU_PRINT_ERROR | BCMPMU_PRINT_INIT;
 /* static int debug_mask = 0xFF; */
 #define pr_chrgr(debug_level, args...) \
@@ -192,7 +197,7 @@ static int bcmpmu_chrgr_usb_en(struct bcmpmu *bcmpmu, int en)
 		chrgr_usb_en = false;
 	}
 	else{
-		while (timeout) {
+		while(timeout) {
 			if(!pchrgr->spafifo.chrg_on)
 				break;
 			mdelay(100);
@@ -213,10 +218,10 @@ static int bcmpmu_chrgr_usb_en(struct bcmpmu *bcmpmu, int en)
 
 		if(timeout) {
 		timeout = 10;
-		while (timeout) {
+		while(timeout) {
 				if(!pchrgr->spafifo.chrg_on)
 				break;
-			mdelay(100);
+				mdelay(100);
 			// USB_VALID
 			bcmpmu->read_dev(bcmpmu, PMU_REG_ENV2,
 					&val, PMU_BITMASK_ALL);
@@ -225,7 +230,7 @@ static int bcmpmu_chrgr_usb_en(struct bcmpmu *bcmpmu, int en)
 				break;
 			}
 			timeout--;
-		}
+			}
 		}
 
 		bcmpmu->read_dev(bcmpmu, PMU_REG_CHRGR_USB_EN,
@@ -505,7 +510,7 @@ static int bcmpmu_chrgr_set_property(struct power_supply *ps,
 		enum power_supply_property prop,
 		const union power_supply_propval *propval)
 {
-	int ret = 0;
+	int ret = 0,type=0,curr=0;
 	struct bcmpmu_chrgr *pchrgr = container_of(ps,
 		struct bcmpmu_chrgr, chrgr);
 	struct bcmpmu *bcmpmu = pchrgr->bcmpmu;
@@ -515,12 +520,26 @@ static int bcmpmu_chrgr_set_property(struct power_supply *ps,
 	case POWER_SUPPLY_PROP_STATUS:
 		pchrgr->status = propval->intval;
 #if defined(CONFIG_BQ24272_CHARGER)
-
+	if(bcmpmu->usb_accy_data.chrgr_type == PMU_CHRGR_TYPE_SDP)
+		type = 0; // USB
+	else
+		type = 1; // TA
+	
 	if(propval->intval == POWER_SUPPLY_STATUS_CHARGING)
-		bq24272_start_chg();
+		bq24272_start_chg(type);
 	else
 		bq24272_stop_chg();
+#elif defined(CONFIG_SMB358_CHARGER)
 
+	if(bcmpmu->usb_accy_data.chrgr_type == PMU_CHRGR_TYPE_SDP)
+		type = 0; // USB
+	else
+		type = 1; // TA
+	
+	if(propval->intval == POWER_SUPPLY_STATUS_CHARGING)
+		smb358_start_chg(type);
+	else
+		smb358_stop_chg();
 #else
 		if (!pchrgr->chrgrfifo.fifo_full) {
 				mutex_lock(&pchrgr->chrgrlock);
@@ -558,7 +577,12 @@ static int bcmpmu_chrgr_set_property(struct power_supply *ps,
 
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		pchrgr->icc_fc = propval->intval;
+#ifdef CONFIG_SMB358_CHARGER
+		pr_chrgr(FLOW, "%s, charging current%d\n", __func__,propval->intval);
+		smb358_set_chg_current((int)propval->intval);
+#else
 		bcmpmu_set_icc_fc(bcmpmu, (int)propval->intval);
+#endif
 		break;
 
 	case POWER_SUPPLY_PROP_CHARGE_FULL_DESIGN:
@@ -800,6 +824,21 @@ static void bcmpmu_chrgr_isr(enum bcmpmu_irq irq, void *data)
 				NULL);
 		}
 		break;
+#ifdef CONFIG_SMB358_CHARGER
+	case PMU_IRQ_BATRM:
+		// If the battery removed while charger connection, 
+		// Sometims unknown reset and abnormal behavior occurred.
+		// So, In that case set PMU shutdown from SMB358 suspend to prevent abnoraml behavior.
+		if(pchrgr->bcmpmu->usb_accy_data.chrgr_type != PMU_CHRGR_TYPE_NONE){
+			smb358_stop_chg();			
+			pchrgr->bcmpmu->write_dev(pchrgr->bcmpmu,
+									PMU_REG_HOSTCTRL1,
+									0x34,
+									pchrgr->bcmpmu->regmap[PMU_REG_HOSTCTRL1].mask);
+
+		}	
+		break;
+#endif			
 	default:
 		break;
 	}
@@ -870,10 +909,14 @@ static void bcmpmu_chrgr_spa_evt(struct work_struct *work)
 			spa_event_handler(SPA_EVT_TEMP, data);
 			break;
 		case BCMPMU_CHRGR_EVENT_MBOV:
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER)	
 			spa_event_handler(SPA_EVT_OVP, data);
+#endif
 			break;
 		case BCMPMU_CHRGR_EVENT_USBOV:
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER)	
 			spa_event_handler(SPA_EVT_OVP, data);
+#endif
 			break;
 		case BCMPMU_CHRGR_EVENT_EOC:
 			spa_event_handler(SPA_EVT_EOC, 0);
@@ -888,7 +931,7 @@ static void bcmpmu_chrgr_spa_evt(struct work_struct *work)
 	}
 	else {
 		printk(KERN_INFO "%s fifo empty\n",__func__);
-		mutex_unlock(&pchrgr->lock);
+    		mutex_unlock(&pchrgr->lock);
 	}
 
 	if (event_exist)
@@ -982,6 +1025,10 @@ static int __devinit bcmpmu_chrgr_probe(struct platform_device *pdev)
 		bcmpmu->register_irq(bcmpmu, PMU_IRQ_USBOV_DIS,
 		bcmpmu_chrgr_isr, pchrgr);
 
+#ifdef CONFIG_SMB358_CHARGER
+	bcmpmu->register_irq(bcmpmu, PMU_IRQ_BATRM,
+	bcmpmu_chrgr_isr, pchrgr);
+#endif
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBTEMPLOW);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_MBTEMPHIGH);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_CHGERRDIS);
@@ -992,6 +1039,9 @@ static int __devinit bcmpmu_chrgr_probe(struct platform_device *pdev)
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_USBOV);
 	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_USBOV_DIS);
 
+#ifdef CONFIG_SMB358_CHARGER
+	bcmpmu->unmask_irq(bcmpmu, PMU_IRQ_BATRM);
+#endif
 	pchrgr->nb.notifier_call = bcmpmu_chrgr_event_handler;
 	ret = bcmpmu_add_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION,
 		&pchrgr->nb);
@@ -1026,7 +1076,7 @@ static int __devinit bcmpmu_chrgr_probe(struct platform_device *pdev)
 err2:
 	bcmpmu_remove_notifier(BCMPMU_USB_EVENT_IN, &pchrgr->nb);
 	bcmpmu_remove_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION, &pchrgr->nb);
-	bcmpmu_remove_notifier(BCMPMU_CHRGR_UBPD_CHG_F, &pchrgr->nb);
+	bcmpmu_remove_notifier(BCMPMU_CHRGR_UBPD_CHG_F, &pchrgr->nb);	
 err1:
 	power_supply_unregister(&pchrgr->chrgr);
 err:
@@ -1042,7 +1092,7 @@ static int __devexit bcmpmu_chrgr_remove(struct platform_device *pdev)
 
 	bcmpmu_remove_notifier(BCMPMU_USB_EVENT_IN, &pchrgr->nb);
 	bcmpmu_remove_notifier(BCMPMU_CHRGR_EVENT_CHGR_DETECTION, &pchrgr->nb);
-	bcmpmu_remove_notifier(BCMPMU_CHRGR_UBPD_CHG_F, &pchrgr->nb);
+	bcmpmu_remove_notifier(BCMPMU_CHRGR_UBPD_CHG_F, &pchrgr->nb);	
 	power_supply_unregister(&pchrgr->chrgr);
 
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_MBTEMPLOW);

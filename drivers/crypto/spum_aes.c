@@ -950,9 +950,9 @@ static int __devinit aes_probe(struct platform_device *pdev)
 
 	/* Initializing the clock. */
 	spum_dev->clk = clk_get(NULL, "spum_open");
-	if (!spum_dev->clk) {
+	if (IS_ERR(spum_dev->clk)) {
 		printk(KERN_ERR "%s: Clock intialization failed.\n", __func__);
-		rc = -ENODEV;
+		rc = PTR_ERR(spum_dev->clk);
 		goto exit_free;
 	}
 

@@ -1269,7 +1269,7 @@ void resume_console(void)
 	console_unlock();
 }
 
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
+#if defined( CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined( CONFIG_MACH_CAPRI_SS_CRATER_CMCC)
 int get_console_suspended(void)
 {
 	return console_suspended ;

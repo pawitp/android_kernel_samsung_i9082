@@ -1196,7 +1196,7 @@ void csl_caph_dma_set_ddrfifo_status(CSL_CAPH_DMA_CHNL_e chnl,
 	CAPH_DMA_CHANNEL_e chal_chnl = CAPH_DMA_CH_VOID;
 	CAPH_DMA_CHNL_FIFO_STATUS_e chal_status = CAPH_READY_NONE;
 
-	/* aTrace(LOG_AUDIO_CSL, "%s::\n", __func__); */
+	/* aTrace(LOG_AUDIO_CSL, "%s %d\n", __func__, status); */
 
 	chal_chnl = csl_caph_dma_get_chal_chnl(chnl);
 	chal_status = csl_caph_dma_get_chal_ddrfifo_status(status);

@@ -208,9 +208,9 @@ static int Get_SDCARD_Available(void)
 	int ret;
 	u64 int_max = INT_MAX;
 
-	ret = kern_path("/sdcard/", LOOKUP_DIRECTORY, &path);
+	ret = kern_path(BCMLOG_GetFileBase(), LOOKUP_DIRECTORY, &path);
 	if (ret < 0)
-		goto out;
+		return ret;
 
 	ret = vfs_statfs(&path, &sbuf);
 	if (ret < 0)
@@ -239,7 +239,8 @@ static void WriteToLogDev_SDCARD(void)
 	 */
 	if (!g_devWrParms.file) {
 		if ((Get_SDCARD_Available()) > MTT_SD_RESERVED) {
-			GetLogFileName(fname, "/sdcard/", sizeof(fname));
+			GetLogFileName(fname, BCMLOG_GetFileBase(),
+				sizeof(fname));
 
 			g_devWrParms.file =
 			    filp_open(fname, O_WRONLY | O_TRUNC | O_CREAT,
@@ -354,13 +355,14 @@ int WriteToLogDev_MODEMLOG(void)
 	 *      If log file open start logging to it
 	 */
 	printk("++++WriteToLogDev_MODEMLOG pfile : %x ++++\n", pfile);
-        buf_size = BCMLOG_GetBufferSize();
-	nWrite = pfile->f_op->write
-		(pfile, g_fifo.buf_ptr,
-		buf_size, &pfile->f_pos);
-
 	if( pfile )
 	{
+	        buf_size = BCMLOG_GetBufferSize();
+		nWrite = pfile->f_op->write
+			(pfile, g_fifo.buf_ptr,
+			buf_size, &pfile->f_pos);
+		printk("++++WriteToLogDev_MODEMLOG nWrite : %x ++++\n", nWrite);
+
 		filp_close(pfile, NULL);
 	}
 	set_fs(oldfs);
@@ -414,7 +416,7 @@ static void verifyRefCount(unsigned char *pBytes, unsigned long nBytes)
 				expect_counter = old_frame_counter + 1;
 				if (frame_counter != expect_counter) {
 					pr_info
-					    ("BCMLOG: RefCount Skip!!!Time %d: %d, expect %d\n",
+			    ("BCMLOG: RefCount Skip!!!Time %d: %d, expect %d\n",
 					     (pBytes[i + 4] << 24) |
 					     (pBytes[i + 5] << 16) |
 					     (pBytes[i + 6] << 8) |
@@ -509,12 +511,12 @@ static void WriteToLogDev_UART(void)
 			if (nFifo > 0) {
 				nWrite =
 				    g_devWrParms.file->f_op->write(g_devWrParms.
-								   file,
-								   BCMLOG_FifoGetData
-								   (&g_fifo),
-								   nFifo,
-								   &g_devWrParms.
-								   file->f_pos);
+					file,
+					BCMLOG_FifoGetData
+					(&g_fifo),
+					nFifo,
+					&g_devWrParms.
+					file->f_pos);
 
 				if (nWrite > 0)
 					BCMLOG_FifoRemove(&g_fifo, nWrite);
@@ -598,7 +600,7 @@ static void WriteToLogDev_ACM(void)
 
 					if (nWrite < (int)nFifo) {
 						pr_info
-						    ("ACM failed to write log error:%d\n",
+				    ("ACM failed to write log error:%d\n",
 						     nWrite);
 						nFifo = 0;
 						filp_close(g_devWrParms.file,

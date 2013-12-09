@@ -27,6 +27,7 @@
 #include <mach/rdb/brcm_rdb_scu.h>
 #include <mach/rdb/brcm_rdb_pwrmgr.h>
 #include <mach/rdb/brcm_rdb_kproc_clk_mgr_reg.h>
+#include <mach/rdb/brcm_rdb_gicdist.h>
 #include <mach/rdb/brcm_rdb_pl310.h>
 
 #include <plat/pi_mgr.h>
@@ -34,6 +35,7 @@
 #include <mach/chipregHw_inline.h>
 #include <asm/cacheflush.h>
 #include <asm/hardware/cache-l2x0.h>
+#include "capri_pm.h"
 
 /* Control variable to enter retention instead
  * of dormant in idle path but enter
@@ -85,6 +87,9 @@ module_param_named(cnt_success, cnt_success, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 static int cnt_failure;
 module_param_named(cnt_failure, cnt_failure, int, S_IRUGO | S_IWUSR | S_IWGRP);
+
+static int pm_reg_log;
+module_param_named(pm_reg_log, pm_reg_log, int, S_IRUGO | S_IWUSR | S_IWGRP);
 
 /* Buffer to pass parameters to secure rom */
 #define	SEC_BUFFER_ADDR				0x3404C400	/* SRAM */
@@ -146,7 +151,8 @@ u8 gic_dist_shared_data[GIC_DIST_SHARED_DATA_SIZE];
 /* un-cached memory for dormant stack */
 u32 un_cached_stack_ptr;
 
-volatile int dormant_debug_count;
+int dormant_debug_count;
+int event_set_count;
 
 #define PROC_CLK_REG_ADDR(reg_name)		((u32)(KONA_PROC_CLK_VA + \
 		(KPROC_CLK_MGR_REG_##reg_name##_OFFSET)))
@@ -208,10 +214,31 @@ static u32 proc_clk_regs[][2] = {
 #define PROC_CLK_ITEM_ADDR(index)	(proc_clk_regs[(index)][0])
 #define PROC_CLK_ITEM_VALUE(index)	(proc_clk_regs[(index)][1])
 
+/**
+ * Before WFI pm_set(7), int_status(7), int_masked(7),
+ * gic_enable_set(8), gic_pending_set(8), pm_event(1). After WFI
+ * int_status(7), int_masked(7), gic_enable_set(8),
+ * gic_pending_set(8), in_out_wfi_in_secure mode (1)
+ */
+
+struct dbg_pm_buff_t {
+	u32 pre_pm_set[7];
+	u32 pre_int_status[7];
+	u32 pre_int_masked[7];
+	u32 pre_gic_en_set[8];
+	u32 pre_gic_pending_set[8];
+	u32 pm_envent;
+	u32 post_int_status[7];
+	u32 post_int_masked[7];
+	u32 post_gic_en_set[8];
+	u32 post_gic_pending_set[8];
+	u32 wfi_count_in_sec;
+};
+
 #define LOG_BUFFER_SIZE (SEC_BUFFER_SIZE -\
 		(MAX_SECURE_BUFFER_SIZE +\
 			sizeof(u32)*NUM_API_PARAMETERS +\
-			sizeof(u32)*1))
+			sizeof(u32)*1 + sizeof(u32)*69))
 
 /* Structure of the parameters passed in the buffer to secure side */
 struct secure_params_t {
@@ -229,7 +256,10 @@ struct secure_params_t {
 	 */
 	u32 log_index;
 	u8 log_buffer[LOG_BUFFER_SIZE];
+	struct dbg_pm_buff_t pm_dbg_buff;
 };
+
+struct dbg_pm_buff_t pm_dbg_regLog;
 
 enum DORMANT_LOG_TYPE {
 	DORMNAT_ENTRY_LOG = 1,
@@ -422,6 +452,183 @@ u32 is_dormant_enabled(void)
 	return !dormant_disable;
 }
 
+void capri_pm_regLog(void)
+{
+		int i;
+		for (i = 0; i < 7; i++) {
+			pm_dbg_regLog.pre_pm_set[i] =
+				secure_params->pm_dbg_buff.pre_pm_set[i];
+			if (pm_reg_log)
+				pr_info("pre_pm_set:%.8x\n",
+				secure_params->pm_dbg_buff.pre_pm_set[i]);
+		}
+		for (i = 0; i < 7; i++) {
+			pm_dbg_regLog.post_int_status[i] =
+				secure_params->pm_dbg_buff.pre_int_status[i];
+			if (pm_reg_log)
+				pr_info("pre_int_status:%.8x\n",
+				secure_params->pm_dbg_buff.pre_int_status[i]);
+		}
+		for (i = 0; i < 7; i++) {
+			pm_dbg_regLog.pre_int_masked[i] =
+				secure_params->pm_dbg_buff.pre_int_masked[i];
+			if (pm_reg_log)
+				pr_info("pre_masked:%.8x\n",
+				secure_params->pm_dbg_buff.pre_int_masked[i]);
+		}
+		for (i = 0; i < 8; i++) {
+			pm_dbg_regLog.pre_gic_en_set[i] =
+				secure_params->pm_dbg_buff.pre_gic_en_set[i];
+			if (pm_reg_log)
+				pr_info("pre_gic_en_set:%.8x\n",
+				secure_params->pm_dbg_buff.pre_gic_en_set[i]);
+		}
+		for (i = 0; i < 8; i++) {
+			pm_dbg_regLog.pre_gic_pending_set[i] =
+			 secure_params->pm_dbg_buff.pre_gic_pending_set[i];
+			if (pm_reg_log)
+				pr_info("pre_gic_pending_set:%.8x\n",
+			  secure_params->pm_dbg_buff.pre_gic_pending_set[i]);
+		}
+
+		pm_dbg_regLog.pm_envent = secure_params->pm_dbg_buff.pm_envent;
+
+		if (pm_reg_log)
+			pr_info("pm_event(COMMON_INT_TO_AC_EVENT):%.8x\n",
+				secure_params->pm_dbg_buff.pm_envent);
+
+		pm_dbg_regLog.post_int_status[0] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS0_OFFSET);
+		pm_dbg_regLog.post_int_status[1] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS1_OFFSET);
+		pm_dbg_regLog.post_int_status[2] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS2_OFFSET);
+		pm_dbg_regLog.post_int_status[3] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS3_OFFSET);
+		pm_dbg_regLog.post_int_status[4] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS4_OFFSET);
+		pm_dbg_regLog.post_int_status[5] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS5_OFFSET);
+		pm_dbg_regLog.post_int_status[6] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS6_OFFSET);
+
+		if (pm_reg_log) {
+			for (i = 0; i < 7; i++)
+				pr_info("post_int_status:%.8x\n",
+					pm_dbg_regLog.post_int_status[i]);
+		}
+
+		pm_dbg_regLog.post_int_masked[0] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS0_OFFSET);
+		pm_dbg_regLog.post_int_masked[1] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS1_OFFSET);
+		pm_dbg_regLog.post_int_masked[2] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS2_OFFSET);
+		pm_dbg_regLog.post_int_masked[3] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS3_OFFSET);
+		pm_dbg_regLog.post_int_masked[4] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS4_OFFSET);
+		pm_dbg_regLog.post_int_masked[5] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS5_OFFSET);
+		pm_dbg_regLog.post_int_masked[6] =
+			readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS6_OFFSET);
+
+		if (pm_reg_log) {
+			for (i = 0; i < 7; i++)
+				pr_info("post_int_masked:%.8x\n",
+					pm_dbg_regLog.post_int_masked[i]);
+		}
+
+		pm_dbg_regLog.post_gic_en_set[0] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET0_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[1] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET1_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[2] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET2_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[3] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET3_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[4] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET4_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[5] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET5_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[6] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET6_OFFSET);
+		pm_dbg_regLog.post_gic_en_set[7] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_ENABLE_SET7_OFFSET);
+
+		if (pm_reg_log) {
+			for (i = 0; i < 8; i++)
+				pr_info("post_gic_en_set:%.8x\n",
+				pm_dbg_regLog.post_gic_en_set[i]);
+		}
+
+		pm_dbg_regLog.post_gic_pending_set[0] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET0_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[1] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET1_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[2] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET2_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[3] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET3_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[4] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET4_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[5] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET5_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[6] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET6_OFFSET);
+		pm_dbg_regLog.post_gic_pending_set[7] =
+			readl_relaxed(KONA_GICDIST_VA +
+				GICDIST_PENDING_SET7_OFFSET);
+
+		if (pm_reg_log) {
+			for (i = 0; i < 8; i++) {
+				pr_info("post_gic_pendig:%.8x\n",
+				pm_dbg_regLog.post_gic_pending_set[0]);
+			}
+		}
+
+		pm_dbg_regLog.wfi_count_in_sec =
+			secure_params->pm_dbg_buff.wfi_count_in_sec;
+
+		if (secure_params->pm_dbg_buff.pm_envent & 0x1)
+			event_set_count++;
+
+		if (pm_reg_log) {
+			pr_info("in_out_wfi_in_secure:%.8x\n",
+			secure_params->pm_dbg_buff.wfi_count_in_sec);
+			pr_info("event_set_count:%d\n", event_set_count);
+		}
+}
+
 /* Main dormant enter routine.  Must be called with
  * interrupts locked.  Will save/restore context of the CPU/CLUSTER
  * and returns back as a normal function call.
@@ -433,10 +640,76 @@ void dormant_enter(enum CAPRI_DORMANT_SERVICE_TYPE service,
 	u32 boot_2nd_addr;
 	u32 dormant_return;
 	u32 reg_val;
+	int i;
 
 	dormant_debug_count = 1;
-	
-	spin_lock_irqsave(&dormant_entry_lock, flgs);
+
+	if (path == CAPRI_DORMANT_SUSPEND_PATH && service ==
+		CAPRI_DORMANT_CLUSTER_DOWN && pm_reg_log) {
+		pr_info("Pre COMMON EVENT:%.8x\n",
+			readl_relaxed(KONA_PWRMGR_VA +
+		       PWRMGR_COMMON_INT_TO_AC_EVENT_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+		       CHIPREG_INTERRUPT_EVENT_4_PM_SET0_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET1_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET2_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET3_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET4_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET5_OFFSET));
+		pr_info("pm_set:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INTERRUPT_EVENT_4_PM_SET6_OFFSET));
+
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS0_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS1_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS2_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS3_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS4_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS5_OFFSET));
+		pr_info("int_status:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_STATUS6_OFFSET));
+
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE0_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE1_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE2_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE3_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE4_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE5_OFFSET));
+		pr_info("int_enable:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_ENABLE6_OFFSET));
+
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS0_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS1_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS2_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS3_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS4_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS5_OFFSET));
+		pr_info("int_masked:%.8x\n", readl_relaxed(KONA_CHIPREG_VA +
+			   CHIPREG_INT_MASKED_STATUS6_OFFSET));
+	}
+
 	if (dormant_disable || fake_dormant ||
 	    (force_retention_in_idle && (service == CAPRI_DORMANT_CORE_DOWN))) {
 		/* Dis-allow entering dormant */
@@ -460,7 +733,6 @@ void dormant_enter(enum CAPRI_DORMANT_SERVICE_TYPE service,
 		writel_relaxed(reg_val, KONA_PWRMGR_VA +
 			       PWRMGR_PI_DEFAULT_POWER_STATE_OFFSET);
 	}
-	spin_unlock_irqrestore(&dormant_entry_lock, flgs);
 
 	if (dormant_disable) {
 
@@ -758,6 +1030,10 @@ void dormant_enter(enum CAPRI_DORMANT_SERVICE_TYPE service,
 		}		/* Master core */
 	}			/* Success dormant return */
 	dormant_debug_count = 20;
+	if (path == CAPRI_DORMANT_SUSPEND_PATH &&
+		service == CAPRI_DORMANT_CLUSTER_DOWN)
+		capri_pm_regLog();
+
 }
 
 /*
@@ -792,12 +1068,14 @@ void dormant_enter_continue(void)
 
 	if (processor_id == MASTER_CORE) {
 
+#if !defined(CONFIG_CAPRI_SYSEMI_DDR3)
 		secure_params->core0_reset_address = virt_to_phys(cpu_resume);
 
 		secure_params->core1_reset_address = virt_to_phys(cpu_resume);
+#endif
 
 		/* Check if L2 controller is off  or if this is a fake dormant
-		 * if it is, do not bother saving/restoring L2 controlelr
+		 * if it is, do not bother saving/restoring L2 controller
 		 * in the secure side.  For fake dormant, we do not want
 		 * to save and restore the L2 controller since it would not
 		 * be turned off.
@@ -807,6 +1085,19 @@ void dormant_enter_continue(void)
 			/* We want to enter retention in idle path */
 			wfi();
 		} else {
+#if defined(CONFIG_CAPRI_SYSEMI_DDR3)
+			/*
+			 * Hook DDR3 restoring function into resume path
+			 *  1. change Reset address to where it restores DDR3
+			 *  2. jump to virt_to_phys(cpu_resume) as it should be
+			 */
+			capri_suspend_ddr3(
+				0 /* unused */
+				, SEC_BUFFER_ADDR
+				, ((is_l2_disabled() || fake_dormant) ? 3 : 2)
+				, virt_to_phys(cpu_resume)
+				);
+#else
 			if (is_l2_disabled() || fake_dormant) {
 #ifdef CONFIG_MOBICORE_DRIVER
 				local_secure_api(SMC_CMD_SLEEP,
@@ -831,6 +1122,7 @@ void dormant_enter_continue(void)
 						 (u32)SEC_BUFFER_ADDR +
 						 MAX_SECURE_BUFFER_SIZE, 2);
 			}
+#endif
 #endif
 		}
 

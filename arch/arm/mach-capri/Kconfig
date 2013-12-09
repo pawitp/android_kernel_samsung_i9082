@@ -71,7 +71,12 @@ config MACH_CAPRI_SS_BAFFIN_CMCC
 	bool "Support Broadcom Capri SS BAFFIN board"
 	help
 	  Support for the Broadcom Capri SS BAFFIN board.
-	  
+
+config MACH_CAPRI_SS_CRATER_CMCC
+	bool "Support Broadcom Capri SS CRATER board"
+	help
+	  Support for the Broadcom Capri SS CRATER board.
+	  	  
 config MACH_CAPRI_SS_BAFFIN_CHU
 	bool "Support Broadcom Capri SS BAFFIN board"
 	help
@@ -93,9 +98,11 @@ choice
 config CAPRI_11130
 	bool "BCM11130"
 	select CAPRI_LPDDR2_AUTO_VREF
+	select CAPRI_SYSEMI_DDR3
 
 config CAPRI_11140
 	bool "BCM11140"
+	select CAPRI_SYSEMI_DDR3
 
 config CAPRI_11351
 	bool "BCM11351"
@@ -110,6 +117,56 @@ config CAPRI_28155
 	select CAPRI_LPDDR2_AUTO_VREF
 
 endchoice
+
+
+# ----- DDR3 SDRAM -----
+config CAPRI_SYSEMI_DDR3
+	bool "Use DDR3 SDRAM on System EMI"
+	help
+	Say Y if SDRAM on System EMI is DDR3.
+	Put DDR3 SDRAM into self-refresh mode and shutdown PHY,
+	when system enters suspend mode, and/or maybe
+	even idle mode.
+
+choice
+	prompt "Select DDR3 chip(s) voltage"
+	depends on CAPRI_SYSEMI_DDR3
+	default CAPRI_SYSEMI_DDR3_1V35
+	help
+	Select desired voltage configuration:
+		1) ldo_volts (bit 8:7) of STANDBY_CONTROL
+			(Standby Control register - 0xA4)
+		2) vddq (bit 9:8) of STRAP_CONTROL
+			(Strap Control register - 0xB0)
+	Part of the SYS_EMI_DDR3_PHY_ADDR_CTL (0x35008800) block.
+
+config CAPRI_SYSEMI_DDR3_1V80
+	bool "1.80v"
+	help
+	DDR3 chip(s) voltage configuration:
+		Set "ldo_volts" to 1.80V
+	See also CAPRI_SYSEMI_DDR3 for
+	more information.
+
+config CAPRI_SYSEMI_DDR3_1V50
+	bool "1.50v"
+	help
+	DDR3 chip(s) voltage configuration:
+		Set "ldo_volts" to 1.50V
+	See also CAPRI_SYSEMI_DDR3 for
+	more information.
+
+config CAPRI_SYSEMI_DDR3_1V35
+	bool "1.35v"
+	help
+	DDR3 chip(s) voltage configuration:
+		Set "ldo_volts" to 1.35V
+	See also CAPRI_SYSEMI_DDR3 for
+	more information.
+	Default setting.
+
+endchoice
+
 
 config SUSPEND_INVALID
 	bool "Set Suspend Invalid"
@@ -374,10 +431,27 @@ config SEC_MODEM_BAFFIN_TD
 	select TDSCDMA_MODEM_SPRD8803
 	select LINK_DEVICE_SPI
 
+config SEC_MODEM_CRATER_TD
+	bool "Crater with SPRD8803"
+	select UMTS_MODEM_XMM6262
+	select LINK_DEVICE_HSIC
+	select EHCI_IRQ_DISTRIBUTION
+	select TDSCDMA_MODEM_SPRD8803
+	select LINK_DEVICE_SPI
+	
 config LINK_DEVICE_SPI
 	bool "Using spi for sprd modem"
 	default n
 
+config SPI_KONA_SSP3_SUPPORT
+	bool "Support for KONA SPI3"
+	depends on SPI_SSPI_KONA
+	default n
+
+config SPI_KONA_SSP3_TEST
+        bool "Support for testing KONA SPI3"
+        depends on SPI_SPIDEV && SPI_SSPI_KONA && SPI_KONA_SSP3_SUPPORT
+	default n
 endmenu
 
 source "arch/arm/mach-capri/custom_boards/Kconfig"

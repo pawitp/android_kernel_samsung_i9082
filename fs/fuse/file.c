@@ -1259,8 +1259,7 @@ static void fuse_writepage_end(struct fuse_conn *fc, struct fuse_req *req)
 	fuse_writepage_free(fc, req);
 }
 
-static int fuse_writepage_locked(struct page *page,
-				 struct writeback_control *wbc)
+static int fuse_writepage_locked(struct page *page)
 {
 	struct address_space *mapping = page->mapping;
 	struct inode *inode = mapping->host;
@@ -1269,14 +1268,6 @@ static int fuse_writepage_locked(struct page *page,
 	struct fuse_req *req;
 	struct fuse_file *ff = NULL;
 	struct page *tmp_page;
-
-	if (fuse_page_is_writeback(inode, page->index)) {
-		if (wbc->sync_mode != WB_SYNC_ALL) {
-			redirty_page_for_writepage(wbc, page);
-			return 0;
-		}
-		fuse_wait_on_page_writeback(inode, page->index);
-	}
 
 	set_page_writeback(page);
 
@@ -1291,16 +1282,13 @@ static int fuse_writepage_locked(struct page *page,
 	spin_lock(&fc->lock);
 	if (!list_empty(&fi->write_files)) {
 		ff = list_entry(fi->write_files.next, struct fuse_file,
-				write_entry);
+			write_entry);
 		req->ff = fuse_file_get(ff);
 	}
 	spin_unlock(&fc->lock);
 
-	if (!ff) {
-		printk(KERN_WARNING "fuse: failed to write back page (ino:%lu"
-			"index:%lu): no suitable open files\n", inode->i_ino, page->index);
+	if (!ff)
 		goto err_free_tmp_page;
-	}
 
 	fuse_write_fill(req, ff, page_offset(page), 0);
 
@@ -1338,7 +1326,7 @@ static int fuse_writepage(struct page *page, struct writeback_control *wbc)
 {
 	int err;
 
-	err = fuse_writepage_locked(page, wbc);
+	err = fuse_writepage_locked(page);
 	unlock_page(page);
 
 	return err;
@@ -1349,10 +1337,7 @@ static int fuse_launder_page(struct page *page)
 	int err = 0;
 	if (clear_page_dirty_for_io(page)) {
 		struct inode *inode = page->mapping->host;
-		struct writeback_control wbc = {
-			.sync_mode = WB_SYNC_ALL,
-		};
-		err = fuse_writepage_locked(page, &wbc);
+		err = fuse_writepage_locked(page);
 		if (!err)
 			fuse_wait_on_page_writeback(inode, page->index);
 	}
@@ -1365,11 +1350,7 @@ static int fuse_launder_page(struct page *page)
  */
 static void fuse_vma_close(struct vm_area_struct *vma)
 {
-	int err = filemap_write_and_wait(vma->vm_file->f_mapping);
-	if (err) {
-		printk(KERN_WARNING "fuse_vma_close(): error writing back dirty"
-			"pages for inode %lu: %i\n", vma->vm_file->f_mapping->host->i_ino, err);
-	}
+	filemap_write_and_wait(vma->vm_file->f_mapping);
 }
 
 /*

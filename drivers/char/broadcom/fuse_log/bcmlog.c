@@ -53,17 +53,16 @@
 #include <linux/fs.h>
 #include <linux/uaccess.h>
 
+#include <linux/vmalloc.h>
 #include <linux/mtd/mtd.h>
 #include <linux/broadcom/ipcinterface.h>
+#include <mach/ns_ioremap.h>
 
 #include "fifo.h"
 #include "bcmmtt.h"
 #include "bcmlog.h"
 #include "output.h"
 #include "config.h"
-
-#define DUMPLOOP 16
-#define DUMP_2MB 0x200000
 
 /**
  *	Console message logging levels -- can be or'ed together
@@ -134,6 +133,10 @@ static void BCMLOG_klogging_crashdump(const char *buf, int size)
 	brcm_klogging((char *)buf, size);
 	mdelay(10);
 }
+
+struct vm_struct *bcmlog_cpmap_area;
+#define get_vaddr_ipc(area)	(ipc_cpmap_area->addr + area)
+#define get_vaddr(area)	(bcmlog_cpmap_area->addr + area)
 
 #ifdef CONFIG_BRCM_CP_CRASH_DUMP_EMMC
 static unsigned long offs;
@@ -394,7 +397,7 @@ static long BCMLOG_Ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					break;
 				}
 
-				kbuf_str = kmalloc(lcl->size + 1, GFP_ATOMIC);
+				kbuf_str = kmalloc(lcl->size + 1, GFP_KERNEL);
 
 				if (!kbuf_str) {
 					BCMLOG_PRINTF(BCMLOG_CONSOLE_MSG_ERROR,
@@ -485,20 +488,20 @@ static long BCMLOG_Ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 					 **/
 					if (copy_from_user
 					    (kernelSigBuf, lcl->sigPtr,
-					     lcl->sigBufSize)) {
+							   lcl->sigBufSize)) {
 						rc = -1;
 						kfree(kernelSigBuf);
 						break;
 					}
 				}
-				/* internal api for signal logging */
+					/* internal api for signal logging */
 				LogSignal_Internal(lcl->sigCode, kernelSigBuf,
 						   lcl->sigBufSize, lcl->state,
-						   lcl->sender,
-						   LOGSIGNAL_COMPRESS);
+							   lcl->sender,
+							   LOGSIGNAL_COMPRESS);
 
-				kfree(kernelSigBuf);
-			}
+					kfree(kernelSigBuf);
+				}
 
 			rc = 0;
 
@@ -530,6 +533,20 @@ static int BCMLOG_Release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+int __init bcmlog_crashsupport_init(void)
+{
+	bcmlog_cpmap_area = plat_get_vm_area(BCMLOG_IOREMAP_NUM_PAGES);
+
+	if (!bcmlog_cpmap_area) {
+		pr_err("bcmlog_cpmap_area:Failed to allocate vm area\n");
+		return -ENOMEM;
+	}
+
+	pr_info("bcmlog:vm area:start:0x%lx, size:%lx\n",
+			(unsigned long __force)bcmlog_cpmap_area->addr,
+			bcmlog_cpmap_area->size);
+	return 0;
+}
 static int __init setup_mtt_logbuffer(char *str)
 {
 	if (str) {
@@ -585,6 +602,9 @@ static int __init BCMLOG_ModuleInit(void)
 			"BCM Log Failed to allocate buffer\n");
 		return -1;
 	}
+
+	if (bcmlog_crashsupport_init())
+		return -1;
 
 	g_module.fifo = BCMLOG_OutputInit((unsigned char *)g_module.buffer,
 		g_module.buffer_size);
@@ -676,7 +696,7 @@ static void LogString_Internal(const char *inLogString, unsigned short inSender)
 		return;
 	}
 
-	kbuf_mtt = kmalloc(mttFrameSize, GFP_ATOMIC);
+	kbuf_mtt = kmalloc(mttFrameSize, GFP_ATOMIC | __GFP_NOWARN);
 
 	if (!kbuf_mtt) {
 		BCMLOG_PRINTF(BCMLOG_CONSOLE_MSG_ERROR, "allocation error\n");
@@ -1237,6 +1257,44 @@ static void start_panic_crashlog(void)
 }
 #endif
 
+static int start_internalsd_crashlog(struct file *inDumpFile)
+{
+	int ret_status;
+	struct timespec ts;
+	struct rtc_time tm;
+	char assertFileName[CP_CRASH_DUMP_MAX_LEN];
+	/* need to tell kernel that pointers from within the */
+	/* kernel address space are valid (needed to do */
+	/* file ops from kernel) */
+	sCrashDumpFS = get_fs();
+	set_fs(KERNEL_DS);
+
+	/* get current time */
+	getnstimeofday(&ts);
+	rtc_time_to_tm(ts.tv_sec, &tm);
+	snprintf(assertFileName, CP_CRASH_DUMP_MAX_LEN,
+		 "%s%s%d_%02d_%02d_%02d_%02d_%02d%s",
+		 BCMLOG_GetInternalFileBase(),
+		 CP_CRASH_DUMP_BASE_FILE_NAME,
+		 tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		 tm.tm_hour, tm.tm_min, tm.tm_sec, CP_CRASH_DUMP_FILE_EXT);
+
+	sDumpFile =
+	    filp_open(assertFileName,
+		      O_WRONLY | O_TRUNC | O_LARGEFILE | O_CREAT, 666);
+	if (IS_ERR(sDumpFile)) {
+		BCMLOG_PRINTF(BCMLOG_CONSOLE_MSG_ERROR,
+			      "failed to open sdDumpFile %s\n", assertFileName);
+		sDumpFile = NULL;
+		ret_status = 0;
+	} else {
+		BCMLOG_PRINTF(BCMLOG_CONSOLE_MSG_ERROR,
+			      "sdDumpFile %s opened OK\n", assertFileName);
+		ret_status = 1;
+	}
+	return ret_status;
+}
+
 static int start_sdcard_crashlog(struct file *inDumpFile)
 {
 	int ret_status;
@@ -1277,10 +1335,10 @@ static int start_sdcard_crashlog(struct file *inDumpFile)
 
 #ifdef CONFIG_CRASH_DUMP_START_UI_DISPLAY
 int dump_start_ui_on;
-void display_crash_dump_start_ui(void)
+void display_crash_dump_start_ui(const char *mode)
 {
 	struct subprocess_info *dump_start_ui_sub_info;
-	char *argv[] = { "/system/bin/dispmanx-kpanic-dump", "0", "100",
+	char *argv[] = { "/system/bin/dispmanx-kpanic-dump", mode, "100",
 		NULL
 	};
 	static char *envp[] = { "HOME=/", "PATH=/sbin:/bin:/usr/sbin:/usr/bin",
@@ -1315,7 +1373,8 @@ void BCMLOG_StartCpCrashDump(struct file *inDumpFile, int cpresetStatus)
 	sDumpFile = inDumpFile;
 	in_atomic = in_atomic();
 
-	if ((BCMLOG_OUTDEV_SDCARD == BCMLOG_GetCpCrashLogDevice())
+	if ((BCMLOG_OUTDEV_SDCARD == BCMLOG_GetCpCrashLogDevice() ||
+		BCMLOG_OUTDEV_ACM == BCMLOG_GetCpCrashLogDevice())
 #ifdef CONFIG_BRCM_CP_CRASH_DUMP_EMMC
 	    && ap_triggered
 #endif
@@ -1324,7 +1383,10 @@ void BCMLOG_StartCpCrashDump(struct file *inDumpFile, int cpresetStatus)
 		BCMLOG_SetCpCrashLogDevice(dump_port);
 	}
 	if ((BCMLOG_OUTDEV_RNDIS == BCMLOG_GetCpCrashLogDevice())
-	    && !cp_crashed) {
+#ifdef CONFIG_BCM_MODEM
+	    && !cp_crashed
+#endif
+	    ) {
 		dump_port = BCMLOG_OUTDEV_PANIC;
 		BCMLOG_SetCpCrashLogDevice(dump_port);
 	}
@@ -1334,18 +1396,28 @@ void BCMLOG_StartCpCrashDump(struct file *inDumpFile, int cpresetStatus)
 	switch (BCMLOG_GetCpCrashLogDevice()) {
 	case BCMLOG_OUTDEV_SDCARD:
 		if (!start_sdcard_crashlog(inDumpFile) || in_atomic) {
-			if (!cpresetStatus) {
-				/*sdcard not present or failed,
-				   save the dump to flash */
-				BCMLOG_SetCpCrashLogDevice(BCMLOG_OUTDEV_PANIC);
-				abort();
+			if (!start_internalsd_crashlog(inDumpFile)) {
+				pr_err("No internal/external sd card\n");
+				if (!cpresetStatus) {
+#ifdef CONFIG_BCM_MODEM
+					plat_iounmap_ns(get_vaddr_ipc
+						(IPC_CP_CRASH_SUMMARY_AREA),
+					free_size_ipc
+						(IPC_CP_CRASH_SUMMARY_AREA_SZ));
+#endif
+					/*sdcard not present or failed,
+					save the dump to flash */
+					BCMLOG_SetCpCrashLogDevice
+						(BCMLOG_OUTDEV_PANIC);
+					abort();
+			       }
 			}
 		}
 		break;
 	case BCMLOG_OUTDEV_PANIC:
 #ifdef CONFIG_BRCM_CP_CRASH_DUMP_EMMC
 		start_emmc_crashlog();
-#else
+#elif defined(CONFIG_BRCM_CP_CRASH_DUMP)
 		start_panic_crashlog();
 #endif
 		break;
@@ -1503,13 +1575,12 @@ void BCMLOG_LogCPCrashDumpString(const char *inLogString)
  **/
 void BCMLOG_HandleCpCrashMemDumpData(const char *inPhysAddr, int size)
 {
-	unsigned long p, sz, csz, n, i;
+	unsigned long p, sz, csz, n, progress;
 	unsigned char *pHbuf;
 	unsigned char *pLength;
 	unsigned char *pChksum;
 	unsigned short chksum;
 	char tmpStr[255];
-	void __iomem *MemDumpVAddr = NULL;
 	unsigned long currPhysical = (unsigned long)inPhysAddr;
 
 	/* make sure we were able to allocate our buffer... */
@@ -1530,24 +1601,28 @@ void BCMLOG_HandleCpCrashMemDumpData(const char *inPhysAddr, int size)
 	 * DUMP_Signal() from CIB dump.c
 	 **/
 	n = 0;
-	for (i = 1; i <= DUMPLOOP; i++) {
-		MemDumpVAddr = ioremap_nocache(currPhysical, DUMP_2MB);
-		if (NULL == MemDumpVAddr) {
+	for (progress = 0; progress < size; currPhysical +=
+	     (WORDS_PER_SIGNAL << 2), progress += (WORDS_PER_SIGNAL << 2)) {
+		sz = size - progress;
+		if (sz > (WORDS_PER_SIGNAL << 2))
+			sz = WORDS_PER_SIGNAL << 2;
+
+		p = (unsigned long) plat_ioremap_ns((unsigned long __force)
+				get_vaddr(BCMLOG_IOREMAP_AREA),
+				BCMLOG_IOREMAP_AREA_SZ,
+				(phys_addr_t)currPhysical);
+
+		if (!p) {
 			BCMLOG_PRINTF(BCMLOG_CONSOLE_MSG_ERROR,
-				      "BCMLOG_HandleCpCrashMemDumpData: failed to remap CP dump addr\n");
+					"BCMLOG: remap failed 0x%lx, 0x%lx\n",
+					p, currPhysical);
 			snprintf(tmpStr, 255,
-				 "*** %s: failed to remap CP dump addr ***",
-				 __func__);
+					"%s remap failed 0x%lx, 0x%lx",
+					__func__, p, currPhysical);
+
 			BCMLOG_LogCPCrashDumpString(tmpStr);
 			return;
 		}
-		for (p = (unsigned long)MemDumpVAddr;
-		     p < (unsigned long)MemDumpVAddr + DUMP_2MB;
-		     p += (WORDS_PER_SIGNAL << 2), currPhysical +=
-		     (WORDS_PER_SIGNAL << 2)) {
-			sz = (unsigned long)MemDumpVAddr + DUMP_2MB - p;
-			if (sz > (WORDS_PER_SIGNAL << 2))
-				sz = WORDS_PER_SIGNAL << 2;
 
 		/**
 		 * **FIXME** MAG doesn't appear to be needed under Android...
@@ -1605,13 +1680,20 @@ void BCMLOG_HandleCpCrashMemDumpData(const char *inPhysAddr, int size)
 			if (n >= 32) {
 				n = 0;
 				snprintf(tmpStr, 255,
-					 "CP memory dump done %d of %d bytes. Do not stop logging",
-					 (int)(p - (unsigned long)MemDumpVAddr),
-					 size);
+				 "CP memory dump done %ld of %d bytes. Do not stop logging",
+					progress, size);
 				BCMLOG_LogCPCrashDumpString(tmpStr);
 			}
-		}
-		iounmap(MemDumpVAddr);
+			/**
+			* A small sleep to let slower drivers like ACM time to dump
+			**/
+			if (BCMLOG_GetCpCrashLogDevice() == BCMLOG_OUTDEV_ACM) {
+				set_current_state(TASK_INTERRUPTIBLE);
+				schedule_timeout(1);
+			}
+
+			plat_iounmap_ns(get_vaddr(BCMLOG_IOREMAP_AREA),
+				free_size_bcmlog(BCMLOG_IOREMAP_AREA_SZ));
 	}
 }
 
@@ -1887,5 +1969,4 @@ void BCMLOG_RegisterPrintkRedirectCbk(int enable, BrcmRedirectPrintkCbk cb)
  **/
 subsys_initcall(BCMLOG_ModuleInit);
 module_exit(BCMLOG_ModuleExit);
-
 

@@ -144,7 +144,8 @@ void chal_audio_vinpath_select_primary_mic( CHAL_HANDLE handle,  cUInt16 digital
  *
  * ============================================================================
  */
-void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable)
+void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable,
+					_Bool clock_phase_rev)
 {
     cUInt32 base =    ((ChalAudioCtrlBlk_t*)handle)->audioh_base;
     cUInt32 reg_val;
@@ -156,8 +157,13 @@ void chal_audio_vinpath_digi_mic_enable(CHAL_HANDLE handle, cUInt16 enable)
 	/* release FIFO clear */
 	BRCM_WRITE_REG(base, AUDIOH_ADCPATH_GLOBAL_CTRL, 0);
 
-    reg_val = BRCM_READ_REG(base, AUDIOH_ADC_CTL);
-    reg_val &= ~(AUDIOH_ADC_CTL_DMIC1_EN_MASK | AUDIOH_ADC_CTL_DMIC2_EN_MASK);
+	reg_val = BRCM_READ_REG(base, AUDIOH_ADC_CTL);
+	reg_val &= ~(AUDIOH_ADC_CTL_DMIC1_EN_MASK |
+				 AUDIOH_ADC_CTL_DMIC2_EN_MASK |
+				 AUDIOH_ADC_CTL_DMIC_CLK_PHASE1_MASK);
+
+	if (clock_phase_rev)
+		reg_val |= AUDIOH_ADC_CTL_DMIC_CLK_PHASE1_MASK;
 
     if(enable&CHAL_AUDIO_CHANNEL_LEFT)
     {

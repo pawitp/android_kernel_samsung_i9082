@@ -20,9 +20,6 @@
 #include <linux/completion.h>
 #include <linux/platform_device.h>
 #include <linux/proc_fs.h>
-#if defined(CONFIG_MAP_SDMA)
-#include <mach/sdma.h>
-#endif
 
 
 #include "vchiq.h"
@@ -85,6 +82,7 @@ struct vc_watchdog_state {
 	atomic_t                wdog_enabled;
 	struct task_struct     *wdog_thread;
 	int                     failed_pings;
+	unsigned int            returned_seqnum;
 };
 static struct vc_watchdog_state *vc_wdog_state;
 
@@ -101,6 +99,11 @@ vc_watchdog_vchiq_callback(VCHIQ_REASON_T reason,
 		unsigned long *msg = (unsigned long *)header->data;
 
 		if (msg && (*msg == WDOG_PING_RESPONSE)) {
+			if (header->size > sizeof(unsigned long))
+				vc_wdog_state->returned_seqnum =
+							*(msg + 1) & 0xFF;
+			else
+				vc_wdog_state->returned_seqnum = 0x100;
 			complete(&vc_wdog_state->wdog_ping_response);
 			LOG_DBG("%s received ping response", __func__);
 		} else {
@@ -119,12 +122,12 @@ vc_watchdog_vchiq_callback(VCHIQ_REASON_T reason,
 static int
 vc_watchdog_thread_func(void *v)
 {
-#if defined(CONFIG_MAP_SDMA)
-	int ch = 0;
-#endif
 	while (1) {
 		long rc;
-		unsigned long msg = WDOG_PING_MSG;
+		static unsigned int seqnum;
+		u64 microsecs;
+		unsigned int cmp_seq;
+		unsigned long msg[2] = { WDOG_PING_MSG, 0 };
 		VCHIQ_ELEMENT_T elem = {
 			.data = (void *)&msg,
 			.size = sizeof(msg)
@@ -153,12 +156,22 @@ vc_watchdog_thread_func(void *v)
 		if (mutex_lock_interruptible(&vc_wdog_state->wdog_ping_mutex)
 				!= 0) {
 			vchiq_release_service(vc_wdog_state->service_handle);
-			LOG_DBG("%s: Interrupted waiting for ping", __func__);
+			LOG_DBG("%s: Interrupted waiting for ping mutex",
+				__func__);
 			continue;
 		}
 
 		LOG_DBG("%s: Pinging videocore", __func__);
-		/* ping vc... */
+		/* ping vc...
+		 * include timestamp to allow vchiq slot data to be correlated
+		 * with kernel log.
+		 * include sequence number to allow ping and response to be
+		 * correlated. */
+		microsecs = cpu_clock(0);
+		do_div(microsecs, 1000);
+		cmp_seq = (seqnum++) & 0xFF;
+		msg[1] = (((unsigned long)microsecs) & 0xFFFFFF00) |
+							(cmp_seq & 0xFF);
 		vchiq_queue_message(vc_wdog_state->service_handle, &elem, 1);
 
 		LOG_DBG("%s: Waiting for ping response", __func__);
@@ -170,20 +183,25 @@ vc_watchdog_thread_func(void *v)
 		if (rc == 0) {
 			/* Timed out... BANG! */
 			vc_wdog_state->failed_pings++;
-			LOG_ERR("%s VideoCore Watchdog timed out!! (%d)",
-				__func__, vc_wdog_state->failed_pings);
+			LOG_ERR("%s VideoCore Watchdog timed out!! (%d - "
+				"seqnum %d)",
+				__func__, vc_wdog_state->failed_pings, cmp_seq);
 			if (vc_wdog_state->failed_pings >=
-						WATCHDOG_NO_RESPONSE_COUNT) {
-#if defined(CONFIG_MAP_SDMA)
-			for (; ch <= SDMA_NUM_CHANNELS; ch++)
-				sdma_dump_debug_info(ch);
-#endif
-			BUG();
-			}
+						WATCHDOG_NO_RESPONSE_COUNT)
+				BUG();
 		} else if (rc < 0)
 			LOG_ERR("%s: Interrupted waiting for ping", __func__);
 		else {
-			LOG_DBG("%s: Ping response received", __func__);
+			if (vc_wdog_state->returned_seqnum != 0x100 &&
+					(vc_wdog_state->returned_seqnum !=
+						cmp_seq))
+				LOG_ERR("%s: Out of sequence ping response "
+					"received. Expected %d, got %d",
+					__func__,
+					cmp_seq,
+					vc_wdog_state->returned_seqnum);
+			else
+				LOG_DBG("%s: Ping response received", __func__);
 			vc_wdog_state->failed_pings = 0;
 		}
 

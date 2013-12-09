@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/ipc_server_ifc.h
+*	@file	include/linux/broadcom/ipc_server_ifc.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -99,8 +99,8 @@ void ipcs_get_ipc_state(int *state);
 
     @ingroup  IPC_PROXY_SERVER
 */
-int ipcs_register_client(bcm_ipcs_ccb_t * clnt_info,
-			 ipcs_clnt_handle_t * handle);
+int ipcs_register_client(bcm_ipcs_ccb_t *clnt_info,
+			 ipcs_clnt_handle_t *handle);
 
 /* -------------------------------------------------- */
 /**
@@ -115,6 +115,6 @@ int ipcs_register_client(bcm_ipcs_ccb_t * clnt_info,
 
     @ingroup  IPC_PROXY_SERVER
 */
-int ipcs_deregister_client(ipcs_clnt_handle_t * handle);
+int ipcs_deregister_client(ipcs_clnt_handle_t *handle);
 
 #endif /* _IPC_SERVER_IFC_H_ */

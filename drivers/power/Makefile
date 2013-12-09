@@ -57,4 +57,5 @@ obj-$(CONFIG_CHARGER_BCMPMU_EXT)	+= bcmpmu-chrgr-ext.o
 obj-$(CONFIG_BCMPMU_EM) 	+= bcmpmu-em.o
 obj-$(CONFIG_SEC_CHARGING_FEATURE) +=spa_power.o
 obj-$(CONFIG_BQ24272_CHARGER) +=bq24272_charger.o
+obj-$(CONFIG_SMB358_CHARGER) +=smb358_charger.o
 obj-$(CONFIG_SEC_CHARGING_FEATURE) +=spa_ps.o

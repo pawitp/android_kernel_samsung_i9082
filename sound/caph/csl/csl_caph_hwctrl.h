@@ -150,6 +150,8 @@ struct __CSL_CAPH_HWCTRL_CONFIG_t {
 	AUDIO_NUM_OF_CHANNEL_t chnlNum;
 	AUDIO_BITS_PER_SAMPLE_t bitPerSample;
 	Int32 sidetone_mode;
+	Boolean secMic;
+	Boolean micClockPhaseRev;
 };
 #define CSL_CAPH_HWCTRL_CONFIG_t struct __CSL_CAPH_HWCTRL_CONFIG_t
 
@@ -274,6 +276,8 @@ struct __CSL_CAPH_HWConfig_Table_t {
 	UInt32 size;
 	CSL_CAPH_DMA_CALLBACK_p dmaCB;
 	Boolean status;
+	Boolean secMic;
+	Boolean micClockPhaseRev;
 	UInt8 sinkCount;
 
 	/*for new api */
@@ -667,24 +671,6 @@ void csl_caph_hwctrl_SetBTMode(int mode);
 
 /****************************************************************************
 *
-*  Function Name: csl_caph_hwctrl_GetDualMic_NoiseRefMic
-*
-*  Description: Get the noise ref mic for dual mic operation
-*
-****************************************************************************/
-CSL_CAPH_DEVICE_e csl_caph_hwctrl_GetDualMic_NoiseRefMic(void);
-
-/****************************************************************************
-*
-*  Function Name: csl_caph_hwctrl_SetDualMic_NoiseRefMic
-*
-*  Description: Set the noise ref mic for dual mic operation
-*
-****************************************************************************/
-void csl_caph_hwctrl_SetDualMic_NoiseRefMic(CSL_CAPH_DEVICE_e dev);
-
-/****************************************************************************
-*
 *  Function Name: csl_caph_arm2sp_set_mixmode
 *
 *  Description: control the MixMode for ARM2SP feature
@@ -840,4 +826,8 @@ void csl_caph_hwctrl_SetLongDma(CSL_CAPH_PathID pathID);
 int csl_caph_hwctrl_hub(int arg1, int arg2);
 int csl_caph_FindPathWithSink(CSL_CAPH_DEVICE_e sink, int skip_path);
 int csl_caph_hwctrl_aadmac_autogate_status(void);
+void csl_caph_SetTuningFlag(int flag);
+int csl_caph_TuningFlag(void);
+void csl_ControlHWClock_156m(Boolean enable);
+void csl_ControlHWClock_2p4m(Boolean enable);
 #endif

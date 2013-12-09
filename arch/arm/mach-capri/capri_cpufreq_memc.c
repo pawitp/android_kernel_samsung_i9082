@@ -30,6 +30,11 @@
  * 0x2 - SYS PLL at 156 MHz
  * 0x1 - crystal at 26 MHz
  */
+enum {
+	DDR_PLL_26M = 1,
+	DDR_PLL_156M,
+	DDR_PLL_400M
+};
 #define DEFAULT_DDR_SPEED_CAP    0x2
 
 struct cpufreq_memc_ctrl {
@@ -43,16 +48,51 @@ struct cpufreq_memc_ctrl {
 static struct cpufreq_memc_ctrl memc_ctrl;
 static struct kobject *memc_kobj;
 
+/*
+ * Function to set the cap for the max memory speed. Need to be called with
+ * proper lock held
+ */
+static inline int __cap_max_mem_speed(unsigned int ddr_cap)
+{
+	uint32_t reg_val, count;
+
+	if (ddr_cap < DDR_PLL_26M || ddr_cap > DDR_PLL_400M)
+		return -EINVAL;
+
+	/* wait for previous MEMC config to finish */
+	count = 0;
+	do {
+		reg_val = readl(KONA_MEMC0_NS_VA +
+				CSR_MEMC_PWR_STATE_PENDING_OFFSET);
+	} while (reg_val &
+		CSR_MEMC_PWR_STATE_PENDING_MEMC_MAX_PWR_STATE_PENDING_MASK
+		&& ++count < MAX_MEMC_PENDING_TICK);
+	if (count >= MAX_MEMC_PENDING_TICK)
+		return -EFAULT;
+
+	reg_val = readl(KONA_MEMC0_NS_VA +
+			CSR_MEMC_MAX_PWR_STATE_OFFSET);
+	reg_val &= ~CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_MASK;
+	reg_val |= (ddr_cap
+		    << CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_SHIFT);
+	writel(reg_val,
+	       KONA_MEMC0_NS_VA + CSR_MEMC_MAX_PWR_STATE_OFFSET);
+
+	return 0;
+}
+
 static int cpufreq_notifier_trans(struct notifier_block *nb,
 				  unsigned long val, void *data)
 {
 	struct cpufreq_freqs *freq = data;
-	uint32_t reg_val, count;
-
-	if (memc_ctrl.enable == 0)
-		return 0;
+	int rc = 0;
 
 	spin_lock(&memc_ctrl.trans_lock);
+
+	if (memc_ctrl.enable == 0 && memc_ctrl.ddr_cap_activated == 0) {
+		spin_unlock(&memc_ctrl.trans_lock);
+		return 0;
+	}
 
 	switch (val) {
 	case CPUFREQ_PRECHANGE:
@@ -64,27 +104,12 @@ static int cpufreq_notifier_trans(struct notifier_block *nb,
 		    memc_ctrl.ddr_cap_activated == 0)
 			break;
 
-		/* wait for previous MEMC config to finish */
-		count = 0;
-		do {
-			reg_val = readl(KONA_MEMC0_NS_VA +
-					CSR_MEMC_PWR_STATE_PENDING_OFFSET);
-		} while (reg_val &
-			 CSR_MEMC_PWR_STATE_PENDING_MEMC_MAX_PWR_STATE_PENDING_MASK
-			 && ++count < MAX_MEMC_PENDING_TICK);
-		if (count >= MAX_MEMC_PENDING_TICK) {
-			printk(KERN_ERR "memc state pending timeout\n");
+		/* program the max MEMC state to DDR PLL */
+		rc = __cap_max_mem_speed(DDR_PLL_400M);
+		if (rc < 0) {
+			printk(KERN_ERR "memc freq cap failed rc=%d\n", rc);
 			break;
 		}
-
-		/* program the max MEMC state to DDR PLL */
-		reg_val = readl(KONA_MEMC0_NS_VA +
-				CSR_MEMC_MAX_PWR_STATE_OFFSET);
-		reg_val &= ~CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_MASK;
-		reg_val |= (0x3
-			    << CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_SHIFT);
-		writel(reg_val,
-		       KONA_MEMC0_NS_VA + CSR_MEMC_MAX_PWR_STATE_OFFSET);
 		memc_ctrl.ddr_cap_activated = 0;
 		break;
 
@@ -97,27 +122,12 @@ static int cpufreq_notifier_trans(struct notifier_block *nb,
 		    memc_ctrl.ddr_cap_activated == 1)
 			break;
 
-		/* wait for previous MEMC config to finish */
-		count = 0;
-		do {
-			reg_val = readl(KONA_MEMC0_NS_VA +
-					CSR_MEMC_PWR_STATE_PENDING_OFFSET);
-		} while (reg_val &
-			 CSR_MEMC_PWR_STATE_PENDING_MEMC_MAX_PWR_STATE_PENDING_MASK
-			 && ++count < MAX_MEMC_PENDING_TICK);
-		if (count >= MAX_MEMC_PENDING_TICK) {
-			printk(KERN_ERR "memc state pending timeout\n");
+		/* program the max MEMC state to SYS PLL */
+		rc = __cap_max_mem_speed(memc_ctrl.ddr_cap);
+		if (rc < 0) {
+			printk(KERN_ERR "memc freq cap failed rc=%d\n", rc);
 			break;
 		}
-
-		/* program the max MEMC state to SYS PLL */
-		reg_val = readl(KONA_MEMC0_NS_VA +
-				CSR_MEMC_MAX_PWR_STATE_OFFSET);
-		reg_val &= ~CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_MASK;
-		reg_val |= (memc_ctrl.ddr_cap
-			    << CSR_MEMC_MAX_PWR_STATE_MEMC_MAX_PWR_STATE_SHIFT);
-		writel(reg_val,
-		       KONA_MEMC0_NS_VA + CSR_MEMC_MAX_PWR_STATE_OFFSET);
 		memc_ctrl.ddr_cap_activated = 1;
 		break;
 
@@ -196,7 +206,7 @@ static ssize_t store_ddr_cap(struct device *dev,
 
 	sscanf(buf, "%u", &ddr_cap);
 
-	if (ddr_cap < 1 || ddr_cap > 3) {
+	if (ddr_cap < DDR_PLL_26M || ddr_cap > DDR_PLL_400M) {
 		printk(KERN_ERR "DDR cap index is out of range\n");
 		return count;
 	}
@@ -220,17 +230,35 @@ int capri_cpufreq_memc_ctrl(int enable, unsigned int freq_threshold,
 			    unsigned int ddr_cap)
 {
 	static struct cpufreq_memc_ctrl *memc = &memc_ctrl;
+	int rc;
 
-	if (ddr_cap < 1 || ddr_cap > 3) {
+	if (ddr_cap < DDR_PLL_26M || ddr_cap > DDR_PLL_400M) {
 		printk(KERN_ERR "DDR cap index is out of range\n");
 		return -1;
 	}
+
 	spin_lock(&memc->trans_lock);
+
 	memc->enable = enable;
 	if (enable) {
 		memc->freq_threshold = freq_threshold;
 		memc->ddr_cap = ddr_cap;
+	} else {
+		/*
+		 * in the case of disabling, de-activate previous cap
+		 * immediately if they are still active
+		 */
+		if (memc->ddr_cap_activated) {
+			/* program the max MEMC state to DDR PLL */
+			rc = __cap_max_mem_speed(DDR_PLL_400M);
+			if (rc < 0) {
+				printk(KERN_ERR "memc freq cap failed rc=%d\n",
+					rc);
+			}
+			memc->ddr_cap_activated = 0;
+		}
 	}
+
 	spin_unlock(&memc->trans_lock);
 
 	return 0;

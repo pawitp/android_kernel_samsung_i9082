@@ -1100,7 +1100,9 @@ void dwc_otg_hcd_complete_xfer_ddma(dwc_otg_hcd_t *hcd,
 	
 
 	}
+	DWC_SPINLOCK_IRQSAVE(hcd->lock, &flags);
 	tr_type = dwc_otg_hcd_select_transactions(hcd);
+	DWC_SPINUNLOCK_IRQRESTORE(hcd->lock, flags);
 	if (tr_type != DWC_OTG_TRANSACTION_NONE || continue_isoc_xfer) {
 		if (continue_isoc_xfer) {
 			if (tr_type == DWC_OTG_TRANSACTION_NONE) {

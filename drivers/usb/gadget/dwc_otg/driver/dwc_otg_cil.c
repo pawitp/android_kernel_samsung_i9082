@@ -60,9 +60,11 @@
 #include "dwc_os.h"
 #include "dwc_otg_regs.h"
 #include "dwc_otg_cil.h"
+#include <linux/reboot.h>
 
 
 static int dwc_otg_setup_params(dwc_otg_core_if_t * core_if);
+extern bool boot_is_recoverymode(void);
 
 void dwc_otg_core_soft_disconnect(dwc_otg_core_if_t *core_if, bool en)
 {
@@ -185,6 +187,49 @@ void w_wakeup_core(void *p)
 
 }
 
+/* BC Detection needs soft disconnect enabled so USB
+ * doesn't pull on Dp/Dm.  Once BC detection is done
+ * soft disconnect should return to previous value */
+static handle_soft_disconnect_request(dwc_otg_core_if_t *core_if, bool en)
+{
+	dctl_data_t dctl = {.d32 = 0 };
+	static int stored;
+	static int stored_val;
+
+	if (dwc_otg_is_device_mode(core_if)) {
+		dctl.d32 =
+			dwc_read_reg32(&core_if->dev_if->dev_global_regs->dctl);
+		if (en) {
+			stored = 1;
+			stored_val = dctl.b.sftdiscon;
+
+			dctl.b.sftdiscon = 1;
+			dwc_write_reg32(&core_if->dev_if->dev_global_regs->dctl,
+					dctl.d32);
+		} else {
+			if (stored) {
+				dctl.b.sftdiscon = stored_val;
+				dwc_write_reg32(
+					&core_if->dev_if->dev_global_regs->dctl,
+					dctl.d32);
+				stored = 0;
+			}
+		}
+	}
+	return ;
+
+}
+
+void w_start_soft_disconnect(void *p)
+{
+	handle_soft_disconnect_request((dwc_otg_core_if_t *)p, true);
+}
+
+void w_restore_soft_disconnect(void *p)
+{
+	handle_soft_disconnect_request((dwc_otg_core_if_t *)p, false);
+}
+
 void w_shutdown_core(void *p)
 {
 	dwc_otg_core_if_t *core_if = p;
@@ -232,6 +277,9 @@ void w_vbus_draw(void *p)
 }
 
 #ifdef CONFIG_USB_OTG_UTILS
+
+#define USB_OP_MODE_CHANGE_DELAY_IN_MS 200
+
 static void w_process_id_change(void *p)
 {
 
@@ -259,6 +307,12 @@ static void w_process_id_change(void *p)
 
 		}
 	}
+
+	/*USB core will need some time to pick up the ID change from PHY
+	before moving furtuer to do the actual core operation.
+	The vaule could vary depending on HW. We define this
+	delay in USB_OP_MODE_CHANGE_DELAY_IN_MS */
+	dwc_mdelay(USB_OP_MODE_CHANGE_DELAY_IN_MS);
 
 	/* Shutdown xceiver/PHY */
 	if (core_if->xceiver->shutdown)
@@ -302,6 +356,16 @@ static int dwc_otg_xceiv_nb_callback(struct notifier_block *nb, unsigned long va
 		/* Schedule a work item to de-init the core */
 		DWC_WORKQ_SCHEDULE(core_if->wq_otg, w_wakeup_core,
 			   core_if, "wake up core ");
+		break;
+	case USB_EVENT_START_SOFT_DISCONNECT:
+		/* Schedule a work item to start soft disconnect */
+		DWC_WORKQ_SCHEDULE(core_if->wq_otg, w_start_soft_disconnect,
+			   core_if, "soft disconnect start");
+		break;
+	case USB_EVENT_RESTORE_SOFT_DISCONNECT:
+		/* Schedule a work item to restore soft disconnect */
+		DWC_WORKQ_SCHEDULE(core_if->wq_otg, w_restore_soft_disconnect,
+			   core_if, "soft disconnect restore");
 		break;
 	default:
 		DWC_DEBUGPL(DBG_CIL, "Unhandled OTG notification\n");
@@ -2826,14 +2890,11 @@ void hc_xfer_timeout(void *ptr)
 
 void ep_xfer_timeout(void *ptr)
 {
-	struct ep_xfer_info *xfer_info = NULL;
+	struct ep_xfer_info *xfer_info = ptr;
 	int ep_num = 0;
 	dctl_data_t dctl = {.d32 = 0 };
 	gintsts_data_t gintsts = {.d32 = 0 };
 	gintmsk_data_t gintmsk = {.d32 = 0 };
-
-	if (ptr)
-		xfer_info = (struct ep_xfer_info *) ptr;
 
 	if (!xfer_info) {
 		DWC_ERROR("No xfer_info\n");
@@ -5206,12 +5267,18 @@ printk("USBD][%s] 1\n",__func__);
 			DWC_WARN("%s() HANG! Soft Reset GRSTCTL=%0x\n",
 				 __func__, greset.d32);
                         printk("%s() HANG! Soft Reset GRSTCTL=%0x\n",__func__, greset.d32);
+			if(boot_is_recoverymode())
+				kernel_restart("recovery");//workaround to restart phone as recovery mode again
+			else
+				kernel_restart(NULL);//workaround to restart phone.
 			break;
 		}
 		dwc_udelay(1);
 	}
 	while (greset.b.csftrst == 1);
 
+	printk("%s - recovery_mode:%d\n",__func__,boot_is_recoverymode());
+	
 	core_if->device_speed = 0;
 
 	/* Always come up soft-disconnected */

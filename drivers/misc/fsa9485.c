@@ -162,6 +162,7 @@ struct fsa9485_usbsw {
 	int				mansw;
 	int				dock_attached;
 	int				ovp;
+	int				acc_status;
 
 	struct input_dev	*input;
 	int			previous_key;
@@ -927,10 +928,10 @@ static ssize_t fsa9485_usb_sel_show(struct device *dev,
 	printk("curr_usb_path = %d \n", curr_usb_path);
 	printk("usb_switch_show usb_sel.bin = %s \n",buffer);
 
-
-	if (!strncmp(buffer, "0", 1)) {
+	
+	if (!strncmp(buffer, "1", 1)) {
 		return sprintf(buf, "PDA");
-	}  else if (!strncmp(buffer, "1", 1)) {
+	}  else if (!strncmp(buffer, "0", 1)) {
 		return sprintf(buf, "MODEM");
 	} else {
 		return sprintf(buf, "PDA");
@@ -964,29 +965,29 @@ static ssize_t fsa9485_usb_sel_store(struct device *dev, struct device_attribute
 		printk("[FSA9480]: %s :: open success %s ,fd=0x%x\n",__func__,"/data/path/usb_sel.bin",fd);
 	}
 
-
+	
 
     if (!strncmp(value,"PDA",3)) {
-        if(curr_usb_path != SWITCH_AP){
+		if(curr_usb_path != SWITCH_AP){ 
 			fsa9485_cp2_usb_on_en(0);
-			sprintf(buffer, "0");
-			fsa9485_set_switch("DHOST");
-			curr_usb_path = SWITCH_AP;
-		}
-	} else if (!strncmp(value,"MODEM",5)) {
-        if( curr_usb_path != SWITCH_CP) {
-			fsa9485_cp2_usb_on_en(1);
 			sprintf(buffer, "1");
+			fsa9485_set_switch("DHOST");
+			curr_usb_path = SWITCH_AP;	
+		} 		
+	} else if (!strncmp(value,"MODEM",5)) {		
+	 	if( curr_usb_path != SWITCH_CP) {
+			fsa9485_cp2_usb_on_en(1);
+			sprintf(buffer, "0");		
 			fsa9485_set_switch("VAUDIO");
-			curr_usb_path = SWITCH_CP;
-        }
+			curr_usb_path = SWITCH_CP;		
+ 		}
 	} else {
 		fsa9485_set_switch("AUTO");
 	}
 
 	sys_write(fd,buffer,strlen(buffer));
 
-	sys_close(fd);
+	sys_close(fd); 
 	set_fs(fs);
 
 	return size;
@@ -1068,7 +1069,23 @@ void fsa9485_otg_vbus_en(u8 on)
 }
 EXPORT_SYMBOL(fsa9485_otg_vbus_en);
 
+int get_acc_status()
+{
+	struct fsa9485_usbsw *usbsw;
+	
+	if(!local_usbsw)
+	{
+		pr_info("%s fsa9485 driver is not ready\n", __func__);
+		return;
+	}
+	usbsw = local_usbsw;	
 
+	pr_info("%s acc_status=%d\n",__func__,usbsw->acc_status);
+
+	return usbsw->acc_status;
+	
+}
+EXPORT_SYMBOL(get_acc_status);
 void fsa9485_manual_switching(int path)
 {
 	struct i2c_client *client = local_usbsw->client;
@@ -1284,6 +1301,7 @@ static int fsa9485_detect_dev(struct fsa9485_usbsw *usbsw)
 	usbsw->unnormal_TA = 0;
 	/* Attached */
 	if (val1 || val2) {
+		usbsw->acc_status = 0;
 		/* USB */
 		if (val1 & DEV_USB ) {
 			dev_info(&client->dev, "usb device - connect\n");
@@ -1405,9 +1423,10 @@ static int fsa9485_detect_dev(struct fsa9485_usbsw *usbsw)
 			} 
 			else {
 				pr_info("FSA MHL Attach\n");
+				usbsw->acc_status = 1;
 				if(fsa9485_read_vbus())
 					if (pdata->charger_cb)
-						pdata->charger_cb(FSA9485_ATTACHED);	
+						pdata->charger_cb(FSA9485_ACCESSORY);	
 
 				fsa9485_write_reg(client,FSA9485_REG_RESERVED_20, 0x08);
 		#if defined(CONFIG_VIDEO_MHL_V1) || defined(CONFIG_VIDEO_MHL_V2)
@@ -1732,6 +1751,9 @@ static void fsa9485_vbus_work_cb(struct delayed_work *work)
 {
 	struct fsa9485_usbsw *usbsw = container_of(work, struct fsa9485_usbsw, work);
 	struct fsa9485_platform_data *pdata;
+#if defined(CONFIG_BQ24272_CHARGER)||defined(CONFIG_SMB358_CHARGER)	
+	u8 val1,val2;
+#endif
 		
 	usbsw = local_usbsw;
 	pdata = local_usbsw->pdata;	
@@ -1742,13 +1764,19 @@ static void fsa9485_vbus_work_cb(struct delayed_work *work)
 	}
 	if(usbsw->dev1==0 && usbsw->dev2==0 && usbsw->vbus==1 ){
 		usbsw->unnormal_TA = 1;
-		pr_info("%s unnormal_TA=%d\n",__func__,usbsw->unnormal_TA);
+		pr_info("%s unnormal_TA=%d acc_status=%d\n",__func__,usbsw->unnormal_TA,usbsw->acc_status);
 	}
 
 	if(usbsw->unnormal_TA ){
 		if(usbsw->vbus){
-			if (pdata->charger_cb)
-				pdata->charger_cb(FSA9485_ATTACHED);			
+			if( usbsw->acc_status){
+				if (pdata->charger_cb)
+					pdata->charger_cb(FSA9485_ACCESSORY);						
+			}
+			else{
+				if (pdata->charger_cb)
+					pdata->charger_cb(FSA9485_ATTACHED);			
+			}
 		}
 		else	{
 			if (pdata->charger_cb)
@@ -1756,6 +1784,18 @@ static void fsa9485_vbus_work_cb(struct delayed_work *work)
 		}	
 	}	
 		
+#if defined(CONFIG_BQ24272_CHARGER)||defined(CONFIG_SMB358_CHARGER)		
+	if(usbsw->vbus==0){
+		fsa9485_read_reg(usbsw->client, FSA9485_REG_DEV_T1,&val1);
+		fsa9485_read_reg(usbsw->client, FSA9485_REG_DEV_T2,&val2);
+		if( val1 || val2)
+			return;
+		else{
+			if (pdata->charger_cb)
+				pdata->charger_cb(FSA9485_DETACHED);			
+		}
+	}
+#endif		
 		
 }
 
@@ -1792,6 +1832,7 @@ static void fsa9485_work_cb(struct work_struct *work)
 		reset to defaults so they need to be reinitialised. */
 		fsa9485_reg_init(usbsw);
 	}
+#if !defined(CONFIG_MACH_CAPRI_SS_CRATER)	
 	else if(intr & 0x20) // ovp
 	{
 		usbsw->ovp = true;
@@ -1802,6 +1843,7 @@ static void fsa9485_work_cb(struct work_struct *work)
 		usbsw->ovp = false;
 		usbsw->pdata->ovp_cb(false);			
 	}
+#endif	
 	/* ADC_value(key pressed) changed at AV_Dock.*/
 	if (intr2) {
 		if (intr2 & 0x4) { /* for adc change */
@@ -1956,22 +1998,22 @@ static void sec_switch_init_work(struct work_struct *work)
 
 	printk("usb buffer : %c\n", buffer);
 
-	if (!strcmp(buffer, "0"))
+	if (!strcmp(buffer, "1"))
 	{
-		printk("sec_switch_init_work usb PDA\n");
+		printk("sec_switch_init_work usb PDA\n");		
 		fsa9485_cp2_usb_on_en(0);
 		fsa9485_set_switch("DHOST");
-		curr_usb_path = SWITCH_AP;
-	} else if(!strcmp(buffer, "1")){
-		printk("sec_switch_init_work usb MODEM\n");
+		curr_usb_path = SWITCH_AP;		
+	} else 	if(!strcmp(buffer, "0")){
+		printk("sec_switch_init_work usb MODEM\n");			
 		fsa9485_cp2_usb_on_en(1);
 		fsa9485_set_switch("VAUDIO");
-		curr_usb_path = SWITCH_CP;
+		curr_usb_path = SWITCH_CP;	
 	} else {
-		printk("sec_switch_init_work usb PDA in else\n");
+		printk("sec_switch_init_work usb PDA in else\n");		
 		fsa9485_cp2_usb_on_en(0);
 		fsa9485_set_switch("DHOST");
-		curr_usb_path = SWITCH_AP;
+		curr_usb_path = SWITCH_AP;	
 	}
 
 	sys_close(fd_uart);
@@ -2055,6 +2097,8 @@ static int __devinit fsa9485_probe(struct i2c_client *client,
 		goto fail2;
 	}
 
+//#ifdef CONFIG_SEC_CHARGING_FEATURE
+#if 0
 	/* make sysfs node /sys/class/sec/switch/usb_state */
 #if defined(CONFIG_SEC_DUAL_MODEM)
 	switch_dev = device_create(sec_class, NULL, 0, NULL, "switch");
@@ -2109,6 +2153,8 @@ static int __devinit fsa9485_probe(struct i2c_client *client,
 #endif
 
 	dev_set_drvdata(switch_dev, usbsw);
+#endif
+	
 	/* fsa9485 dock init*/
 	if (usbsw->pdata->ex_init)
 		usbsw->pdata->ex_init();

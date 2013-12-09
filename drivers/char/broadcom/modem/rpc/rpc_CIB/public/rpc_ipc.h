@@ -136,6 +136,19 @@ typedef enum {
 } RPC_CPResetEvent_t;
 
 /**
+RPC Notification
+**/
+enum RPC_NtfEvent_t {
+	RPC_CPRESET_EVT	/* RPC CP Reset event */
+};
+
+struct RpcNotificationEvent_t {
+	PACKET_InterfaceType_t	ifType;
+	enum RPC_NtfEvent_t event;
+	UInt32 param;
+};
+
+/**
 RPC Error codes
 **/
 typedef enum {
@@ -168,6 +181,7 @@ typedef enum {
 	RPC_PROP_CP_IN_DEEPSLEEP,	///< 1 is deepsleep, 0 otherwise
 	RPC_PROP_CP_TASKMSGS_READY,	///< 
 	RPC_PROP_CP_VERSION,	///< 
+	RPC_PROP_CP_RTC_RATIO,
 	RPC_PROP_END_CP = IPC_PROPERTY_END_CP,
 
 	RPC_MAX_PROP_TYPE = IPC_NUM_OF_PROPERTIES,
@@ -205,9 +219,8 @@ typedef struct {
 		for Packet Data.
 
 **/
-typedef void (RPC_PACKET_CPResetCallbackFunc_t) (RPC_CPResetEvent_t event,
-						 PACKET_InterfaceType_t
-						 interface);
+typedef void (RPC_PACKET_NotificationFunc_t) (
+	struct RpcNotificationEvent_t event);
 
 /****************************************************************************/
 /**
@@ -270,8 +283,8 @@ RPC_Result_t RPC_PACKET_RegisterDataInd(UInt8 rpcClientID,
 					dataIndFunc,
 					RPC_FlowControlCallbackFunc_t
 					flowControlCb,
-					RPC_PACKET_CPResetCallbackFunc_t
-					cpResetCb);
+					RPC_PACKET_NotificationFunc_t
+					rpcNtfFn);
 
 //***************************************************************************************
 /**
@@ -470,8 +483,8 @@ RPC_Result_t RPC_PACKET_RegisterFilterCbk(UInt8 rpcClientID,
 					  PACKET_InterfaceType_t interfaceType,
 					  RPC_PACKET_DataIndCallBackFunc_t
 					  dataIndFunc,
-					  RPC_PACKET_CPResetCallbackFunc_t
-					  cpResetCb);
+					  RPC_PACKET_NotificationFunc_t
+					  rpcNtfFn);
 
 RPC_Result_t RPC_PACKET_FreeBufferEx(PACKET_BufHandle_t dataBufHandle,
 				     UInt8 rpcClientID);
@@ -485,8 +498,8 @@ RPC_Result_t RPC_PACKET_RegisterDataIndEx(UInt8 rpcClientID,
 					  dataIndFunc,
 					  RPC_FlowControlCallbackFunc_t
 					  flowControlCb,
-					  RPC_PACKET_CPResetCallbackFunc_t
-					  cpResetCb);
+					  RPC_PACKET_NotificationFunc_t
+					  rpcNtfFn);
 
 PACKET_BufHandle_t RPC_PACKET_AllocateBufferEx2(PACKET_InterfaceType_t
 						interfaceType,
@@ -497,11 +510,11 @@ PACKET_BufHandle_t RPC_PACKET_AllocateBufferEx2(PACKET_InterfaceType_t
 RPC_Result_t RPC_PACKET_SendDataEx(RpcPktBufferInfo_t *pktBufInfo);
 
 /* called to initiate notification of clients of start of CP reset */
-void RPC_PACKET_HandleNotifyCPReset(RPC_CPResetEvent_t inEvent);
+void RPC_PACKET_HandleNotification(struct RpcNotificationEvent_t inEvent);
 
 /* called when client of interfaceType is ready for silent CP reset; expected
-   to be called at some point after client's registered RPC_PACKET_CPResetCallbackFunc_t
-   is called.
+   to be called at some point after client's registered
+   RPC_PACKET_NotificationFunc_t is called.
 */
 void RPC_PACKET_AckReadyForCPReset(UInt8 rpcClientID,
 				   PACKET_InterfaceType_t interfaceType);
@@ -509,6 +522,9 @@ void RPC_PACKET_FilterAckReadyForCPReset(UInt8 rpcClientID,
 					 PACKET_InterfaceType_t interfaceType);
 
 Int32 RPC_PACKET_IsReservedPkt(PACKET_BufHandle_t dataBufHandle);
+
+Boolean RPC_IsCPResetting(void);
+
 /** \endcond   */
 
 #endif

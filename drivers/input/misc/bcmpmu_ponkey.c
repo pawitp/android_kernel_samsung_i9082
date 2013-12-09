@@ -38,6 +38,7 @@
 struct bcmpmu_ponkey {
 	struct input_dev	*idev;
 	struct bcmpmu		*bcmpmu;
+	struct wake_lock onkey_wake_lock;
 };
 
 static int onkey_pressed=0;
@@ -56,6 +57,8 @@ static void bcmpmu_ponkey_isr(enum bcmpmu_irq irq, void *data)
 		case PMU_IRQ_PONKEYB_F: /* press */
 			val = 1;
 			onkey_pressed = 1;
+			wake_lock_timeout(&(ponkey->onkey_wake_lock), 2*HZ);
+
 	                printk("onkey pressed\n");
 			break;
 
@@ -105,6 +108,7 @@ static int __devinit bcmpmu_ponkey_probe(struct platform_device *pdev)
 	ponkey->idev->evbit[0] = BIT_MASK(EV_KEY);
 	ponkey->idev->keybit[BIT_WORD(KEY_POWER)] = BIT_MASK(KEY_POWER);
 
+	wake_lock_init(&(ponkey->onkey_wake_lock), WAKE_LOCK_SUSPEND, "onkey_wakelock");
 
 	/* Request PRESSED and RELEASED interrupts.
 	 */
@@ -134,6 +138,8 @@ static int __devexit bcmpmu_ponkey_remove(struct platform_device *pdev)
 {
 	struct bcmpmu *bcmpmu = pdev->dev.platform_data;
 	struct bcmpmu_ponkey *ponkey = bcmpmu->ponkeyinfo;
+	
+    	wake_lock_destroy(&(ponkey->onkey_wake_lock));
 	
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_PONKEYB_F);
 	bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_PONKEYB_R);

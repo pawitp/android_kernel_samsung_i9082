@@ -41,8 +41,11 @@
 #include <asm/smp_twd.h>
 #endif
 
-static struct kona_timer *gpt_evt = NULL;
-static struct kona_timer *gpt_src = NULL;
+#define AON_TIMER_RATE 32768
+
+static struct kona_timer *gpt_evt;
+static struct kona_timer *gpt_src;
+static struct kona_timer *aon_timer;
 
 /*
  * read_persistent_clock -  Return time from a *fake* persistent clock.
@@ -107,12 +110,22 @@ static void gptimer_set_mode(enum clock_event_mode mode,
 	}
 }
 
-static cycle_t gptimer_clksrc_read (struct clocksource *cs)
+static cycle_t gptimer_clksrc_read(struct clocksource *cs)
 {
 	cycle_t	count = 0;
 
 	count = kona_timer_get_counter(gpt_src);
 	return count;
+}
+
+static void gptimer_clksrc_suspend(struct clocksource *cs)
+{
+	kona_timer_suspend(gpt_src);
+}
+
+static void gptimer_clksrc_resume(struct clocksource *cs)
+{
+	kona_timer_resume(gpt_src);
 }
 
 static struct clock_event_device clockevent_gptimer = {
@@ -135,6 +148,17 @@ static struct clocksource clksrc_gptimer = {
 						   is informed that CS timer is 32 bit.
 						   */
 	.shift		= 16, /* Fix shift as 16 and calculate mult based on this during init */
+	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
+	.suspend	= gptimer_clksrc_suspend,
+	.resume		= gptimer_clksrc_resume,
+};
+
+/* used for reference, don't need to register this clock source */
+static struct clocksource clksrc_aon_timer = {
+	.name		= "aon_source_1",
+	.rating		= 150,
+	.mask		= CLOCKSOURCE_MASK(32),
+	.shift		= 16,
 	.flags		= CLOCK_SOURCE_IS_CONTINUOUS,
 };
 
@@ -163,6 +187,10 @@ static void __init gptimer_clocksource_init(void)
 	clksrc_gptimer.mult = clocksource_hz2mult(CLOCK_TICK_RATE, 
 		clksrc_gptimer.shift);
 	clocksource_register(&clksrc_gptimer);
+
+	/* clksrc_aon_timer is just used for calculation, don't register it */
+	clksrc_aon_timer.mult = clocksource_hz2mult(AON_TIMER_RATE,
+			clksrc_aon_timer.shift);
 	return;
 }
 
@@ -195,8 +223,36 @@ static void __init timers_init(struct gp_timer_setup *gpt_setup)
 		return;
 	}
 
-	pr_info("timers_init: === SYSTEM TIMER NAME: %s CHANNEL NUMBER %d \
-	RATE %d \r\n",gpt_setup->name, gpt_setup->ch_num, gpt_setup->rate);
+	/*
+	 * if always on timer (hub timer) is deployed as global timer, do
+	 * nothing
+	 *
+	 * if slave timer is deployed as gobal timer, we still have to make
+	 * sure the always on timer is configured properly and its rate set
+	 * to 32768 Hz
+	 */
+	if (strcmp(gpt_setup->name, "aon-timer") == 0)
+		aon_timer = gpt_evt;
+	else {
+		if (kona_timer_module_set_rate("aon-timer",
+					AON_TIMER_RATE) < 0) {
+			pr_err("timers_init: Unable to set the AON timer "
+				"rate to %d\n", AON_TIMER_RATE);
+			return;
+		}
+		aon_timer = kona_timer_request("aon-timer", -1);
+		if (aon_timer == NULL) {
+			pr_err("timers_init: Unable to get AON timer\r\n");
+			return;
+		}
+	}
+
+	pr_info("timers_init: === SYSTEM TIMER NAME: %s CHANNEL NUMBER %d"
+		"RATE %d \r\n", gpt_setup->name, gpt_setup->ch_num,
+		gpt_setup->rate);
+	pr_info("timers_init: === AON TIMER NAME: %s CHANNEL NUMBER %d"
+		"RATE %lu \r\n", aon_timer->ktm->name, aon_timer->ch_num,
+		aon_timer->ktm->rate);
 
 	evt_tm_cfg.mode =  MODE_ONESHOT;
 	evt_tm_cfg.arg = &clockevent_gptimer;
@@ -220,14 +276,22 @@ static void __init timers_init(struct gp_timer_setup *gpt_setup)
 
 	return ;
 }
+
 unsigned long long sched_clock(void)
 {
-	if (gpt_src == NULL)
+	/* timer is not ready yet */
+	if (aon_timer == NULL)
 		return (unsigned long long)(jiffies - INITIAL_JIFFIES) *
 							(NSEC_PER_SEC / HZ);
-	else
-		return clocksource_cyc2ns(gptimer_clksrc_read(NULL),
-					clksrc_gptimer.mult, clksrc_gptimer.shift);
+
+	/*
+	 * Since printk relies on this function for timestamp, ideally we want
+	 * to use a persistent clock source here (e.g., the Always On timer) so
+	 * the printk timestamp keeps incrementing even in system suspend. That
+	 * sometimes provides useful info for debugging
+	 */
+	return clocksource_cyc2ns((cycle_t)kona_timer_get_counter(aon_timer),
+		clksrc_aon_timer.mult, clksrc_aon_timer.shift);
 }
 
 void __init gp_timer_init(struct gp_timer_setup *gpt_setup)

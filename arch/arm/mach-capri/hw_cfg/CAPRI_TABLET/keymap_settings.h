@@ -18,12 +18,12 @@
 #define HW_DEFAULT_KEYMAP \
 { \
 	/* keyout/keyin */ \
-	{ 0x02, 'h' }, /* HOME */ \
+	{ 0x02, 102 }, /* HOME */ \
 	{ 0x01, 's' }, /* VOL_UP */ \
 	{ 0x00, 'r' }, /* VOL_DOWN */ \
-	{ 0x12, ';'  }, /* MENU */ \
+	{ 0x12, 139 }, /* MENU */ \
 	{ 0x11, 158 }, /* BACK */ \
-	{ 0x10, 127 }, /* SEARCH */ \
+	{ 0x10, 217 }, /* SEARCH */ \
 }
 
 #define HW_DEFAULT_POWEROFF { } /* Power button goes to the PMU directly */

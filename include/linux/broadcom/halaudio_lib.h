@@ -18,7 +18,7 @@
 *  @brief   HAL Audio kernel library definitions
 *
 *****************************************************************************/
-#if !defined( HALAUDIO_LIB_H )
+#if !defined(HALAUDIO_LIB_H)
 #define HALAUDIO_LIB_H
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -27,7 +27,7 @@
 #include <linux/broadcom/halaudio.h>	/* HAL Audio API */
 
 /* ---- Constants and Types ---------------------------------------------- */
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /* The maximum number of input samples that can be processed by
  * the software equalizer at one time.
@@ -50,7 +50,7 @@ typedef struct halaudio_rw_buf {
 
 typedef struct halaudio_write {
 	int request;		/* Write request */
-	unsigned int flush_count;	/* Number of flush frames following write */
+	unsigned int flush_count;/* Number of flush frames following write */
 	HALAUDIO_RW_BUF buf[2];	/* Double buffer */
 	int curr_bufidx;	/* Current buffer index */
 	HALAUDIO_CODEC_IORW_CB usercb;	/* User callback( samples, data ) */
@@ -60,12 +60,12 @@ typedef struct halaudio_write {
 #endif
 
 /* ---- Variable Externs ------------------------------------------ */
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #endif
 
 /* ---- Function Prototypes --------------------------------------- */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /***************************************************************************/
 /**
@@ -77,10 +77,11 @@ typedef struct halaudio_write {
 *     This routine expects to run in an atomic context and is not
 *     thread safe.
 */
-void __halAudioWriteWorker(HALAUDIO_WRITE * writestp,	/*<< (io) write state pointer */
-			   int16_t *bufp,	/*<< (o)  output buffer pointer */
-			   int frame_size	/*<< (i)  frame size in bytes */
-    );
+void __halAudioWriteWorker(HALAUDIO_WRITE *writestp,
+					/*<< (io) write state pointer */
+		   int16_t *bufp,	/*<< (o)  output buffer pointer */
+		   int frame_size	/*<< (i)  frame size in bytes */
+);
 
 /***************************************************************************/
 /**
@@ -94,14 +95,14 @@ void __halAudioWriteWorker(HALAUDIO_WRITE * writestp,	/*<< (io) write state poin
 *     This routine expects to run in an atomic context and is not
 *     thread safe.
 */
-static inline void halAudioWriteService(HALAUDIO_WRITE * writestp,	/*<< (io) write state pointer */
-					int16_t *bufp,	/*<< (o)  output buffer pointer */
-					int frame_size	/*<< (i)  frame size in bytes */
-    )
+static inline void halAudioWriteService(HALAUDIO_WRITE *writestp,
+					/*<< (io) write state pointer */
+			int16_t *bufp,	/*<< (o)  output buffer pointer */
+			int frame_size	/*<< (i)  frame size in bytes */
+)
 {
-	if (writestp->request) {
+	if (writestp->request)
 		__halAudioWriteWorker(writestp, bufp, frame_size);
-	}
 }
 
 /***************************************************************************/
@@ -111,14 +112,15 @@ static inline void halAudioWriteService(HALAUDIO_WRITE * writestp,	/*<< (io) wri
 *
 *  @return  0 for success, otherwise -ve error code.
 */
-int halAudioWriteRequest(HALAUDIO_WRITE * writestp,	/*<< (io) write state pointer */
-			 int bytes,    /**< (i)  Number of bytes to write */
-			 const char *audiobuf,
-				       /**< (i)  Pointer to audio samples */
-			 HALAUDIO_CODEC_IORW_CB usercb,
-				       /**< (i)  User callback to request for more data */
-			 void *userdata/**< (i)  User data */
-    );
+int halAudioWriteRequest(HALAUDIO_WRITE *writestp,
+				/*<< (io) write state pointer */
+		 int bytes,    /**< (i)  Number of bytes to write */
+		 const char *audiobuf,
+			       /**< (i)  Pointer to audio samples */
+		 HALAUDIO_CODEC_IORW_CB usercb,
+			     /**< (i)  User callback to request for more data */
+		 void *userdata/**< (i)  User data */
+);
 
 /***************************************************************************/
 /**
@@ -126,8 +128,8 @@ int halAudioWriteRequest(HALAUDIO_WRITE * writestp,	/*<< (io) write state pointe
 *
 *  @return  0 for success, otherwise -ve error code.
 */
-int halAudioWriteFlush(HALAUDIO_WRITE * writestp	/*<< (io) write state pointer */
-    );
+int halAudioWriteFlush(HALAUDIO_WRITE *writestp	/*<< (io) write state pointer */
+);
 
 /***************************************************************************/
 /**
@@ -136,8 +138,8 @@ int halAudioWriteFlush(HALAUDIO_WRITE * writestp	/*<< (io) write state pointer *
 *
 *  @return  0 for success, otherwise -ve error code.
 */
-int halAudioWriteFree(HALAUDIO_WRITE * writestp	/*<< (io) write state pointer */
-    );
+int halAudioWriteFree(HALAUDIO_WRITE *writestp	/*<< (io) write state pointer */
+);
 
 /***************************************************************************/
 /**
@@ -154,8 +156,8 @@ void halAudioGenerateRamp(uint16_t *bufp,
 				 /**< (i)  Number of samples to generate */
 			  int chans
 				 /**< (i)  Number of interleave channels: 1 for
-                                           mono, 2 for stereo, etc.*/
-    );
+				mono, 2 for stereo, etc.*/
+);
 
 /***************************************************************************/
 /**
@@ -165,16 +167,16 @@ void halAudioGenerateRamp(uint16_t *bufp,
 *  @return  None
 */
 void halAudioCompareData(const uint16_t *bufp,
-			   /**< (i)  Pointer to samples to check (rx buffer) */
-			 const uint16_t *refp,
-			   /**< (i)  Pointer to reference samples (tx buffer) */
-			 int length,
-			   /**< (i)  Number of samples */
-			 int *errs,
-			   /**< (o)  Pointer to number of errors */
-			 int *delta
-			   /**< (io) Pointer to delta constant between tx and rx samples */
-    );
+	   /**< (i)  Pointer to samples to check (rx buffer) */
+	 const uint16_t *refp,
+	   /**< (i)  Pointer to reference samples (tx buffer) */
+	 int length,
+	   /**< (i)  Number of samples */
+	 int *errs,
+	   /**< (o)  Pointer to number of errors */
+	 int *delta
+	   /**< (io) Pointer to delta constant between tx and rx samples */
+);
 
 /***************************************************************************/
 /**
@@ -182,12 +184,12 @@ void halAudioCompareData(const uint16_t *bufp,
 *
 *  @return  None
 */
-void halAudioSineConfig(HALAUDIO_SINECTL * cblkp,
-				 /**< (o)  Ptr to sine generation control block */
+void halAudioSineConfig(HALAUDIO_SINECTL *cblkp,
+			 /**< (o)  Ptr to sine generation control block */
 			int freq,/**< (i)  Carrier frequency */
 			int samp_freq
 				 /**< (i)  Sampling frequency */
-    );
+);
 
 /***************************************************************************/
 /**
@@ -196,12 +198,12 @@ void halAudioSineConfig(HALAUDIO_SINECTL * cblkp,
 *  @return  16-bit sample
 */
 void halAudioSine(int16_t *dstp, /**< (o)  Output pointer */
-		  HALAUDIO_SINECTL * cblkp,
-				 /**< (io) Ptr to sine generation control block */
+		  HALAUDIO_SINECTL *cblkp,
+			 /**< (io) Ptr to sine generation control block */
 		  int samples,	 /**< (i)  Number of samples to generate */
 		  int chans	 /**< (i)  Number of interleave channels: 1 for
-                                           mono, 2 for stereo, etc.*/
-    );
+				mono, 2 for stereo, etc.*/
+);
 
 /***************************************************************************/
 /**
@@ -213,23 +215,23 @@ void halAudioSine(int16_t *dstp, /**< (o)  Output pointer */
 *           contents.
 */
 void halAudioPrintMemory(char *str, /**< (o)  Ptr to output string buffer */
-			 int *offset,
-				    /**< (io) Ptr to length offset into string */
-			 void *datap,
-				    /**< (i)  Ptr to memory to dump out */
-			 int max_length,
-				    /**< (i)  Maximum number of words to dump out */
-			 int hexformat,
-				    /**< (i)  1 to output hex, 0 for integer */
-			 int line_length,
-				    /**< (i)  Number of words per line */
-			 int word_width,
-				    /**< (i)  Word width in bytes, supports 1, 2 and 4 */
-			 int print_addr,
-				    /**< (i)  1 to enable address prefix, otherwise 0 */
-			 unsigned long start_addr
-				    /**< (i)  If address prefix request, start with following address */
-    );
+	 int *offset,
+		    /**< (io) Ptr to length offset into string */
+	 void *datap,
+		    /**< (i)  Ptr to memory to dump out */
+	 int max_length,
+		    /**< (i)  Maximum number of words to dump out */
+	 int hexformat,
+		    /**< (i)  1 to output hex, 0 for integer */
+	 int line_length,
+		    /**< (i)  Number of words per line */
+	 int word_width,
+		    /**< (i)  Word width in bytes, supports 1, 2 and 4 */
+	 int print_addr,
+		    /**< (i)  1 to enable address prefix, otherwise 0 */
+	 unsigned long start_addr
+	/**< (i)  If address prefix request, start with following address */
+);
 
 /***************************************************************************/
 /**
@@ -245,7 +247,7 @@ void halAudioEquProcess(int16_t *samp,
 				    /**< (i) pointer to history */
 			int order,  /**< (i) filter order */
 			int len	    /**< (i) number of samples to process */
-    );
+);
 
 #endif /* __KERNEL__ */
 

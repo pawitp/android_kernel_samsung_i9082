@@ -18,8 +18,8 @@ the GPL, without Broadcom's express prior written consent.
 #define BCM_UNICAM_MAGIC	'U'
 
 typedef struct {
-	void *ptr;		// virtual address
-	unsigned int addr;	//physical address
+	void *ptr;		/* virtual address*/
+	unsigned int addr;	/*physical address*/
 	unsigned int size;
 } mem_t;
 
@@ -45,11 +45,18 @@ enum {
 	UNICAM_CMD_LAST
 };
 
-#define UNICAM_IOCTL_WAIT_IRQ        _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_WAIT_IRQ, unsigned int)
-#define UNICAM_IOCTL_OPEN_CSI0       _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_OPEN_CSI0, unsigned int)
-#define UNICAM_IOCTL_CLOSE_CSI0      _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CLOSE_CSI0, unsigned int)
-#define UNICAM_IOCTL_OPEN_CSI1       _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_OPEN_CSI1, unsigned int)
-#define UNICAM_IOCTL_CLOSE_CSI1	     _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CLOSE_CSI1, unsigned int)
-#define UNICAM_IOCTL_CONFIG_SENSOR   _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CONFIG_SENSOR, unsigned int)
-#define UNICAM_IOCTL_RETURN_IRQ		 _IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_RETURN_IRQ, unsigned int)
+#define UNICAM_IOCTL_WAIT_IRQ\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_WAIT_IRQ, unsigned int)
+#define UNICAM_IOCTL_OPEN_CSI0\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_OPEN_CSI0, unsigned int)
+#define UNICAM_IOCTL_CLOSE_CSI0\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CLOSE_CSI0, unsigned int)
+#define UNICAM_IOCTL_OPEN_CSI1\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_OPEN_CSI1, unsigned int)
+#define UNICAM_IOCTL_CLOSE_CSI1\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CLOSE_CSI1, unsigned int)
+#define UNICAM_IOCTL_CONFIG_SENSOR\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_CONFIG_SENSOR, unsigned int)
+#define UNICAM_IOCTL_RETURN_IRQ\
+	_IOR(BCM_UNICAM_MAGIC, UNICAM_CMD_RETURN_IRQ, unsigned int)
 #endif

@@ -20,12 +20,12 @@
  *
  *****************************************************************************/
 
-#if !defined( CSX_SIGMORPH_H )
+#if !defined(CSX_SIGMORPH_H)
 #define CSX_SIGMORPH_H
 
 /* ---- Constants and Types ---------------------------------------------- */
 
-#define CSX_SIGMORPH_IO_POINT_NUM_MAX     (80)	/* Maximum number of CSX I/O 
+#define CSX_SIGMORPH_IO_POINT_NUM_MAX     (80)	/* Maximum number of CSX I/O
 						   points supported */
 #define CSX_SIGMORPH_MIX_ENABLE           (1)
 
@@ -34,8 +34,8 @@ typedef int CSX_SIGMORPH_HDL;
 /*
    capture_raw:   first capture point. Signal  is saved before any processing
    capture_procd: second capture point. Signal is saved after processing
-   inject:        container needed for doing a MIX operation. If not set, 
-                  only an AMPLIFY operation can be envoked.
+   inject:        container needed for doing a MIX operation. If not set,
+		only an AMPLIFY operation can be envoked.
 */
 typedef struct csx_sigmorph_info {
 	GIST_WRITER_PARAMS capture_raw;	/* capture before processing */
@@ -56,9 +56,9 @@ typedef struct csx_sigmorph_point {
 
 /* ---- Function Prototypes ---------------------------------------------- */
 
-#if !defined( SWIG ) && !defined( MAKEDEFS )
+#if !defined(SWIG) && !defined(MAKEDEFS)
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 int csx_sigmorph_add_point(CSX_IO_POINT_INFO *csx_info,
 			   CSX_SIGMORPH_INFO *csx_sigmorph_info,
 			   CSX_IO_HANDLE *csx_handle);

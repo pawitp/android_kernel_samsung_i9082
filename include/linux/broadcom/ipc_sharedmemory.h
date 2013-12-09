@@ -53,7 +53,7 @@ extern "C" {
 *===========================================================*/
 #if defined(FUSE_COMMS_PROCESSOR) || (defined(FUSE_APPS_PROCESSOR) && \
 	!defined(UNDER_CE) && !defined(UNDER_LINUX))
-	extern char *GetFuncNameByAddr(IPC_U32, IPC_U32, IPC_U32 *);
+	extern char *GetFuncNameByAddr(IPC_U32, IPC_U32, IPC_U32*);
 #endif
 
 	typedef IPC_U32 IPC_SmPtr;	/* "Pointer" in Shared Memory */
@@ -83,7 +83,7 @@ extern "C" {
 /* Special values used to mark the top 2 bytes of IPC version */
 #define IPC_VersionHi		0xabcd
 /* IPC version, starting from 1 */
-#define IPC_VersionLo		0x1
+#define IPC_VersionLo		0x2
 #define IPC_Version		((IPC_VersionHi << 16) | IPC_VersionLo)
 
 /**************************************************
@@ -91,7 +91,7 @@ extern "C" {
 * per CPU i.e. IPC_SM_MAX_BUFFERS can be owned by both Apps and Comms
 * Must be a power of 2
 **************************************************/
-#define IPC_SM_MAX_BUFFER_POWER	(10)
+#define IPC_SM_MAX_BUFFER_POWER	(11)
 #define IPC_SM_MAX_BUFFERS		(1 << IPC_SM_MAX_BUFFER_POWER)
 
 /*============================================================
@@ -106,7 +106,7 @@ extern "C" {
 		volatile IPC_Buffer Buffer[IPC_SM_MAX_BUFFERS];
 	} IPC_Fifo_T;
 
-	typedef IPC_Fifo_T *IPC_Fifo;
+	typedef IPC_Fifo_T * IPC_Fifo;
 
 #define IPC_FIFOINCREMENT(Index) ((Index + 1) & (~IPC_SM_MAX_BUFFERS))
 
@@ -167,7 +167,7 @@ extern "C" {
 		volatile IPC_U32 Size;
 	} IPC_SmControl_T;
 
-	typedef IPC_SmControl_T *IPC_SmControl;
+	typedef IPC_SmControl_T * IPC_SmControl;
 
 /* Control structure in local memory - CPU specific data */
 	typedef struct IPC_SmLocalControl_S {
@@ -196,11 +196,14 @@ extern "C" {
 
 /* Macros for critical region protection */
 #define CRITICAL_REIGON_SETUP
-#define CRITICAL_REIGON_CREATE()	(*SmLocalControl.LockFunctions.CreateLock)()
-#define CRITICAL_REIGON_ENTER(lock)	(*SmLocalControl.LockFunctions.AcquireLock) ((void *) lock)
-#define CRITICAL_REIGON_LEAVE(lock)	(*SmLocalControl.LockFunctions.ReleaseLock) ((void *) lock)
+#define CRITICAL_REIGON_CREATE()\
+	(*SmLocalControl.LockFunctions.CreateLock)()
+#define CRITICAL_REIGON_ENTER(lock)\
+	(*SmLocalControl.LockFunctions.AcquireLock) ((void *) lock)
+#define CRITICAL_REIGON_LEAVE(lock)\
+	(*SmLocalControl.LockFunctions.ReleaseLock) ((void *) lock)
 #define CRITICAL_REIGON_DELETE(lock) \
-		(*SmLocalControl.LockFunctions.DeleteLock) ((void *) lock)
+	(*SmLocalControl.LockFunctions.DeleteLock) ((void *) lock)
 
 /* Macros for Event Flags */
 #define IPC_EVENT_CREATE SmLocalControl.Event.Create ? \

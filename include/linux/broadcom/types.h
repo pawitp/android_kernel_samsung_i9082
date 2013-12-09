@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/types.h
+*	@file	include/linux/broadcom/types.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -68,13 +68,16 @@ typedef enum {
 	UNICODE_81 = 0x81,	/* /< unicode tag 81 */
 	UNICODE_82 = 0x82,	/* /< unicode tag 82 */
 
-	UNICODE_UCS2 = 0xF0,	/* /< 2 byte unicode characters with native endianess */
+	UNICODE_UCS2 = 0xF0,
+	/* /< 2 byte unicode characters with native endianess */
 
 	UNICODE_RESERVED = 0xFF	/* /< reserved value */
 } Unicode_t;			/* /< unicode types */
 
-/* Macro to determine if the passed coding type is non-UCS2 format. These include UNICODE_GSM & UNICODE_UCS1 cases */
-#define IS_NON_UCS2_CODING(code_type) (((code_type) == UNICODE_GSM) || ((code_type) == UNICODE_UCS1))
+/* Macro to determine if the passed coding type is non-UCS2 format.
+These include UNICODE_GSM & UNICODE_UCS1 cases */
+#define IS_NON_UCS2_CODING(code_type)\
+	(((code_type) == UNICODE_GSM) || ((code_type) == UNICODE_UCS1))
 
 /** @} */
 

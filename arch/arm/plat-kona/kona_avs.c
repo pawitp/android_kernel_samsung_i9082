@@ -294,8 +294,7 @@ static int kona_avs_get_mon_val(struct avs_info *avs_inf_ptr)
 
 	if (avs_inf_ptr->pdata->flags & AVS_READ_FROM_MEM) {
 		void __iomem *mem_ptr;
-		avs_dbg(AVS_LOG_INIT, "%s: AVS_READ_FROM_MEM => mem adr = %x\n",
-				__func__,
+		avs_dbg(AVS_LOG_INIT, "    AVS_READ_FROM_MEM => mem adr = %x\n",
 				avs_inf_ptr->pdata->avs_mon_addr);
 		BUG_ON(avs_inf_ptr->pdata->avs_mon_addr == 0);
 
@@ -305,8 +304,8 @@ static int kona_avs_get_mon_val(struct avs_info *avs_inf_ptr)
 					sizeof(struct mon_val));
 
 		avs_dbg(AVS_LOG_INIT,
-				"%s: AVS_READ_FROM_MEM => virtual addr = %p\n",
-				__func__, mem_ptr);
+				"    AVS_READ_FROM_MEM => virtual addr = %p\n",
+				mem_ptr);
 		if (mem_ptr) {
 			memcpy(&mon_val, mem_ptr, sizeof(struct mon_val));
 			iounmap(mem_ptr);
@@ -317,9 +316,9 @@ static int kona_avs_get_mon_val(struct avs_info *avs_inf_ptr)
 		}
 	} else {
 		avs_dbg(AVS_LOG_INIT,
-				"%s: AVS_READ_FROM_OTP => row = %x\n",
-				__func__,
+				"    AVS_READ_FROM_OTP => row = %x\n",
 				avs_inf_ptr->pdata->avs_mon_addr);
+
 #if defined(KONA_AVS_DEBUG) || defined(CONFIG_KONA_OTP)
 		ret =
 		otp_read_mon_val(avs_inf_ptr->pdata->avs_mon_addr, &mon_val);
@@ -328,7 +327,7 @@ static int kona_avs_get_mon_val(struct avs_info *avs_inf_ptr)
 
 	if (!ret) {
 
-		avs_dbg(AVS_LOG_INIT, "%s: opt:val0 = %x val1 = %x\n", __func__,
+		avs_dbg(AVS_LOG_INIT, "    opt:val0 = %x; val1 = %x\n",
 				mon_val.val0,
 				mon_val.val1);
 		avs_inf_ptr->monitor_val0 =
@@ -341,10 +340,10 @@ static int kona_avs_get_mon_val(struct avs_info *avs_inf_ptr)
 			(mon_val.val1 >> MONITOR_VAL3_SHIFT) & MONITOR_VAL_MASK;
 
 		avs_dbg(AVS_LOG_INIT,
-				"%s: monitor_val0 = %d; "
-				"monitor_val1 = %d; "
-				"monitor_val2 = %d; "
-				"monitor_val3 = %d\n", __func__,
+				"    monitor_val0 = %d\n"
+				"    monitor_val1 = %d\n"
+				"    monitor_val2 = %d\n"
+				"    monitor_val3 = %d\n",
 				avs_inf_ptr->monitor_val0,
 				avs_inf_ptr->monitor_val1,
 				avs_inf_ptr->monitor_val2,
@@ -359,7 +358,7 @@ static int kona_avs_get_ate_val(struct avs_info *avs_inf_ptr)
 	int ret = -EINVAL;
 	void __iomem *mem_ptr;
 
-	avs_dbg(AVS_LOG_FLOW, "%s\n", __func__);
+	avs_dbg(AVS_LOG_FLOW, "%s:\n", __func__);
 
 	if (avs_inf_ptr->pdata->flags & AVS_TYPE_BOOT) {
 		avs_dbg(AVS_LOG_ERR, "%s: AVS_TYPE_BOOT not supported !!!\n",
@@ -370,14 +369,14 @@ static int kona_avs_get_ate_val(struct avs_info *avs_inf_ptr)
 	if (avs_inf_ptr->pdata->flags & AVS_READ_FROM_MEM) {
 		BUG_ON(avs_inf_ptr->pdata->avs_ate_addr == 0);
 		avs_dbg(AVS_LOG_INIT,
-				"%s: AVS_READ_FROM_MEM => mem adr = %x\n",
-				__func__,
+				"    AVS_READ_FROM_MEM => mem adr = %x\n",
 				avs_inf_ptr->pdata->avs_ate_addr);
+
 		mem_ptr = ioremap_nocache(avs_inf_ptr->pdata->avs_ate_addr,
 				sizeof(ate_val));
 		avs_dbg(AVS_LOG_INIT,
-				"%s: AVS_READ_FROM_MEM => virtual addr = %p\n",
-				__func__, mem_ptr);
+				"    AVS_READ_FROM_MEM => virtual addr = %p\n",
+				mem_ptr);
 		if (mem_ptr) {
 			memcpy(&ate_val, mem_ptr, sizeof(ate_val));
 			iounmap(mem_ptr);
@@ -388,15 +387,15 @@ static int kona_avs_get_ate_val(struct avs_info *avs_inf_ptr)
 		}
 	}
 	if (!ret) {
-		avs_dbg(AVS_LOG_INIT, "%s: ATE val0 = %x val1 = %x\n", __func__,
+		avs_dbg(AVS_LOG_INIT, "    ATE val0 = %x; val1 = %x\n",
 				ate_val.val0,
 				ate_val.val1);
 		avs_inf_ptr->year = ((ate_val.val0 & AVS_ATE_YEAR_MASK) >>
 				AVS_ATE_YEAR_SHIFT);
 		avs_inf_ptr->month = ((ate_val.val0 & AVS_ATE_MONTH_MASK) >>
 				AVS_ATE_MONTH_SHIFT);
-		avs_dbg(AVS_LOG_INFO, "%s: AVS Year & Month of Manufacturing:"
-				"%d %d\n", __func__,
+		avs_dbg(AVS_LOG_INFO, "    AVS Year & Month of Manufacturing:"
+				"%d %d\n",
 				((avs_inf_ptr->year == 0) ? 2012 :
 				 (2010 + avs_inf_ptr->year)),
 				(avs_inf_ptr->month));
@@ -418,15 +417,14 @@ static int kona_avs_get_ate_val(struct avs_info *avs_inf_ptr)
 				((ate_val.val0 & AVS_ATE_IRDROP_MASK) >>
 				AVS_ATE_IRDROP_SHIFT);
 
-		avs_dbg(AVS_LOG_INIT, "%s: "
-							"ATE_CSR_BIN[3 : 0] = 0x%x; "
-							"ATE_MSR_BIN[3 : 0] = 0x%x; "
-							"ATE_VSR_BIN[3 : 0] = 0x%x; "
-							"YEAR[3 : 0] = 0x%x; "
-							"MONTH[3 : 0] = 0x%x; "
-							"ATE_IRDROP_BIN[9 : 0] = 0x%x; "
-							"CRC[3 : 0]=0x%x\n",
-				__func__,
+		avs_dbg(AVS_LOG_INIT,
+							"    ATE_CSR_BIN[3 : 0] = 0x%x\n"
+							"    ATE_MSR_BIN[3 : 0] = 0x%x\n"
+							"    ATE_VSR_BIN[3 : 0] = 0x%x\n"
+							"    YEAR[3 : 0]        = 0x%x\n"
+							"    MONTH[3 : 0]       = 0x%x\n"
+							"    ATE_IRDROP_BIN[9:0] = 0x%x\n"
+							"    CRC[3 : 0]         = 0x%x\n",
 				avs_inf_ptr->ate_csr_bin,
 				avs_inf_ptr->ate_msr_bin,
 				avs_inf_ptr->ate_vsr_bin,
@@ -458,7 +456,7 @@ static int kona_avs_ate_get_type(struct avs_info *avs_inf_ptr)
 			"   avs_inf_ptr->ate_csr_bin = %d\n"
 			"   avs_inf_ptr->ate_msr_bin = %d\n"
 			"   avs_inf_ptr->ate_vsr_bin = %d\n"
-			"   avs_inf_ptr->ate_crc = %d\n",
+			"   avs_inf_ptr->ate_crc = 0x%x\n",
 			__func__,
 			avs_inf_ptr->ate_csr_bin,
 			avs_inf_ptr->ate_msr_bin,
@@ -510,7 +508,7 @@ static int kona_avs_ate_get_type(struct avs_info *avs_inf_ptr)
 		strcat(pack, "0");
 
 	strcat(pack, str);
-	avs_dbg(AVS_LOG_INFO, "packed [ATE:VM] string for CRC : %s\n", pack);
+	avs_dbg(AVS_LOG_INFO, "packed [ATE:VM] string for CRC :\n%s\n", pack);
 
 	temp3 = ((avs_inf_ptr->ate_vsr_bin << 4) |
 			 (avs_inf_ptr->ate_msr_bin));
@@ -520,7 +518,7 @@ static int kona_avs_ate_get_type(struct avs_info *avs_inf_ptr)
 		strcat(pack, "0");
 
 	strcat(pack, str);
-	avs_dbg(AVS_LOG_INFO, "packed [ATE:VM] string for CRC : %s\n", pack);
+	avs_dbg(AVS_LOG_INFO, "packed [ATE:VM] string for CRC :\n%s\n", pack);
 
 
 	cal_crc(pack, crc);
@@ -533,20 +531,26 @@ static int kona_avs_ate_get_type(struct avs_info *avs_inf_ptr)
 		return err;
 	}
 
-	avs_dbg(AVS_LOG_INIT, "Calcualted ATE CRC value = %x\n", (u32)crc_val);
+	avs_dbg(AVS_LOG_INIT, "Calcualted ATE CRC value = 0x%x\n",
+		(u32)crc_val);
 
 	if (avs_inf_ptr->ate_crc != crc_val) {
 		avs_dbg(AVS_LOG_ERR, "ATE CRC Failed. "
 				"Assuming default silicon type %d\n",
 				pdata->ate_default_silicon_type);
 
+#ifdef CONFIG_CAPRI_28145
+		avs_inf_ptr->ate_silicon_type_csr =  SILICON_SS;
+		avs_inf_ptr->ate_silicon_type_msr =  SILICON_SS;
+		avs_inf_ptr->ate_silicon_type_vsr =  SILICON_SS;
+#else
 		avs_inf_ptr->ate_silicon_type_csr =
 		 pdata->ate_default_silicon_type;
 		avs_inf_ptr->ate_silicon_type_msr =
 		 pdata->ate_default_silicon_type;
 		avs_inf_ptr->ate_silicon_type_vsr =
 		 pdata->ate_default_silicon_type;
-
+#endif
 		avs_inf_ptr->freq = pdata->ate_default_cpu_freq;
 
 	} else {
@@ -597,8 +601,7 @@ static u32 kona_avs_get_avs_type(u32 avs_val,
 		bin = SILICON_FF;
 	}
 
-	avs_dbg(AVS_LOG_INFO, "%s: bin = %d\n",
-		__func__, bin);
+	avs_dbg(AVS_LOG_INFO, "    bin = %d\n", bin);
 
 	return bin;
 }
@@ -629,14 +632,14 @@ static u32 kona_avs_get_msr_type(struct avs_info *avs_inf_ptr)
 	struct kona_avs_pdata *pdata = avs_inf_ptr->pdata;
 
 	avs_dbg(AVS_LOG_INIT, "%s:\n", __func__);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val0 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val0);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val1 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val1);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val2 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val2);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val3 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val3);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val0 = %d\n",
+	 avs_inf_ptr->monitor_val0);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val1 = %d\n",
+	 avs_inf_ptr->monitor_val1);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val2 = %d\n",
+	 avs_inf_ptr->monitor_val2);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val3 = %d\n",
+	 avs_inf_ptr->monitor_val3);
 
 	monitor0_bin = kona_avs_get_avs_type(avs_inf_ptr->monitor_val0,
 						&(pdata->avs_lut_msr[0]));
@@ -669,14 +672,14 @@ static u32 kona_avs_get_vsr_type(struct avs_info *avs_inf_ptr)
 	struct kona_avs_pdata *pdata = avs_inf_ptr->pdata;
 
 	avs_dbg(AVS_LOG_INIT, "%s:\n", __func__);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val0 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val0);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val1 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val1);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val2 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val2);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_inf_ptr->monitor_val3 = %d\n",
-	 __func__, avs_inf_ptr->monitor_val3);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val0 = %d\n",
+	 avs_inf_ptr->monitor_val0);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val1 = %d\n",
+	 avs_inf_ptr->monitor_val1);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val2 = %d\n",
+	 avs_inf_ptr->monitor_val2);
+	avs_dbg(AVS_LOG_INIT, "    avs_inf_ptr->monitor_val3 = %d\n",
+	 avs_inf_ptr->monitor_val3);
 
 	monitor0_bin = kona_avs_get_avs_type(avs_inf_ptr->monitor_val0,
 					&(pdata->avs_lut_vsr[0]));
@@ -706,29 +709,31 @@ static int avs_find_silicon_type(void)
 	int ret = 0;
 	int ate_enabled = 0;
 
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.monitor_val0 = %d\n",
-	 __func__, avs_info.monitor_val0);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.monitor_val1 = %d\n",
-	 __func__, avs_info.monitor_val1);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.monitor_val2 = %d\n",
-	 __func__, avs_info.monitor_val2);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.monitor_val3 = %d\n",
-	 __func__, avs_info.monitor_val3);
+	avs_dbg(AVS_LOG_INIT, "%s:\n", __func__);
 
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.avs_irdrop = %d\n",
-	 __func__, avs_info.avs_irdrop);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.ate_csr_bin = %d\n",
-	 __func__, avs_info.ate_csr_bin);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.ate_msr_bin = %d\n",
-	 __func__, avs_info.ate_msr_bin);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.ate_vsr_bin = %d\n",
-	 __func__, avs_info.ate_vsr_bin);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.freq = %d\n",
-	 __func__, avs_info.freq);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.year = %d\n",
-	 __func__, avs_info.year);
-	avs_dbg(AVS_LOG_INIT, "%s: avs_info.month = %d\n",
-	 __func__, avs_info.month);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.monitor_val0 = %d\n",
+	 avs_info.monitor_val0);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.monitor_val1 = %d\n",
+	 avs_info.monitor_val1);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.monitor_val2 = %d\n",
+	 avs_info.monitor_val2);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.monitor_val3 = %d\n",
+	 avs_info.monitor_val3);
+
+	avs_dbg(AVS_LOG_INIT, "    avs_info.avs_irdrop = %d\n",
+	  avs_info.avs_irdrop);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.ate_csr_bin = %d\n",
+	  avs_info.ate_csr_bin);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.ate_msr_bin = %d\n",
+	  avs_info.ate_msr_bin);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.ate_vsr_bin = %d\n",
+	  avs_info.ate_vsr_bin);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.freq = %d\n",
+	  avs_info.freq);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.year = %d\n",
+	  avs_info.year);
+	avs_dbg(AVS_LOG_INIT, "    avs_info.month = %d\n",
+	  avs_info.month);
 
 	if (!avs_info.pdata)
 		return  -EPERM;
@@ -764,12 +769,8 @@ static int avs_find_silicon_type(void)
 				avs_info.freq);
 
 	avs_dbg(AVS_LOG_INIT,
-			"%s:silicon_type_csr: %d; silicon_type_csr: %d; "
-			"silicon_type_csr: %d\n",
-			__func__,
-			avs_info.silicon_type_csr,
-			avs_info.silicon_type_msr,
-			avs_info.silicon_type_vsr);
+			"%s: AVS Complete",
+			__func__);
 
 	return 0;
 }
@@ -800,7 +801,7 @@ static int kona_avs_drv_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct kona_avs_pdata *pdata = pdev->dev.platform_data;
 
-	avs_dbg(AVS_LOG_INIT, "%s\n", __func__);
+	avs_dbg(AVS_LOG_INIT, "%s: AVS Start\n", __func__);
 
 	if (!pdata) {
 		avs_dbg(AVS_LOG_ERR,

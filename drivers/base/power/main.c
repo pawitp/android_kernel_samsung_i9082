@@ -608,7 +608,8 @@ static void dpm_drv_timeout(unsigned long data)
 	printk(KERN_EMERG "**** DPM device timeout: %s (%s)\n", dev_name(dev),
 	       (dev->driver ? dev->driver->name : "no driver"));
 
-	printk(KERN_EMERG "**** DPM device timeout: preempt_count=%d\n", preempt_count());
+	printk(KERN_EMERG "**** DPM device timeout: preempt_count=%d\n",
+		preempt_count());
 	sysrq_timer_list_show();
 
 	printk(KERN_EMERG "dpm suspend stack:\n");
@@ -998,11 +999,11 @@ static void dpm_log_dump(void)
 {
 	u32 i;
 	for (i = 0; i < switch_cnt_in_dpm_suspend_task; i++)
-		printk("time = %u, to task 0x%x\n",
+		printk(KERN_EMERG "time = %u, to task 0x%x\n",
 		sched_history[i].time, sched_history[i].to_task);
 
 	for (i = 0; i < irq_cnt_in_dpm_suspend_task; i++)
-		printk("time = %u, irq %d\n",
+		printk(KERN_EMERG "time = %u, irq %d\n",
 		irq_history[i].time, irq_history[i].irq);
 }
 
@@ -1039,9 +1040,9 @@ int dpm_suspend(pm_message_t state)
 	switch_cnt_in_dpm_suspend_task = 0;
 	irq_cnt_in_dpm_suspend_task = 0;
 	printk(KERN_EMERG "**** dpm_suspend thread: task=0x%x\n",
-			dpm_suspend_task);
+		dpm_suspend_task);
 	printk(KERN_EMERG "**** dpm_suspend thread: local_clock=%u",
-			(u32)local_clock());
+		(u32)local_clock());
 	mutex_lock(&dpm_list_mtx);
 	pm_transition = state;
 	async_error = 0;
@@ -1073,9 +1074,9 @@ int dpm_suspend(pm_message_t state)
 		dpm_show_time(starttime, state, NULL);
 
 	dpm_suspend_task = 0;
-	printk(KERN_EMERG "**** dpm_suspend thread: switch cnt=%d, irq cnt=%d\n",
+	printk(KERN_EMERG "**** dpm_suspend thread: switch=%d, irq=%d\n",
 		switch_cnt_in_dpm_suspend_task, irq_cnt_in_dpm_suspend_task);
-	//dpm_log_dump();
+	/*dpm_log_dump();*/
 	return error;
 }
 

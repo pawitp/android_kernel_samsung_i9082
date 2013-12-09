@@ -84,6 +84,8 @@ subdir-ccflags-$(CONFIG_MACH_CAPRI_SS_CRATER) += -Iarch/arm/mach-capri/hw_cfg/CA
 			-Iarch/arm/mach-capri/hw_cfg/BASE
 subdir-ccflags-$(CONFIG_MACH_CAPRI_SS_ARUBA) += -Iarch/arm/mach-capri/hw_cfg/CAPRI_SS_ARUBA \
 			-Iarch/arm/mach-capri/hw_cfg/BASE
+subdir-ccflags-$(CONFIG_MACH_CAPRI_GARNET) += -Iarch/arm/mach-capri/hw_cfg/CAPRI_GARNET \
+			-Iarch/arm/mach-capri/hw_cfg/BASE
 subdir-ccflags-$(CONFIG_MACH_CAPRI_A01) += -Iarch/arm/mach-capri/hw_cfg/CAPRI_A01 \
                                                 -Iarch/arm/mach-capri/hw_cfg/BASE
 

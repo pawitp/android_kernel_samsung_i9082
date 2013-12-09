@@ -2,13 +2,13 @@
  * DHD Bus Module for SDIO
  *
  * Copyright (C) 1999-2012, Broadcom Corporation
- *
+ * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
  * under the terms of the GNU General Public License version 2 (the "GPL"),
  * available at http://www.broadcom.com/licenses/GPLv2.php, with the
  * following added to such license:
- *
+ * 
  *      As a special exception, the copyright holders of this software give you
  * permission to link this software with independent modules, and to copy and
  * distribute the resulting executable under terms of your choice, provided that
@@ -16,12 +16,12 @@
  * the license of that module.  An independent module is a module which is not
  * derived from this software.  The special exception does not apply to any
  * modifications of the software.
- *
+ * 
  *      Notwithstanding the above, under no circumstances may you combine this
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_sdio.c 373329 2012-12-07 04:46:09Z $
+ * $Id: dhd_sdio.c 408730 2013-06-20 08:54:49Z $
  */
 
 #include <typedefs.h>
@@ -554,7 +554,7 @@ do {												\
 												\
 	R_SDREG(intstatuserr, &bus->regs->intstatus, retries);					\
 	printf("dstatussw = 0x%x, dstatushw = 0x%x, intstatus = 0x%x\n",			\
-	        dstatussw, dstatushw, intstatuserr);						\
+	        dstatussw, dstatushw, intstatuserr); 						\
 												\
 	bus->nextlen = 0;									\
 	*finished = TRUE;									\
@@ -1510,8 +1510,8 @@ dhdsdio_func_blocksize(dhd_pub_t *dhd, int function_num, int block_size)
 	int bcmerr = 0;
 	int result;
 
-	bcmerr = dhd_bus_iovar_op(dhd, "sd_blocksize", &func_blk_size, sizeof(int),	&result,
-		sizeof(int), 0);
+	bcmerr = dhd_bus_iovar_op(dhd, "sd_blocksize", &func_blk_size,
+		sizeof(int), &result, sizeof(int), IOV_GET);
 
 	if (bcmerr != BCME_OK) {
 		DHD_ERROR(("%s: Get F%d Block size error\n", __FUNCTION__, function_num));
@@ -1524,9 +1524,8 @@ dhdsdio_func_blocksize(dhd_pub_t *dhd, int function_num, int block_size)
 			function_num, result, block_size));
 
 		func_blk_size = function_num << 16 | block_size;
-		bcmerr = dhd_bus_iovar_op(dhd, "sd_blocksize", &func_blk_size, sizeof(int32),
-			&result, sizeof(int32), 1);
-
+		bcmerr = dhd_bus_iovar_op(dhd, "sd_blocksize", NULL,
+			0, &func_blk_size, sizeof(int32), IOV_SET);
 		if (bcmerr != BCME_OK) {
 			DHD_ERROR(("%s: Set F2 Block size error\n", __FUNCTION__));
 			return BCME_ERROR;
@@ -1542,10 +1541,10 @@ dhdsdio_func_blocksize(dhd_pub_t *dhd, int function_num, int block_size)
 void
 dhd_enable_oob_intr(struct dhd_bus *bus, bool enable)
 {
-#if defined(HW_OOB)
-	bcmsdh_enable_hw_oob_intr(bus->sdh, enable);
-#elif defined(BCMSPI_ANDROID)
+#if defined(BCMSPI_ANDROID)
 	bcmsdh_intr_enable(bus->sdh);
+#elif defined(HW_OOB)
+	bcmsdh_enable_hw_oob_intr(bus->sdh, enable);
 #else
 	sdpcmd_regs_t *regs = bus->regs;
 	uint retries = 0;
@@ -1579,9 +1578,10 @@ dhdsdio_txpkt(dhd_bus_t *bus, void *pkt, uint chan, bool free_pkt, bool queue_on
 	int ret;
 	osl_t *osh;
 	uint8 *frame;
-	uint16 len, pad1 = 0;
+	uint16 len, pad1 = 0, act_len = 0;
 	uint32 swheader;
 	uint retries = 0;
+	uint32 real_pad = 0;
 	bcmsdh_info_t *sdh;
 	void *new;
 	int i;
@@ -1619,7 +1619,7 @@ dhdsdio_txpkt(dhd_bus_t *bus, void *pkt, uint chan, bool free_pkt, bool queue_on
 #endif /* WLMEDIA_HTSF */
 
 	/* Add alignment padding, allocate new packet if needed */
-	if (!((uintptr)frame & 1) && (pad1 = ((uintptr)frame % DHD_SDALIGN))) {
+	if ((pad1 = ((uintptr)frame % DHD_SDALIGN))) {
 		if (PKTHEADROOM(osh, pkt) < pad1) {
 			DHD_INFO(("%s: insufficient headroom %d for %d pad1\n",
 			          __FUNCTION__, (int)PKTHEADROOM(osh, pkt), pad1));
@@ -1659,7 +1659,8 @@ dhdsdio_txpkt(dhd_bus_t *bus, void *pkt, uint chan, bool free_pkt, bool queue_on
 
 #ifdef BCMSDIOH_TXGLOM
 	if (bus->glom_enable) {
-		uint32 hwheader1 = 0, hwheader2 = 0, act_len = len;
+		uint32 hwheader1 = 0, hwheader2 = 0;
+		act_len = len;
 
 		/* Software tag: channel, sequence number, data offset */
 		swheader = ((chan << SDPCM_CHANNEL_SHIFT) & SDPCM_CHANNEL_MASK) |
@@ -1728,6 +1729,7 @@ dhdsdio_txpkt(dhd_bus_t *bus, void *pkt, uint chan, bool free_pkt, bool queue_on
 	} else
 #endif /* BCMSDIOH_TXGLOM */
 	{
+	act_len = len;
 	/* Software tag: channel, sequence number, data offset */
 	swheader = ((chan << SDPCM_CHANNEL_SHIFT) & SDPCM_CHANNEL_MASK) | bus->tx_seq |
 	        (((pad1 + SDPCM_HDRLEN) << SDPCM_DOFFSET_SHIFT) & SDPCM_DOFFSET_MASK);
@@ -1772,6 +1774,23 @@ dhdsdio_txpkt(dhd_bus_t *bus, void *pkt, uint chan, bool free_pkt, bool queue_on
 			DHD_ERROR(("%s: sending unrounded %d-byte packet\n", __FUNCTION__, len));
 #endif
 	}
+	real_pad = len - act_len;
+	if (PKTTAILROOM(osh, pkt) < real_pad) {
+		DHD_INFO(("%s 3: insufficient tailroom %d for %d real_pad\n",
+		__FUNCTION__, (int)PKTTAILROOM(osh, pkt), real_pad));
+		if (PKTPADTAILROOM(osh, pkt, real_pad)) {
+			DHD_ERROR(("padding error size %d\n", real_pad));
+			ret = BCME_NOMEM;
+			goto done;
+		}
+#ifndef BCMLXSDMMC
+		else
+			PKTSETLEN(osh, pkt, act_len);
+#endif
+	}
+#ifdef BCMLXSDMMC
+	PKTSETLEN(osh, pkt, len);
+#endif /* BCMLXSDMMC */
 	}
 
 	do {
@@ -1844,7 +1863,11 @@ done:
 		} else
 #endif
 		{
-	PKTPULL(osh, pkt, SDPCM_HDRLEN + pad1);
+#ifdef BCMLXSDMMC
+			if (act_len > 0)
+				PKTSETLEN(osh, pkt, act_len);
+#endif /* BCMLXSDMMC */
+			PKTPULL(osh, pkt, SDPCM_HDRLEN + pad1);
 		}
 #ifdef PROP_TXSTATUS
 	if (bus->dhd->wlfc_state) {
@@ -2344,7 +2367,7 @@ done:
 	else
 		bus->dhd->tx_ctlpkts++;
 
-	if (bus->dhd->txcnt_timeout >= MAX_CNTL_TIMEOUT)
+	if (bus->dhd->txcnt_timeout >= MAX_CNTL_TX_TIMEOUT)
 		return -ETIMEDOUT;
 
 	return ret ? -EIO : 0;
@@ -2413,7 +2436,7 @@ dhd_bus_rxctl(struct dhd_bus *bus, uchar *msg, uint msglen)
 	else
 		bus->dhd->rx_ctlerrs++;
 
-	if (bus->dhd->rxcnt_timeout >= MAX_CNTL_TIMEOUT)
+	if (bus->dhd->rxcnt_timeout >= MAX_CNTL_RX_TIMEOUT)
 		return -ETIMEDOUT;
 
 	if (bus->dhd->dongle_trap_occured)
@@ -3973,6 +3996,7 @@ dhdsdio_download_state(dhd_bus_t *bus, bool enter)
 		}
 		W_SDREG(0xFFFFFFFF, &bus->regs->intstatus, retries);
 
+
 		if (!(si_setcore(bus->sih, ARM7S_CORE_ID, 0)) &&
 		    !(si_setcore(bus->sih, ARMCM3_CORE_ID, 0))) {
 			DHD_ERROR(("%s: Failed to find ARM core!\n", __FUNCTION__));
@@ -4446,12 +4470,21 @@ dhdsdio_rxfail(dhd_bus_t *bus, bool abort, bool rtx)
 	}
 
 	bcmsdh_cfg_write(sdh, SDIO_FUNC_1, SBSDIO_FUNC1_FRAMECTRL, SFC_RF_TERM, &err);
+	if (err) {
+		DHD_ERROR(("%s: SBSDIO_FUNC1_FRAMECTRL cmd err\n", __FUNCTION__));
+		goto fail;
+	}
 	bus->f1regdata++;
 
 	/* Wait until the packet has been flushed (device/FIFO stable) */
 	for (lastrbc = retries = 0xffff; retries > 0; retries--) {
 		hi = bcmsdh_cfg_read(sdh, SDIO_FUNC_1, SBSDIO_FUNC1_RFRAMEBCHI, NULL);
-		lo = bcmsdh_cfg_read(sdh, SDIO_FUNC_1, SBSDIO_FUNC1_RFRAMEBCLO, NULL);
+		lo = bcmsdh_cfg_read(sdh, SDIO_FUNC_1, SBSDIO_FUNC1_RFRAMEBCLO, &err);
+		if (err) {
+			DHD_ERROR(("%s: SBSDIO_FUNC1_RFAMEBCLO cmd err\n", __FUNCTION__));
+			goto fail;
+		}
+
 		bus->f1regdata += 2;
 
 		if ((hi == 0) && (lo == 0))
@@ -4482,6 +4515,7 @@ dhdsdio_rxfail(dhd_bus_t *bus, bool abort, bool rtx)
 	/* Clear partial in any case */
 	bus->nextlen = 0;
 
+fail:
 	/* If we can't reach the device, signal failure */
 	if (err || bcmsdh_regfail(sdh))
 		bus->dhd->busstate = DHD_BUS_DOWN;
@@ -6984,8 +7018,12 @@ dhdsdio_probe(uint16 venid, uint16 devid, uint16 bus_no, uint16 slot,
 
 #if defined(CUSTOMER_HW4) && defined(BCMHOST_XTAL_PU_TIME_MOD)
 	bcmsdh_reg_write(bus->sdh, 0x18000620, 2, 11);
+#ifdef BCM4330_CHIP
+	bcmsdh_reg_write(bus->sdh, 0x18000628, 4, 0x0000F801);
+#else
 	bcmsdh_reg_write(bus->sdh, 0x18000628, 4, 0x00F80001);
-#endif
+#endif /* BCM4330_CHIP */
+#endif /* defined(CUSTOMER_HW4) && defined(BCMHOST_XTAL_PU_TIME_MOD */
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 25))
 	mutex_unlock(&_dhd_sdio_mutex_lock_);
@@ -8090,6 +8128,22 @@ concate_revision_bcm4334(dhd_bus_t *bus, char *path, int path_len)
 	return 0;
 }
 
+/* Just print chip revision for BCM4330 */
+static int
+concate_revision_bcm4330(dhd_bus_t *bus)
+{
+	uint chipver;
+	chipver = bus->sih->chiprev;
+
+	if (chipver == 3)
+		DHD_ERROR(("---- CHIP bcm4330 B1 ----\n"));
+	else if (chipver == 4)
+		DHD_ERROR(("---- CHIP bcm4330 B2 ----\n"));
+	else
+		DHD_ERROR(("----- Invalid chip version -----\n"));
+	return 0;
+}
+
 int
 concate_revision(dhd_bus_t *bus, char *path, int path_len)
 {
@@ -8098,7 +8152,11 @@ concate_revision(dhd_bus_t *bus, char *path, int path_len)
 		DHD_ERROR(("%s:Bus is Invalid\n", __FUNCTION__));
 		return -1;
 	}
-	if (bus->sih->chip == BCM4334_CHIP_ID) {
+
+	switch (bus->sih->chip) {
+	case BCM4330_CHIP_ID:
+		return concate_revision_bcm4330(bus);
+	case BCM4334_CHIP_ID:
 		return concate_revision_bcm4334(bus, path, path_len);
 	}
 	DHD_ERROR(("REVISION SPECIFIC feature is not required\n"));

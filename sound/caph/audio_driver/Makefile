@@ -40,7 +40,7 @@ obj-$(CONFIG_BCM_ALSA_SOUND) 	+= audio_mqueue.o
 #EXTRA_CFLAGS += -DEXPORT_SYMTAB
 #EXTRA_CFLAGS += -static -nostdlib -fno-pic 
 #VoiceSolution-objs += voicesolution.o
-#VoiceSolution-objs += Rhea_Capri_DiamondVoice_LIB_20120808.a
+#VoiceSolution-objs += BCM_DiamondVoice_LIB_20130318.a
 
 #obj-m := VoiceSolution.o
 

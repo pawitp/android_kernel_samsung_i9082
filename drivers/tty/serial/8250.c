@@ -163,10 +163,8 @@ struct uart_8250_port {
 	struct clk          *clk;
 #endif
 
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
 #ifdef CONFIG_ARCH_KONA
 	unsigned int iir;
-#endif
 #endif
 };
 
@@ -1442,11 +1440,9 @@ receive_chars(struct uart_8250_port *up, unsigned int *status)
 	do {
 		if (likely(lsr & UART_LSR_DR))
 			ch = serial_inp(up, UART_RX);
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
 #ifdef CONFIG_ARCH_KONA
 		else if (up->iir & UART_IIR_RDI)
 			ch = serial_inp(up, UART_RX);
-#endif
 #endif
 		else
 			/*
@@ -1615,11 +1611,9 @@ static void serial8250_handle_port(struct uart_8250_port *up)
 
 	if (status & (UART_LSR_DR | UART_LSR_BI))
 		receive_chars(up, &status);
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
 #ifdef CONFIG_ARCH_KONA
 	else if (up->iir & UART_IIR_RDI)
 		receive_chars(up, &status);
-#endif
 #endif
 	check_modem_status(up);
 	if (status & UART_LSR_THRE)
@@ -1633,10 +1627,8 @@ int serial8250_handle_irq(struct uart_port *port, unsigned int iir)
 	struct uart_8250_port *up =
 		container_of(port, struct uart_8250_port, port);
 
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
 #ifdef CONFIG_ARCH_KONA
 	up->iir = iir; /* Stash a copy of iir for later */
-#endif
 #endif
 	if (!(iir & UART_IIR_NO_INT)) {
 		serial8250_handle_port(up);
@@ -1825,10 +1817,8 @@ static void serial8250_timeout(unsigned long data)
 	unsigned int iir;
 
 	iir = serial_in(up, UART_IIR);
-#ifdef CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC
 #ifdef CONFIG_ARCH_KONA
 	up->iir = iir; /* Stash a copy of iir for later */
-#endif
 #endif
 	if (!(iir & UART_IIR_NO_INT))
 		serial8250_handle_port(up);
@@ -3185,9 +3175,13 @@ static int __devexit serial8250_remove(struct platform_device *dev)
 	return 0;
 }
 
+int UART_ready=1;
+EXPORT_SYMBOL(UART_ready);
+
 static int serial8250_suspend(struct platform_device *dev, pm_message_t state)
 {
 	int i;
+	UART_ready = 0;
 
 	for (i = 0; i < UART_NR; i++) {
 		struct uart_8250_port *up = &serial8250_ports[i];
@@ -3209,6 +3203,7 @@ static int serial8250_resume(struct platform_device *dev)
 		if (up->port.type != PORT_UNKNOWN && up->port.dev == &dev->dev)
 			serial8250_resume_port(i);
 	}
+	UART_ready=1;
 
 	return 0;
 }

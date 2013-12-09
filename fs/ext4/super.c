@@ -3722,8 +3722,16 @@ no_journal:
 	return 0;
 
 cantfind_ext4:
+
+	/* for debugging, sangwoo2.lee */
+	/* If you wanna use the flag 'MS_SILENT', call 'print_bh' function within below 'if'. */
+	printk("printing data of superblock-bh\n");
+	print_bh(sb, bh, 0, EXT4_BLOCK_SIZE(sb));
+	/* for debugging */
+
 	if (!silent)
 		ext4_msg(sb, KERN_ERR, "VFS: Can't find ext4 filesystem");
+
 	goto failed_mount;
 
 failed_mount4:
@@ -4822,7 +4830,7 @@ out:
 
 #endif
 
-/* for debugging */
+/* for debugging, sangwoo2.lee */
 void print_bh(struct super_block *sb, struct buffer_head *bh, int start, int len)
 {
 	print_block_data(sb, bh->b_blocknr, bh->b_data, start, len);

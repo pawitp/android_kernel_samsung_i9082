@@ -22,6 +22,8 @@
 #include <linux/broadcom/IPCInterface.h>
 #endif
 
+extern int ipc_crashsupport_init(void);
+
 /*--------------------------------------------------
   IPC Server Client Callback Init
   Register for all endpoints during initialization

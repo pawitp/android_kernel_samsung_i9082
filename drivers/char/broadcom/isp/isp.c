@@ -283,9 +283,9 @@ static int enable_isp_clock(void)
 	int ret;
 
 	isp_clk = clk_get(NULL, "isp_axi_clk");
-	if (!isp_clk) {
+	if (IS_ERR(isp_clk)) {
 		err_print("%s: error get clock\n", __func__);
-		return -EIO;
+		return PTR_ERR(isp_clk);
 	}
 
 	ret = clk_enable(isp_clk);
@@ -309,7 +309,7 @@ static int enable_isp_clock(void)
 static void disable_isp_clock(void)
 {
 	isp_clk = clk_get(NULL, "isp_axi_clk");
-	if (!isp_clk)
+	if (IS_ERR(isp_clk))
 		return;
 
 	clk_disable(isp_clk);

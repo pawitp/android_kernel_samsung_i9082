@@ -1534,6 +1534,19 @@ int mmc_erase(struct mmc_card *card, unsigned int from, unsigned int nr,
 	/* 'from' and 'to' are inclusive */
 	to -= 1;
 
+	/*
+	 * Aligned Trim
+	 * to set the address in 16k (32sectors)
+	 */
+	if(arg == MMC_TRIM_ARG) {
+		if ((from % 32) != 0)
+			from = ((from >> 5) + 1) << 5;
+
+		to = (to >> 5) << 5;
+		if (from >= to)
+			return 0;
+	}
+
 	return mmc_do_erase(card, from, to, arg);
 }
 EXPORT_SYMBOL(mmc_erase);
@@ -1792,6 +1805,27 @@ void mmc_rescan(struct work_struct *work)
 		if (freqs[i] <= host->f_min)
 			break;
 	}
+
+	if(!extend_wakelock){
+		printk("%s- failed to rescan %s, maybe shorted SD-->try power off\n"
+							,__func__,mmc_hostname(host));
+		if(host->ops->set_timeout)
+			host->ops->set_timeout(host,1000);//set the power-off timeout as 1 sec. 
+		
+	}
+	else{
+		printk("%s- success to rescan %s, try to set the default timeout\n"
+							,__func__,mmc_hostname(host));
+		
+		if(host->ops->get_timeout){
+			unsigned int default_timeout;
+
+			if(!(host->ops->get_timeout(host,true,&default_timeout)))
+				if(host->ops->set_timeout)
+					host->ops->set_timeout(host,default_timeout);		
+		}		
+	}
+
 	mmc_release_host(host);
 
  out:
@@ -2080,7 +2114,7 @@ int mmc_pm_notify(struct notifier_block *notify_block,
 		if (!host->card_detect_cap) {
 
 #if defined(CONFIG_BCM4334) || defined(CONFIG_BCM4334_MODULE) || defined(CONFIG_BCM4330)
-		if (host->card && host->card->type == MMC_TYPE_SDIO )
+		if (host->card && host->card->type == MMC_TYPE_SDIO)
 			printk(KERN_INFO"%s(): WLAN SKIP DETECT CHANGE\n",
 					__func__);
 		else{

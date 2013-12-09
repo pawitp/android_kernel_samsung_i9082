@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: linux_osl.h 354452 2012-08-31 04:59:17Z $
+ * $Id: linux_osl.h 396189 2013-04-11 07:41:47Z $
  */
 
 #ifndef _linux_osl_h_
@@ -264,6 +264,7 @@ extern int osl_error(int bcmerror);
 #define	PKTLEN(osh, skb)		(((struct sk_buff*)(skb))->len)
 #define PKTHEADROOM(osh, skb)		(PKTDATA(osh, skb)-(((struct sk_buff*)(skb))->head))
 #define PKTTAILROOM(osh, skb) ((((struct sk_buff*)(skb))->end)-(((struct sk_buff*)(skb))->tail))
+#define PKTPADTAILROOM(osh, skb, padlen)	osh_pktpadtailroom((osh), (skb), (padlen))
 #define	PKTNEXT(osh, skb)		(((struct sk_buff*)(skb))->next)
 #define	PKTSETNEXT(osh, skb, x)		(((struct sk_buff*)(skb))->next = (struct sk_buff*)(x))
 #define	PKTSETLEN(osh, skb, len)	__skb_trim((struct sk_buff*)(skb), (len))
@@ -342,6 +343,8 @@ extern void osl_ctfpool_stats(osl_t *osh, void *b);
 extern void osl_pktfree(osl_t *osh, void *skb, bool send);
 extern void *osl_pktget_static(osl_t *osh, uint len);
 extern void osl_pktfree_static(osl_t *osh, void *skb, bool send);
+
+extern int osh_pktpadtailroom(osl_t *osh, struct sk_buff* skb, int pad);
 
 extern void *osl_pkt_frmnative(osl_t *osh, void *skb);
 extern void *osl_pktget(osl_t *osh, uint len);

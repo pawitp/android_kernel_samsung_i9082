@@ -173,7 +173,7 @@ static inline int sco_chan_add(struct sco_conn *conn, struct sock *sk, struct so
 	return err;
 }
 
-static int sco_connect(struct sock *sk, __s8 is_wbs)
+static int sco_connect(struct sock *sk)
 {
 	bdaddr_t *src = &bt_sk(sk)->src;
 	bdaddr_t *dst = &bt_sk(sk)->dst;
@@ -191,31 +191,16 @@ static int sco_connect(struct sock *sk, __s8 is_wbs)
 
 	hci_dev_lock_bh(hdev);
 
-	hdev->is_wbs = is_wbs;
-
-	if (lmp_esco_capable(hdev) && !disable_esco) {
+	if (lmp_esco_capable(hdev) && !disable_esco)
 		type = ESCO_LINK;
-	} else if (is_wbs) {
-		return -ENAVAIL;
-	} else {
+	else {
 		type = SCO_LINK;
 		pkt_type &= SCO_ESCO_MASK;
 	}
 
-	BT_DBG("type: %d, pkt_type: 0x%x", type, pkt_type);
-	printk("type: %d, pkt_type: 0x%x, is_wbs: %x\n", type, pkt_type, is_wbs);
-
-	hcon = hci_connect(hdev, type, pkt_type, dst,
-					BT_SECURITY_LOW, HCI_AT_NO_BONDING);
+	hcon = hci_connect(hdev, type, pkt_type, dst, BT_SECURITY_LOW, HCI_AT_NO_BONDING);
 	if (IS_ERR(hcon)) {
 		err = PTR_ERR(hcon);
-		goto done;
-	}
-
-	if (is_wbs && (hcon->type != ESCO_LINK)) {
-		BT_ERR("WBS [ hcon->type: 0x%x, hcon->pkt_type: 0x%x ]",
-				hcon->type, hcon->pkt_type);
-		err = -EREMOTEIO;
 		goto done;
 	}
 
@@ -550,7 +535,7 @@ static int sco_sock_connect(struct socket *sock, struct sockaddr *addr, int alen
 	bacpy(&bt_sk(sk)->dst, &sa.sco_bdaddr);
 	sco_pi(sk)->pkt_type = sa.sco_pkt_type;
 
-	err = sco_connect(sk, sa.is_wbs);
+	err = sco_connect(sk);
 	if (err)
 		goto done;
 
@@ -904,6 +889,11 @@ static void sco_conn_ready(struct sco_conn *conn)
 
 		bacpy(&bt_sk(sk)->src, conn->src);
 		bacpy(&bt_sk(sk)->dst, conn->dst);
+
+		if (!conn->hcon) {
+				BT_ERR("conn->hcon = NULL");
+				/* to do */
+		}
 
 		hci_conn_hold(conn->hcon);
 		__sco_chan_add(conn, sk, parent);

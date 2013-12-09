@@ -13,12 +13,12 @@
 *
 *****************************************************************************/
 
-#if !defined( AAA_IOCTL_H )
+#if !defined(AAA_IOCTL_H)
 #define AAA_IOCTL_H
 
 /* ---- Include Files ---------------------------------------------------- */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
@@ -51,9 +51,9 @@ struct aaa_ioctl_setrdcodec {
 };
 
 /* IOCTL numbers */
-#define AAA_IOCTL_SET_TX_CODEC       _IOR( AAA_MAGIC_TYPE, AAA_CMD_SET_WRT_CODEC, struct aaa_ioctl_setwrtcodec )
-#define AAA_IOCTL_DSC_TX_CODEC       _IO( AAA_MAGIC_TYPE, AAA_CMD_DSC_WRT_CODEC )
-#define AAA_IOCTL_SET_RX_CODEC       _IOR( AAA_MAGIC_TYPE, AAA_CMD_SET_RD_CODEC, struct aaa_ioctl_setrdcodec )
+#define AAA_IOCTL_SET_TX_CODEC       _IOR(AAA_MAGIC_TYPE, AAA_CMD_SET_WRT_CODEC, struct aaa_ioctl_setwrtcodec)
+#define AAA_IOCTL_DSC_TX_CODEC       _IO(AAA_MAGIC_TYPE, AAA_CMD_DSC_WRT_CODEC)
+#define AAA_IOCTL_SET_RX_CODEC       _IOR(AAA_MAGIC_TYPE, AAA_CMD_SET_RD_CODEC, struct aaa_ioctl_setrdcodec)
 
 /* ---- Variable Externs ------------------------------------------ */
 

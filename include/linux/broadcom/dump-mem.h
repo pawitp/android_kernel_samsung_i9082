@@ -4,7 +4,7 @@
 * Unless you and Broadcom execute a separate written software license
 * agreement governing use of this software, this software is licensed to you
 * under the terms of the GNU General Public License version 2, available at
-* http://www.broadcom.com/licenses/GPLv2.php (the "GPL"). 
+* http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
 *
 * Notwithstanding the above, under no circumstances may you combine this
 * software in any way with any other Broadcom software provided under a
@@ -22,7 +22,7 @@
 *
 *****************************************************************************/
 
-#if !defined( LINUX_BROADCOM_DUMP_MEM_H )
+#if !defined(LINUX_BROADCOM_DUMP_MEM_H)
 #define LINUX_BROADCOM_DUMP_MEM_H
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -40,7 +40,8 @@ typedef enum {
 
 /* ---- Variable Externs ------------------------------------------------- */
 
-#define DUMP_MEM(dumpDest, addr, mem, numBytes ) if ( dumpDest ) dump_mem( __FUNCTION__, dumpDest, addr, mem, numBytes );
+#define DUMP_MEM(dumpDest, addr, mem, numBytes)\
+	if (dumpDest) dump_mem(__FUNCTION__, dumpDest, addr, mem, numBytes);
 
 /* ---- Function Prototypes ---------------------------------------------- */
 

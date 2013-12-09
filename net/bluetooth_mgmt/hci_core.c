@@ -79,6 +79,16 @@ static ATOMIC_NOTIFIER_HEAD(hci_notifier);
 
 /* ---- HCI notifications ---- */
 
+struct timer_list delay_tx_timer;
+extern int UART_ready;
+
+static void reschedule_tx(unsigned long context)
+{
+	struct hci_dev *hdev = (struct hci_dev *)context;
+	del_timer(&delay_tx_timer);
+	tasklet_schedule(&hdev->tx_task);
+}
+
 int hci_register_notifier(struct notifier_block *nb)
 {
 	return atomic_notifier_chain_register(&hci_notifier, nb);
@@ -1817,6 +1827,10 @@ int hci_register_dev(struct hci_dev *hdev)
 	skb_queue_head_init(&hdev->cmd_q);
 	skb_queue_head_init(&hdev->raw_q);
 
+	init_timer(&delay_tx_timer);
+	delay_tx_timer.function = reschedule_tx;
+	delay_tx_timer.data = (unsigned long) hdev;
+	
 	setup_timer(&hdev->cmd_timer, hci_cmd_timer, (unsigned long) hdev);
 
 	for (i = 0; i < NUM_REASSEMBLY; i++)
@@ -2600,6 +2614,12 @@ static void hci_tx_task(unsigned long arg)
 {
 	struct hci_dev *hdev = (struct hci_dev *) arg;
 	struct sk_buff *skb;
+
+	if (!UART_ready) {
+		mod_timer(&delay_tx_timer, jiffies + 1);
+		printk (KERN_ERR "BT delay tx\n");
+		return;
+	}
 
 	read_lock(&hci_task_lock);
 

@@ -101,7 +101,7 @@ int AtMaudMode(brcm_alsa_chip_t *pChip, Int32 ParamCount, Int32 *Params)
 	AUDIO_SOURCE_Enum_t mic = AUDIO_SOURCE_ANALOG_MAIN;
 	AUDIO_SINK_Enum_t spk = AUDIO_SINK_HANDSET;
 	AudioMode_t mode = AUDIO_SINK_HANDSET;
-	AudioApp_t app = AUDIO_APP_VOICE_CALL;
+	AudioApp_t app = AUDIO_APP_VOICE_CALL, currapp;
 	int rtn = 0;		/* 0 means Ok */
 	static UInt8 loopback_status = 0, loopback_input = 0, loopback_output =
 	    0, sidetone_mode = 0;
@@ -225,10 +225,21 @@ int AtMaudMode(brcm_alsa_chip_t *pChip, Int32 ParamCount, Int32 *Params)
 		pChip->streamCtl[CTL_STREAM_PANEL_VOICECALL - 1].
 		    iLineSelect[1] = spk;
 
+#if defined(CONFIG_BCM_MODEM)
 		RPC_SetProperty(RPC_PROP_AUDIO_MODE,
 			(UInt32)(app * AUDIO_MODE_NUMBER + mode));
+#endif
 
-		AUDCTRL_SaveAudioApp(app);	/* for PCG to set new app */
+
+		/* for PCG to set new app */
+		currapp = AUDCTRL_GetAudioApp();
+		if (currapp != app) {
+			/* Remove the current app
+			before setting the new app */
+			AUDCTRL_RemoveAudioApp(currapp);
+			AUDCTRL_SaveAudioApp(app);
+		}
+
 		if (app == AUDIO_APP_VOICE_CALL
 		    || app == AUDIO_APP_VOICE_CALL_WB
 		    || app == AUDIO_APP_VT_CALL

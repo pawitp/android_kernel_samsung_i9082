@@ -37,4 +37,4 @@
 
 #endif
 
-#endif   /* CAMERA_SETTINGS_H */
+#endif /* CAMERA_SETTINGS_H */

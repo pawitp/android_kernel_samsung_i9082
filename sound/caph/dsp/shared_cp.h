@@ -1378,7 +1378,6 @@ typedef struct
     UInt32 data[80];
 } FSC_Records_t;
 
-
 /**
  * @addtogroup Queues
  * @{
@@ -2533,7 +2532,6 @@ typedef enum
 /**
  * @}
  */
-
 #ifdef MSP
 typedef struct
 {

@@ -32,6 +32,7 @@
 #define BCMLOG_OUTDEV_NONE	0
 #define BCMLOG_OUTDEV_SDCARD	2
 #define BCMLOG_OUTDEV_RNDIS	3
+#define BCMLOG_OUTDEV_ACM	5
 #define BCMLOG_OUTDEV_STM	6	/* STM */
 
 /* Prototypes */
@@ -56,11 +57,12 @@ static int do_cp_crash(struct notifier_block *this, unsigned long event,
 	if (BCMLOG_OUTDEV_STM == BCMLOG_GetCpCrashLogDevice())
 		return NOTIFY_DONE;
 
-	if (BCMLOG_OUTDEV_SDCARD == BCMLOG_GetCpCrashLogDevice() && cp_crashed)
+	if ((BCMLOG_OUTDEV_SDCARD == BCMLOG_GetCpCrashLogDevice() ||
+		BCMLOG_OUTDEV_ACM == BCMLOG_GetCpCrashLogDevice())
+		&& cp_crashed)
 		return NOTIFY_DONE;
 
-    disable_irq(IRQ_IPC_C2A);
-	
+	disable_irq(IRQ_IPC_C2A);
 	ipcs_get_ipc_state(&ipc_state);
 
 	if (!ipc_state)
@@ -77,7 +79,6 @@ static int do_cp_crash(struct notifier_block *this, unsigned long event,
 #endif
 
 out:
-
 	return NOTIFY_DONE;
 }
 

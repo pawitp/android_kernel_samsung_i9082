@@ -184,6 +184,8 @@ UInt32 RPC_Init(void)
 		return 1;
 	}
 
+	/* CSP580464: Add 500ms delay workaround for
+		no resp for RIL req from CP */
 	msleep(500);
 	printk("[%s] 500msec delay \n",__func__);
 	printk("[%s] done \n",__func__);

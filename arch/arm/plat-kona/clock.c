@@ -780,7 +780,7 @@ static int __peri_clk_disable(struct clk *clk)
 
 	if (!(clk->flags & DONOT_NOTIFY_STATUS_TO_CCU) && !(clk->flags & AUTO_GATE)) {
 		clk_dbg("%s: peri clock %s decrementing CCU count\n", __func__, clk->name);
-			__ccu_clk_disable(&peri_clk->ccu_clk->clk);
+		__ccu_clk_disable(&peri_clk->ccu_clk->clk);
 	}
 	return ret;
 }
@@ -1921,7 +1921,7 @@ static int ccu_clk_write_access_enable(struct ccu_clk *ccu_clk, int enable)
 static int ccu_clk_policy_engine_resume(struct ccu_clk *ccu_clk, int load_type)
 {
 	u32 reg_val = 0;
-	u32 insurance = 10000;
+	u32 insurance = 20000;
 
 	if (ccu_clk->pol_engine_dis_cnt == 0)
 		return 0; /*Already in running state ??*/
@@ -1943,19 +1943,29 @@ static int ccu_clk_policy_engine_resume(struct ccu_clk *ccu_clk, int load_type)
 		udelay(1);
 		insurance--;
 	}
+	if (insurance == 0) {
+		pr_err("%s:%s ccu , policy_ctrl = 0x%x\n", __func__,
+			   ccu_clk->clk.name,
+			   readl(CCU_POLICY_CTRL_REG(ccu_clk)));
+	}
 	BUG_ON(insurance == 0);
 
 	reg_val = readl(CCU_POLICY_CTRL_REG(ccu_clk));
 	if ((load_type == CCU_LOAD_TARGET) && (reg_val & CCU_POLICY_CTL_TGT_VLD_MASK)) {
 		reg_val |= CCU_POLICY_CTL_TGT_VLD << CCU_POLICY_CTL_TGT_VLD_SHIFT;
 		writel(reg_val, CCU_POLICY_CTRL_REG(ccu_clk));
-		insurance = 10000;
+		insurance = 20000;
 
 		while ((readl(CCU_POLICY_CTRL_REG(ccu_clk)) &
 					CCU_POLICY_CTL_GO_MASK)
 				&& insurance) {
 			udelay(1);
 			insurance--;
+		}
+		if (insurance == 0) {
+			pr_err("%s:%s ccu , policy_ctrl = 0x%x\n", __func__,
+				   ccu_clk->clk.name,
+				   readl(CCU_POLICY_CTRL_REG(ccu_clk)));
 		}
 		BUG_ON(insurance == 0);
 	}
@@ -2552,6 +2562,8 @@ EXPORT_SYMBOL(peri_clk_get_gating_ctrl);
 static int peri_clk_set_gating_ctrl(struct peri_clk *peri_clk, int gating_ctrl)
 {
 	u32 reg_val;
+	bool clk_enabled;
+	int insurance;
 
 	if (gating_ctrl != CLK_GATING_AUTO && gating_ctrl != CLK_GATING_SW)
 		return -EINVAL;
@@ -2566,6 +2578,38 @@ static int peri_clk_set_gating_ctrl(struct peri_clk *peri_clk, int gating_ctrl)
 
 	writel(reg_val, CCU_REG_ADDR(peri_clk->ccu_clk, peri_clk->clk_gate_offset));
 
+	if (gating_ctrl == CLK_GATING_SW) {
+		if (!peri_clk->clk_en_mask)
+			goto out;
+
+		reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk,
+				peri_clk->clk_gate_offset));
+		clk_enabled = GET_BIT_USING_MASK(reg_val,
+				peri_clk->clk_en_mask) ? true : false;
+		insurance = 0;
+		if (clk_enabled) {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk,
+						peri_clk->clk_gate_offset));
+				insurance++;
+			} while (!(GET_BIT_USING_MASK(reg_val,
+						      peri_clk->stprsts_mask))
+				 && insurance < 1000);
+		} else {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk,
+						peri_clk->clk_gate_offset));
+				insurance++;
+			} while (GET_BIT_USING_MASK(reg_val,
+						    peri_clk->stprsts_mask)
+				 && insurance < 1000);
+		}
+		WARN_ON(insurance >= 1000);
+	}
+
+out:
 	return 0;
 }
 EXPORT_SYMBOL(peri_clk_set_gating_ctrl);
@@ -2733,21 +2777,21 @@ peri_clk_enable_start:
 			udelay(1);
 			reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk, peri_clk->clk_gate_offset));
 			insurance++;
-		} while (!(GET_BIT_USING_MASK(reg_val, peri_clk->stprsts_mask)) && insurance < insurance_threashold);
-	}
-	else
-	{
-		do
-		{
+		} while (!(GET_BIT_USING_MASK(reg_val, peri_clk->stprsts_mask))
+				 && insurance < insurance_threashold);
+	} else {
+		do {
 			udelay(1);
 			reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk, peri_clk->clk_gate_offset));
 			insurance++;
-		} while ((GET_BIT_USING_MASK(reg_val, peri_clk->stprsts_mask)) && insurance < insurance_threashold);
+		} while ((GET_BIT_USING_MASK(reg_val, peri_clk->stprsts_mask))
+				 && insurance < insurance_threashold);
 	}
-
 	if(insurance>=insurance_threashold){
-		pr_err("%s:clk_name:%s Insurance failed\n", __func__, clk->name);
-		pr_err("clk_gate[0x%x]:0x%x\n",peri_clk->clk_gate_offset, reg_val);
+		pr_err("%s:clk_name:%s Insurance failed\n",
+			   __func__, clk->name);
+		pr_err("clk_gate[0x%x]:0x%x\n",
+			   peri_clk->clk_gate_offset, reg_val);
 
 		peri_clk_hyst_enable(peri_clk, HYST_ENABLE & clk->flags,
 				(clk->flags & HYST_HIGH) ? CLK_HYST_HIGH : CLK_HYST_LOW);
@@ -2768,17 +2812,16 @@ peri_clk_enable_start:
 		if(insurance<insurance_max_threshold){
 			insurance_threashold +=1000;
 			insurance = 0;
-			pr_err("%s, set insurance_threshold:%d, try to enable\n",__func__,insurance_threashold);
+			pr_err("%s, set insurance_threshold:%d, try to enable\n",
+				   __func__, insurance_threashold);
 			goto peri_clk_enable_start;
 			
-		}
-		else{	
+		} else {
 			WARN_ON(insurance >= insurance_max_threshold);
 			ccu_write_access_enable(peri_clk->ccu_clk, false);
 			return -EINVAL;
 		}
 	}
-
 	clk_dbg("%s:%s clk after stprsts start\n", __func__, clk->name);
 
 	clk_dbg("%s, %s is %s..!\n", __func__, clk->name, enable ? "enabled" : "disabled");
@@ -3025,7 +3068,8 @@ static int peri_clk_set_rate(struct clk *clk, u32 rate)
 			reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk, clk_div->div_trig_offset));
 			clk_dbg("reg_val: %08x, trigger bit: %08x\n", reg_val, GET_BIT_USING_MASK(reg_val, clk_div->div_trig_mask));
 			insurance++;
-		} while ((GET_BIT_USING_MASK(reg_val, clk_div->div_trig_mask)) && insurance < 2000);
+		} while ((GET_BIT_USING_MASK(reg_val, clk_div->div_trig_mask))
+				 && insurance < 2000);
 		WARN_ON(insurance >= 2000);
 	}
 	if (clk_div->prediv_trig_offset && clk_div->prediv_trig_mask) {
@@ -3040,7 +3084,9 @@ static int peri_clk_set_rate(struct clk *clk, u32 rate)
 			reg_val = readl(CCU_REG_ADDR(peri_clk->ccu_clk, clk_div->prediv_trig_offset));
 			clk_dbg("reg_val: %08x, trigger bit: %08x\n", reg_val, GET_BIT_USING_MASK(reg_val, clk_div->prediv_trig_mask));
 			insurance++;
-		} while ((GET_BIT_USING_MASK(reg_val, clk_div->prediv_trig_mask)) && insurance < 2000);
+		} while ((GET_BIT_USING_MASK(reg_val,
+			 clk_div->prediv_trig_mask))
+				 && insurance < 2000);
 		WARN_ON(insurance >= 2000);
 	}
 	/* disable write access*/
@@ -3282,6 +3328,8 @@ EXPORT_SYMBOL(bus_clk_get_gating_ctrl);
 static int bus_clk_set_gating_ctrl(struct bus_clk *bus_clk, int gating_ctrl)
 {
 	u32 reg_val;
+	bool clk_enabled;
+	int insurance;
 
 	if (!bus_clk->clk_gate_offset || !bus_clk->gating_sel_mask)
 		return -EINVAL;
@@ -3296,6 +3344,38 @@ static int bus_clk_set_gating_ctrl(struct bus_clk *bus_clk, int gating_ctrl)
 		reg_val = RESET_BIT_USING_MASK(reg_val, bus_clk->gating_sel_mask);
 	writel(reg_val, CCU_REG_ADDR(bus_clk->ccu_clk, bus_clk->clk_gate_offset));
 
+	if (gating_ctrl == CLK_GATING_SW) {
+		if (!bus_clk->clk_en_mask)
+			goto out;
+
+		reg_val = readl(CCU_REG_ADDR(bus_clk->ccu_clk,
+				bus_clk->clk_gate_offset));
+		clk_enabled = GET_BIT_USING_MASK(reg_val,
+				bus_clk->clk_en_mask) ? true : false;
+		insurance = 0;
+		if (clk_enabled) {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(bus_clk->ccu_clk,
+						bus_clk->clk_gate_offset));
+				insurance++;
+			} while (!(GET_BIT_USING_MASK(reg_val,
+						      bus_clk->stprsts_mask))
+				 && insurance < 1000);
+		} else {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(bus_clk->ccu_clk,
+						bus_clk->clk_gate_offset));
+				insurance++;
+			} while (GET_BIT_USING_MASK(reg_val,
+						    bus_clk->stprsts_mask)
+				 && insurance < 1000);
+		}
+		WARN_ON(insurance >= 1000);
+	}
+
+out:
 	return 0;
 }
 EXPORT_SYMBOL(bus_clk_set_gating_ctrl);
@@ -3405,29 +3485,33 @@ bus_clk_enable_start:
 			udelay(1);
 			reg_val = readl(CCU_REG_ADDR(bus_clk->ccu_clk, bus_clk->clk_gate_offset));
 			insurance++;
-		} while (!(GET_BIT_USING_MASK(reg_val, bus_clk->stprsts_mask)) && insurance < insurance_threashold);
+		} while (!(GET_BIT_USING_MASK(reg_val, bus_clk->stprsts_mask))
+				 && insurance < insurance_threashold);
 
 	} else {
 		do {
 			udelay(1);
 			reg_val = readl(CCU_REG_ADDR(bus_clk->ccu_clk, bus_clk->clk_gate_offset));
 			insurance++;
-		} while ((GET_BIT_USING_MASK(reg_val, bus_clk->stprsts_mask)) && insurance < insurance_threashold);
+		} while ((GET_BIT_USING_MASK(reg_val, bus_clk->stprsts_mask))
+				 && insurance < insurance_threashold);
 	}
 
 	if(insurance>=insurance_threashold){
-		pr_err("%s:clk_name:%s Insurance failed\n", __func__, clk->name);
-		pr_err("clk_gate[0x%x]:0x%x\n",bus_clk->clk_gate_offset,reg_val);
+		pr_err("%s:clk_name:%s Insurance failed\n",
+			   __func__, clk->name);
+		pr_err("clk_gate[0x%x]:0x%x\n",
+			   bus_clk->clk_gate_offset, reg_val);
 
 		if (bus_clk->hyst_val_mask)
 			bus_clk_hyst_enable(bus_clk, HYST_ENABLE & clk->flags,
-				(clk->flags & HYST_HIGH) ? CLK_HYST_HIGH : CLK_HYST_LOW);
+			  (clk->flags & HYST_HIGH) ?
+					CLK_HYST_HIGH : CLK_HYST_LOW);
 
 		if (clk->flags & AUTO_GATE)
 			bus_clk_set_gating_ctrl(bus_clk, CLK_GATING_AUTO);
 		else
 			bus_clk_set_gating_ctrl(bus_clk, CLK_GATING_SW);
-
 		pr_err("bus_clk re-initiated\n");
 
 		if (insurance>=(insurance_max_threshold-insurance_threashold)) {
@@ -3439,11 +3523,11 @@ bus_clk_enable_start:
 		if(insurance<insurance_max_threshold){
 			insurance_threashold +=1000;
 			insurance = 0;
-			pr_err("%s, set insurance_threshold:%d, try to enable\n",__func__,insurance_threashold);
+			pr_err("%s, set insurance_threshold:%d, try to enable\n",
+				   __func__, insurance_threashold);
 			goto bus_clk_enable_start;
 			
-		}
-		else{	
+		} else {
 			WARN_ON(insurance >= insurance_max_threshold);
 			ccu_write_access_enable(bus_clk->ccu_clk, false);
 			return -EINVAL;
@@ -3653,6 +3737,8 @@ EXPORT_SYMBOL(ref_clk_get_gating_ctrl);
 static int ref_clk_set_gating_ctrl(struct ref_clk *ref_clk, int gating_ctrl)
 {
 	u32 reg_val;
+	bool clk_enabled;
+	int insurance;
 
 	if (gating_ctrl != CLK_GATING_AUTO && gating_ctrl != CLK_GATING_SW)
 		return -EINVAL;
@@ -3667,6 +3753,38 @@ static int ref_clk_set_gating_ctrl(struct ref_clk *ref_clk, int gating_ctrl)
 
 	writel(reg_val, CCU_REG_ADDR(ref_clk->ccu_clk, ref_clk->clk_gate_offset));
 
+	if (gating_ctrl == CLK_GATING_SW) {
+		if (!ref_clk->clk_en_mask)
+			goto out;
+
+		reg_val = readl(CCU_REG_ADDR(ref_clk->ccu_clk,
+			ref_clk->clk_gate_offset));
+		clk_enabled = GET_BIT_USING_MASK(reg_val,
+			ref_clk->clk_en_mask) ? true : false;
+		insurance = 0;
+		if (clk_enabled) {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(ref_clk->ccu_clk,
+						ref_clk->clk_gate_offset));
+				insurance++;
+			} while (!(GET_BIT_USING_MASK(reg_val,
+						      ref_clk->stprsts_mask))
+				 && insurance < 1000);
+		} else {
+			do {
+				udelay(1);
+				reg_val = readl(CCU_REG_ADDR(ref_clk->ccu_clk,
+						ref_clk->clk_gate_offset));
+				insurance++;
+			} while (GET_BIT_USING_MASK(reg_val,
+						    ref_clk->stprsts_mask)
+				 && insurance < 1000);
+		}
+		WARN_ON(insurance >= 1000);
+	}
+
+out:
 	return 0;
 }
 EXPORT_SYMBOL(ref_clk_set_gating_ctrl);

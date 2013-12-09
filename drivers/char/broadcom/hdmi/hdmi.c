@@ -200,8 +200,33 @@ int hdmi_set_wifi_hdmi(int enable)
 
 	return 0;
 }
-
 EXPORT_SYMBOL_GPL(hdmi_set_wifi_hdmi);
+
+
+/***************************************************************************/
+/**
+*  Controls the power to HDMI detection.
+*
+*  @remarks
+*/
+void hdmi_detection_power_ctrl(bool enable)
+{
+	if (enable) {
+		if (hdmi_blk_enabled && hdmi_blk_regulator)
+			regulator_enable(hdmi_blk_regulator);
+
+		if (hdmi_blk_enabled && hdmi_det_regulator)
+			regulator_enable(hdmi_det_regulator);
+	} else {
+		if (hdmi_blk_enabled && hdmi_det_regulator)
+			regulator_disable(hdmi_det_regulator);
+
+		if (hdmi_blk_enabled && hdmi_blk_regulator)
+			regulator_disable(hdmi_blk_regulator);
+	}
+}
+EXPORT_SYMBOL_GPL(hdmi_detection_power_ctrl);
+
 
 /***************************************************************************/
 /**
@@ -266,12 +291,7 @@ static long hdmi_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 
 	case HDMI_IOCTL_DET_POWER_UP:
 		hdmi_blk_enabled = 1;
-
-		if (hdmi_blk_regulator)
-			regulator_enable(hdmi_blk_regulator);
-
-		if (hdmi_det_regulator)
-			regulator_enable(hdmi_det_regulator);
+		hdmi_detection_power_ctrl(true);
 		break;
 
 	default:
@@ -575,7 +595,6 @@ static unsigned int vir_addr;
 */
 int hdmi_pltfm_suspend(struct platform_device *p_dev, pm_message_t state)
 {
-
 #if defined(CONFIG_MACH_CAPRI_SS) || defined(CONFIG_MACH_CAPRI_SS_S2VE)
 
 	/* change HDMI SDA SCL to BSC 3 */
@@ -583,13 +602,6 @@ int hdmi_pltfm_suspend(struct platform_device *p_dev, pm_message_t state)
 	writel(0x110, vir_addr + 0xa8);
 
 #endif
-
-	if (hdmi_blk_enabled && hdmi_det_regulator)
-		regulator_disable(hdmi_det_regulator);
-
-	if (hdmi_blk_enabled && hdmi_blk_regulator)
-		regulator_disable(hdmi_blk_regulator);
-
 	return 0;
 }
 
@@ -599,12 +611,6 @@ int hdmi_pltfm_suspend(struct platform_device *p_dev, pm_message_t state)
 */
 int hdmi_pltfm_resume(struct platform_device *p_dev)
 {
-	if (hdmi_blk_enabled && hdmi_blk_regulator)
-		regulator_enable(hdmi_blk_regulator);
-
-	if (hdmi_blk_enabled && hdmi_det_regulator)
-		regulator_enable(hdmi_det_regulator);
-
 #if defined(CONFIG_MACH_CAPRI_SS) || defined(CONFIG_MACH_CAPRI_SS_S2VE)
 
 	/* change HDMI SDA SCL to HDMI */
@@ -612,7 +618,6 @@ int hdmi_pltfm_resume(struct platform_device *p_dev)
 	writel(0, vir_addr + 0xa8);
 
 #endif
-
 	return 0;
 }
 

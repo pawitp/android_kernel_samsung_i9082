@@ -22,7 +22,7 @@
  *
  *****************************************************************************/
 
-#if !defined( SIGMORPH_H )
+#if !defined(SIGMORPH_H)
 #define SIGMORPH_H
 
 /* ---- Include Files ---------------------------------------- */
@@ -36,7 +36,7 @@
 #define SIGMORPH_MAX_DB_GAIN        (18)
 #define SIGMORPH_MIN_DB_GAIN        (-50)
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 /* ---- Variable Externs ------------------------------------- */
 /* ---- Function Prototypes ---------------------------------- */
 extern int sigmorph_amplify(int16_t *buf_ptr, int buf_size, int16_t db_gain);

@@ -42,15 +42,15 @@
 #define AMI_REG_DELAYY		0x6e
 #define AMI_REG_DELAYZ		0x74
 /* ami306 */
-#define AMI_WIA				0x46
+#define AMI_WIA			0x46
 /* threshold */
 #define AMI_TEMP_MIN		1500
 #define AMI_TEMP_MAX		2500
 #define AMI_MI_ELEMENT1_TH	100
 #define AMI_MI_ELEMENT2_TH	20
-#define AMI_DATA_MIN		1548
-#define AMI_DATA_MAX		2548
-#define AMI_FO_RATE_MIN		900		/* 0.9 */
+#define AMI_DATA_MIN		-500
+#define AMI_DATA_MAX		500
+#define AMI_FO_RATE_MIN		900	/* 0.9 */
 #define AMI_FO_RATE_MAX		1100	/* 1.1 */
 /* macro */
 #define AMI_MIN(a, b)		(((a) < (b)) ? (a) : (b))

@@ -609,8 +609,8 @@ static struct i2c_cmd i2c_cmd[] = {
 	{JUMP_VOLTAGE, 0x00},
 	{I2C_DATA, 0x10},
 	{I2C_DATA, 0xc9},
-	{SET_PC_PINS, 0x11},
 	{I2C_VAR, 0x00},
+	{SET_PC_PINS, 0x11},
 	{REG_ADDR, 0x31},
 	{JUMP, 0x31},
 	{I2C_DATA, 0x10},
@@ -654,8 +654,8 @@ static struct i2c_cmd i2c_cmd[] = {
 	{END, 0x00},
 	{SET_READ_DATA, 0x28},
 	{END, 0x00},
-	{SET_PC_PINS, 0x40},
-	{SET_PC_PINS, 0x11},
+	{SET_PC_PINS, 0x51},
+	{WAIT_TIMER, 0xf0},
 	{WAIT_TIMER, 0xf0},
 	{END, 0x00},
 	{SET_PC_PINS, 0x10},
@@ -742,7 +742,7 @@ static struct v0x_spec_i2c_cmd_ptr v_ptr[V_SET_MAX] = {
 	{
 	 .other_ptr = 8,
 	 .set2_val = 2,		/*Retention voltage inx */
-	 .set2_ptr = 56,
+	 .set2_ptr = 11,
 	 .set1_val = 1,		/*wakeup from retention voltage inx */
 	 .set1_ptr = 59,
 	 .zerov_ptr = 59,	/*Clear PC1 used for capri */

@@ -685,20 +685,30 @@ error_Set_Squelch:
 
 }
 
-static DEVICE_ATTR(USB_MDIO0, 0644, bcm_hsotg_mdio0_show, bcm_hsotg_mdio0_set);
-static DEVICE_ATTR(USB_MDIO1, 0644, bcm_hsotg_mdio1_show, bcm_hsotg_mdio1_set);
-static DEVICE_ATTR(USB_MDIO2, 0644, bcm_hsotg_mdio2_show, bcm_hsotg_mdio2_set);
-static DEVICE_ATTR(USB_MDIO3, 0644, bcm_hsotg_mdio3_show, bcm_hsotg_mdio3_set);
-static DEVICE_ATTR(USB_MDIO4, 0644, bcm_hsotg_mdio4_show, bcm_hsotg_mdio4_set);
-static DEVICE_ATTR(USB_MDIO5, 0644, bcm_hsotg_mdio5_show, bcm_hsotg_mdio5_set);
-static DEVICE_ATTR(TxCurrent, 0644, bcm_hsotg_TxCurrent_show,
-	bcm_hsotg_TxCurrent_set);
-static DEVICE_ATTR(Squelch, 0644, bcm_hsotg_Squelch_show,
+static DEVICE_ATTR(USB_MDIO0, S_IRUGO | S_IWUSR, bcm_hsotg_mdio0_show,
+	bcm_hsotg_mdio0_set);
+static DEVICE_ATTR(USB_MDIO1, S_IRUGO | S_IWUSR, bcm_hsotg_mdio1_show,
+	bcm_hsotg_mdio1_set);
+static DEVICE_ATTR(USB_MDIO2, S_IRUGO | S_IWUSR, bcm_hsotg_mdio2_show,
+	bcm_hsotg_mdio2_set);
+static DEVICE_ATTR(USB_MDIO3, S_IRUGO | S_IWUSR, bcm_hsotg_mdio3_show,
+	bcm_hsotg_mdio3_set);
+static DEVICE_ATTR(USB_MDIO4, S_IRUGO | S_IWUSR, bcm_hsotg_mdio4_show,
+	bcm_hsotg_mdio4_set);
+static DEVICE_ATTR(USB_MDIO5, S_IRUGO | S_IWUSR, bcm_hsotg_mdio5_show,
+	bcm_hsotg_mdio5_set);
+static DEVICE_ATTR(TxCurrent, S_IRUGO | S_IWUSR, bcm_hsotg_TxCurrent_show,
+		bcm_hsotg_TxCurrent_set);
+static DEVICE_ATTR(Squelch, S_IRUGO | S_IWUSR, bcm_hsotg_Squelch_show,
 		bcm_hsotg_Squelch_set);
-static DEVICE_ATTR(TxCurrent_table, 0644, bcm_hsotg_TxCurrent_Table_show, NULL);
-static DEVICE_ATTR(Squelch_table, 0644, bcm_hsotg_Squelch_Table_show, NULL);
-static DEVICE_ATTR(CurrentTable, 0644, bcm_hsotg_Current_Table, NULL);
-static DEVICE_ATTR(SensitivityTable, 0644, bcm_hsotg_Sensitivity_Table, NULL);
+static DEVICE_ATTR(TxCurrent_table, S_IRUGO | S_IWUSR,
+	bcm_hsotg_TxCurrent_Table_show, NULL);
+static DEVICE_ATTR(Squelch_table, S_IRUGO | S_IWUSR,
+	bcm_hsotg_Squelch_Table_show, NULL);
+static DEVICE_ATTR(CurrentTable, S_IRUGO | S_IWUSR,
+	bcm_hsotg_Current_Table, NULL);
+static DEVICE_ATTR(SensitivityTable, S_IRUGO | S_IWUSR,
+	bcm_hsotg_Sensitivity_Table, NULL);
 
 static struct attribute *bcm_hsotgctrl_phy_mdio_attrs[] = {
 	&dev_attr_USB_MDIO0.attr,
@@ -756,10 +766,11 @@ static int __devinit bcm_hsotgctrl_phy_mdio_probe(struct platform_device *pdev)
 	hsotgctrl_drvdata->mdio_master_clk = clk_get(NULL,
 		plat_data->mdio_mstr_clk_name);
 
-	if (IS_ERR_OR_NULL(hsotgctrl_drvdata->mdio_master_clk)) {
+	if (IS_ERR(hsotgctrl_drvdata->mdio_master_clk)) {
+		error = PTR_ERR(hsotgctrl_drvdata->mdio_master_clk);
 		dev_warn(&pdev->dev, "MDIO Mst clk alloc failed\n");
 		kfree(hsotgctrl_drvdata);
-		return -EIO;
+		return error;
 	}
 
 	platform_set_drvdata(pdev, hsotgctrl_drvdata);

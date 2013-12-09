@@ -457,6 +457,7 @@ bcmsdh_reg_read(void *sdh, uint32 addr, uint size)
 				return word;
 			default:
 				bcmsdh->regfail = TRUE;
+				printk("bcmsdh_reg_read failed regfail variable set");
 
 		}
 	}

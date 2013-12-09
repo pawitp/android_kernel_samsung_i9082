@@ -80,8 +80,8 @@ static u8 t48_config_chrg_e[] = {PROCG_NOISESUPPRESSION_T48,
 	10, 0, 9, 5, 0, 15, 0, 20, 0, 0,
 	0, 0, 0, 0, 0, 40, 2,/*blen=0,threshold=50*/
 	2 /*MOVHYSTI*/, 1, 47,
-	MXT224_MAX_MT_FINGERS, 5, 40, 235, 235, 
-	10, 10, 160, 50, 200,
+	MXT224_MAX_MT_FINGERS, 5, 40, 250, 250, 
+	20, 20, 160, 50, 200,
 	80, 18, 15, 0};
 
 static u8 t48_config_e[] = {PROCG_NOISESUPPRESSION_T48,
@@ -90,8 +90,8 @@ static u8 t48_config_e[] = {PROCG_NOISESUPPRESSION_T48,
 	10, 0, 100, 5, 0, 100, 0, 5, 0, 0,
 	0, 0, 0, 0, 0, 30, 2,
 	2 /*MOVHYSTI*/, 1, 81,
-	MXT224_MAX_MT_FINGERS, 5, 40, 235,235,
-	10, 10, 160, 50, 200,
+	MXT224_MAX_MT_FINGERS, 5, 40, 250,250,
+	20, 20, 160, 50, 200,
 	80, 18, 15, 0};
 
 static u8 end_config_e[] = {RESERVED_T255};

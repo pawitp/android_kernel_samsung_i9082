@@ -88,7 +88,11 @@ int __cpuinit local_timer_setup(struct clock_event_device *evt)
 	struct kona_td kona_td;
 	struct timer_ch_cfg config;
 
-	/* allocate an AON timer channel as local tick timer
+	/*
+	 * TICK_TIMER_NAME can be either "aon-timer" or "slave-timer".
+	 *
+	 * We are currently using "slave-timer" at 1 MHz for better timer
+	 * resolution and system performance
 	 */
 	kona_td = (struct kona_td)__get_cpu_var(percpu_kona_td);
 

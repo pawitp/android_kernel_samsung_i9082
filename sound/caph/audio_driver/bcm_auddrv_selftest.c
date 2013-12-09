@@ -981,11 +981,11 @@ static void ST_AUDIOH_hw_DMIC_Enable(CHAL_HANDLE audiohandle, int dmic)
 	switch (dmic) {
 	case 0:
 		chal_audio_vinpath_digi_mic_enable(audiohandle,
-						   CHAL_AUDIO_CHANNEL_LEFT);
+						   CHAL_AUDIO_CHANNEL_LEFT, 0);
 		break;
 	case 1:
 		chal_audio_vinpath_digi_mic_enable(audiohandle,
-						   CHAL_AUDIO_CHANNEL_RIGHT);
+						   CHAL_AUDIO_CHANNEL_RIGHT, 0);
 		break;
 	case 2:
 		chal_audio_nvinpath_digi_mic_enable(audiohandle,

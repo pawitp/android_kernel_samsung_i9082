@@ -26,7 +26,7 @@
 *
 *****************************************************************************/
 
-#if !defined( GIST_H )
+#if !defined(GIST_H)
 #define GIST_H
 
 /* ---- Include Files ---------------------------------------- */
@@ -58,7 +58,8 @@ typedef struct {
 
 /* writer parameters */
 typedef struct {
-	char filename[GIST_FILENAME_MAXLEN];	/* Name of the file to write to */
+	char filename[GIST_FILENAME_MAXLEN];
+				/* Name of the file to write to */
 	int mode;		/* Flag indicating if existing files
 				 * should be overwritten or appended to. */
 	int buffer_size;	/* Size of buffer to use.  Specify
@@ -66,7 +67,7 @@ typedef struct {
 				 * let GIST use the default size */
 } GIST_WRITER_PARAMS;
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 /* ---- Variable Externs ------------------------------------- */
 /* ---- Function Prototypes ---------------------------------- */
 extern int gist_alloc_reader(const GIST_READER_PARAMS *params);

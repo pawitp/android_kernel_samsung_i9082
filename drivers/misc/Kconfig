@@ -425,6 +425,17 @@ config AL3006
 		To compile this driver as a module, choose M here: the
 		module will be called al3006.
 
+config ISL29044
+	tristate "ISL29044 Digital Light + Proximity sensor"
+	depends on I2C && SYSFS
+	default n
+	help
+		If you say yes here you get support for DYNE image
+		Digital Light+Proximity sensor ISL29044.
+
+		To compile this driver as a module, choose M here: the
+		module will be called isl29044.
+
 config TMD2771X
 	tristate "TMD2771X Digital Light + Proximity sensor"
 	depends on I2C && SYSFS
@@ -435,6 +446,16 @@ config TMD2771X
 
 		To compile this driver as a module, choose M here: the
 		module will be called TMD2771X.
+
+config TMD2771
+        bool "sensor proximity & light tmd2771 driver"
+        depends on I2C
+        default n
+        help
+	  This driver provides support for the TAOS TMD2771 proximate & light sensor driver.
+
+	  To compile this driver as a module, choose M here: the
+	  module will be called tmd2771. If unsure, say N here.
 
 config BMP18X
 	tristate "BMP18X digital pressure sensor"
@@ -466,6 +487,28 @@ config BMP18X_SPI
 		To compile this driver as a module, choose M here: the
 		module will be called bmp18x-spi.
 
+config SENSORS_KIONIX_KXTIK
+	tristate "Analog Devices KIONIX KXTIK Three-Axis Digital Accelerometer"
+	depends on I2C && SYSFS
+	help
+		If you say yes here you get support for the KXTIK Accelerometer.
+
+config SENSORS_KIONIX_KXTIK_POLL_DATA
+	bool "Polling data from kxtix"
+	depends on SENSORS_KIONIX_KXTIK
+	help
+	  If you say yes here you will poll data from kxtix.
+	  Otherwise, it will read data from irq.
+	  This should be decided by H/W design.
+	  If your H/W connect the irq pin, irq mode is suggested.
+
+config SENSORS_AK8963
+	tristate "AK8963 compass support"
+	depends on I2C
+	help
+	  If you say yes here you get support for Asahi Kasei's
+	  orientation sensor AK8963.
+
 config SENSORS_AK8975
 	tristate "AK8975 compass support"
 	default n
@@ -482,10 +525,14 @@ config AMI306
     If you say yes here you get support for
     AMI306 standalone compass driver provided by Aichi Stell
 
-config YAS_532_ENABLE
-	bool "yas 532 sensor YAS 4.2.602"
+config MMC328XMA
+	tristate "Memsic MMC328XMA compass"
 	depends on I2C
-	default n
+	help
+	  This driver provides support for the MEMSIC MMC328XMA compass
+	  which is a 3-axis magnetic sensor and provides an I2C digital output.
+	  To compile this driver as a module, choose M here: the
+	  module will be called mmc328xma. If unsure, say N here.
 
 config OPTICAL_CM3663
 	depends on I2C && GENERIC_GPIO
@@ -603,6 +650,15 @@ config PCH_PHUB
 
 	  To compile this driver as a module, choose M here: the module will
 	  be called pch_phub.
+
+config USB_SWITCH_TSU6721
+	tristate "TSU6721 USB Switch"
+	depends on I2C
+	help
+	  The TSU6721 is a USB port accessory detector and switch.
+	  The TSU6721 is fully controlled using I2C and enables USB data,
+	  stereo and mono audio, video, microphone and UART data to use
+	  a common connector port.
 
 config WL127X_RFKILL
 	tristate "Bluetooth power control driver for TI wl127x"
@@ -745,20 +801,10 @@ config BCM_RFKILL
 	  This driver adds RFKILL support for Broadcom bluetooth
 
 config BCM_BT_LPM
-	bool "BCM BT Low Power support"
-	default n
+	bool "BCM BDROID BT Low Power support"
+	default y
 	help
 	  This driver adds Low Power mode support for Broadcom bluetooth
-
-config BCM_BT_GPS_SELFTEST
-	bool "BRCM GPS test interface for GPS combos"
-	depends on BCM_BT_LPM
-	default n
-	help
-	  Provides GPS manufacturing test interface via BCM_BT_LPM ioctl i/f.
-	  If your platform uses a BCMxxxx BT+GPS chip with N_BRCM_HCI line
-	  discpline, say Y.
-	  If no GPS combo, say N.
 
 config RECOVERY
    bool "Android Recovery Support"
@@ -782,8 +828,6 @@ source "drivers/misc/iwmc3200top/Kconfig"
 source "drivers/misc/ti-st/Kconfig"
 source "drivers/misc/lis3lv02d/Kconfig"
 source "drivers/misc/carma/Kconfig"
-source "drivers/misc/inv_mpu/Kconfig"
-source "drivers/misc/yas532/Kconfig"
 source "drivers/misc/vc04_services/Kconfig"
 source "drivers/misc/emmc_rpmb/Kconfig"
 source "drivers/misc/modem_if/Kconfig"

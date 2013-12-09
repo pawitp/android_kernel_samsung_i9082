@@ -20,6 +20,7 @@
 #define CHARGING_STATE	0x3
 #define BOOTLOADER_BOOT	0x5
 #define RECOVERY_BOOT   0x6
+#define RTC_BOOT       0x7
 
 void do_set_recovery_boot(void);
 void do_set_ap_only_boot(void);

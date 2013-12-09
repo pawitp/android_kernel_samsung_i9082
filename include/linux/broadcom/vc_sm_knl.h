@@ -28,7 +28,7 @@ typedef enum {
 
 /* Allocate a shared memory handle and block.
 */
-int vc_sm_alloc(VC_SM_ALLOC_T * alloc, int *handle);
+int vc_sm_alloc(VC_SM_ALLOC_T *alloc, int *handle);
 
 /* Free a previously allocated shared memory handle and block.
 */

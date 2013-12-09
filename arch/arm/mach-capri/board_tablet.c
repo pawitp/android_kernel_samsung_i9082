@@ -15,10 +15,12 @@
 #define CAPRI_BOARD_ID CAPRI_TABLET
 #include "board_template.c"
 
-#if defined (CONFIG_CAPRI_11130)
+#if defined(CONFIG_CAPRI_11130)
 #define CAPRI_BOARD_NAME "BCM911130_TABLET"
-#elif defined (CONFIG_CAPRI_11351)
+#elif defined(CONFIG_CAPRI_11351)
 #define CAPRI_BOARD_NAME "BCM911351_TABLET"
+#elif defined(CONFIG_CAPRI_11140)
+#define CAPRI_BOARD_NAME "BCM911140_TABLET"
 #else
 #define CAPRI_BOARD_NAME "BCM9_TABLET_CAPRI"
 #endif

@@ -73,8 +73,8 @@ static int usbh_hsic_clk_ctrl(struct usbh_hsic_priv *drv_data, int enable)
 		if (hw_cfg->peri_clk_name) {
 			drv_data->peri_clk =
 			    clk_get(drv_data->dev, hw_cfg->peri_clk_name);
-			if (!drv_data->peri_clk)
-				return -EINVAL;
+			if (IS_ERR(drv_data->peri_clk))
+				return PTR_ERR(drv_data->peri_clk);
 			ret = clk_enable(drv_data->peri_clk);
 			if (ret)
 				goto err_put_peri_clk;
@@ -84,8 +84,8 @@ static int usbh_hsic_clk_ctrl(struct usbh_hsic_priv *drv_data, int enable)
 		if (hw_cfg->ahb_clk_name) {
 			drv_data->ahb_clk =
 			    clk_get(drv_data->dev, hw_cfg->ahb_clk_name);
-			if (!drv_data->ahb_clk) {
-				ret = EINVAL;
+			if (IS_ERR(drv_data->ahb_clk)) {
+				ret = PTR_ERR(drv_data->ahb_clk);
 				goto err_disable_peri_clk;
 			}
 			ret = clk_enable(drv_data->ahb_clk);
@@ -99,8 +99,8 @@ static int usbh_hsic_clk_ctrl(struct usbh_hsic_priv *drv_data, int enable)
 		if (hw_cfg->opt_clk_name) {
 			drv_data->opt_clk =
 			    clk_get(drv_data->dev, hw_cfg->opt_clk_name);
-			if (!drv_data->opt_clk) {
-				ret = -EINVAL;
+			if (IS_ERR(drv_data->opt_clk)) {
+				ret = PTR_ERR(drv_data->opt_clk);
 				goto err_disable_ahb_clk;
 			}
 			ret = clk_enable(drv_data->opt_clk);

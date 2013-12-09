@@ -29,12 +29,6 @@
 		.name = "green", 	/* STATUS_LED2 */ \
 		.gpio = 46, \
 	}, \
-#if 0 /* normally configured for PMU's exclusive use */
-	{ \
-		.name = "red", 		/* STATUS_LED3 */ \
-		.gpio = 47, \
-	}, \
-#endif
 };
 
 #endif /* LEDS_GPIO_SETTINGS_H */

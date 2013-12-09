@@ -20,9 +20,9 @@ the GPL, without Broadcom's express prior written consent.
 #endif
 
 /* typedef struct { */
-/* 	void *ptr;		// virtual address */
-/* 	unsigned int addr;	// physical address */
-/* 	unsigned int size; */
+/*	void *ptr;		// virtual address */
+/*	unsigned int addr;	// physical address */
+/*	unsigned int size; */
 /* } mem_t; */
 
 enum {
@@ -51,6 +51,7 @@ enum {
 #define VCE_IOCTL_USE_ACP       _IO(BCM_VCE_MAGIC, VCE_CMD_USE_ACP)
 #define VCE_IOCTL_UNUSE_ACP     _IO(BCM_VCE_MAGIC, VCE_CMD_UNUSE_ACP)
 #define VCE_IOCTL_ASSERT_IDLE   _IO(BCM_VCE_MAGIC, VCE_CMD_ASSERT_IDLE)
-#define VCE_IOCTL_DEBUG_FETCH_KSTAT_IRQS  _IOR(BCM_VCE_MAGIC, VCE_CMD_DEBUG_FETCH_KSTAT_IRQS, unsigned int)
+#define VCE_IOCTL_DEBUG_FETCH_KSTAT_IRQS\
+	_IOR(BCM_VCE_MAGIC, VCE_CMD_DEBUG_FETCH_KSTAT_IRQS, unsigned int)
 
 #endif

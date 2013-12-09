@@ -83,6 +83,19 @@ static struct map_desc io_desc[] __initdata = {
 	 .length = IO_APB_G8_SIZE,
 	 .type = MT_DEVICE,
 	 },
+	{
+	/* CAUTION: Please do NOT remove this section.
+	 *          It's needed by DDR3 code to run off SRAM
+	 *
+	 * Length allocated: 80K.
+	 * Warning: Do not unlock all region to be
+	 * executable for Security resaon.
+	 */
+	 .virtual = (unsigned long)KONA_SRAM_VA,
+	 .pfn = __phys_to_pfn(INT_SRAM_BASE),
+	 .length = (SZ_64K + SZ_16K),
+	 .type = MT_MEMORY_NONCACHED,
+	},
 };
 
 void __init capri_map_io(void)

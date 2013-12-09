@@ -1535,6 +1535,7 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	AUDIO_SINK_Enum_t spk = (AUDIO_SINK_Enum_t) Val3;	/* speaker */
 	UInt32 delayMs = Val4;	/* delay in milliseconds */
 	voip_data_t voip_codec = {0};
+	Boolean isNLPenabled = FALSE;
 
 #if 0  // sometime memory allocation fail happens so that loopback failed consequently.
 	if (record_test_buf == NULL)
@@ -1573,8 +1574,15 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 	}
 	/* configure EC and NS for the loopback test */
 #if defined(USE_LOOPBACK_SYSPARM)
+
+	aTrace(LOG_AUDIO_DRIVER, "\n NLP mode : %d, EC mode : %d, NS mode : %d\n",
+	        (Boolean)(AudParmP()[mode+AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echoNlp_parms.echo_subband_nlp_enable),
+	        (Boolean)(AudParmP()[mode+AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echo_cancelling_enable),
+	        (Boolean)(AudParmP()[mode+AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].ul_noise_suppression_enable)
+	        );
+
 	/* use sysparm to configure EC */
-	if (mode != AUDIO_MODE_SPEAKERPHONE)
+	//if (mode != AUDIO_MODE_SPEAKERPHONE)
 	{
 		AUDCTRL_EC((Boolean)(AudParmP()[mode +
 		AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echo_cancelling_enable),
@@ -1600,13 +1608,13 @@ void AUDTST_VoIP(UInt32 Val2, UInt32 Val3, UInt32 Val4, UInt32 Val5,
 
 	// disable NLP due to volume fluctuation for loopback case only, ported from BCM215x / BCM2133x platform.
 	// reset EC/NLP after AUDCTRL_EnableTelephony() calls AUDDRV_Telephony_Init().
-#if 0
-	AUDCTRL_ECreset_NLPoff(TRUE);
-#endif
-	if(mode == AUDIO_MODE_HEADSET)
+	isNLPenabled = (Boolean)(AudParmP()[mode+AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echoNlp_parms.echo_subband_nlp_enable);
+
+	if(!isNLPenabled)
 	{
-		aTrace(LOG_AUDIO_DRIVER, "\n AUDCTRL_ECreset_NLPoff for ear, rcv\n");
-		AUDCTRL_ECreset_NLPoff(FALSE);
+		/* AUDCTRL_ECreset_NLPoff function is for turning off NLP regardless of input parameter */
+		aTrace(LOG_AUDIO_DRIVER, "\n NLP turned off - mode : %d\n", isNLPenabled);
+		AUDCTRL_ECreset_NLPoff((Boolean)(AudParmP()[mode+AUDIO_APP_LOOPBACK * AUDIO_MODE_NUMBER].echoNlp_parms.echo_subband_nlp_enable));
 	}	
 
 	AUDCTRL_SetTelephonySpkrVolume(spk, vol, AUDIO_GAIN_FORMAT_mB);
@@ -1688,6 +1696,8 @@ void AUDTST_VoIP_Stop(void)
 
 		AUDIO_DRIVER_Close(cur_drv_handle);
 		cur_drv_handle = NULL;
+
+		AUDCTRL_RemoveAudioApp(AUDIO_APP_LOOPBACK);
 #if 0  // sometime memory allocation fail happens so that loopback failed consequently.
 		/* from ceckpatch: kfree is safe, so no need to check */
 		kfree(record_test_buf);

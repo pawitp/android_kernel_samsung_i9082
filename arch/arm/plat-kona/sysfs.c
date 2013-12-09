@@ -52,6 +52,10 @@ static char *str_reset_reason[] = {
 	"ap_only",
 	"bootloader",
 	"recovery",
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+	"rtc_alarm",
+#endif
+
 	"unknown"
 };
 
@@ -171,6 +175,11 @@ reset_reason_show(struct device *dev, struct device_attribute *attr, char *buf)
 	case 0x6:
 		index = 5;
 		break;
+#ifdef CONFIG_BCM_RTC_ALARM_BOOT
+	case 0x7:
+		index = 6;
+		break;
+#endif
 	default:
 		index = 0;
 	}

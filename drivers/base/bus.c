@@ -19,6 +19,12 @@
 #include "base.h"
 #include "power/power.h"
 
+struct klist_node *CSP_knode_bcmdhd_wlan = NULL;
+struct klist_node *CSP_knode_bcm4329_wlan = NULL;
+struct klist_node *CSP_knode_bcmsdh_sdmmc = NULL;
+
+
+
 #define to_bus_attr(_attr) container_of(_attr, struct bus_attribute, attr)
 
 /*
@@ -631,8 +637,8 @@ int bus_add_driver(struct device_driver *drv)
 	bus = bus_get(drv->bus);
 	if (!bus)
 		return -EINVAL;
-
-	pr_debug("bus: '%s': add driver %s\n", bus->name, drv->name);
+	if(!strncmp(drv->name,"bcmsdh_sdmmc",12) || !strncmp(drv->name,"bcmdhd_wlan",10)  || !strncmp(drv->name,"bcm4329_wlan",12))
+		printk("CSP:: bus: '%s': add driver %s\n", bus->name, drv->name);
 
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
@@ -652,6 +658,22 @@ int bus_add_driver(struct device_driver *drv)
 		error = driver_attach(drv);
 		if (error)
 			goto out_unregister;
+	}
+	
+	if(!strncmp(drv->name,"bcmsdh_sdmmc",12))
+	{
+		CSP_knode_bcmsdh_sdmmc = &(priv->knode_bus);
+		printk("CSP:: calling klist_add_tail with node %x\n",&(priv->knode_bus));
+	}
+	if(!strncmp(drv->name,"bcmdhd_wlan",10))
+	{
+		CSP_knode_bcmdhd_wlan = &(priv->knode_bus);
+		printk("CSP:: calling klist_add_tail with node %x\n",&(priv->knode_bus));
+	}
+	if(!strncmp(drv->name,"bcm4329_wlan",12))
+	{
+		CSP_knode_bcm4329_wlan = &(priv->knode_bus);
+		printk("CSP:: calling klist_add_tail with node %x\n",&(priv->knode_bus));
 	}
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	module_add_driver(drv->owner, drv);
@@ -681,6 +703,7 @@ int bus_add_driver(struct device_driver *drv)
 	return 0;
 
 out_unregister:
+	printk("CSP:: unregister error \n");
 	kobject_put(&priv->kobj);
 	kfree(drv->p);
 	drv->p = NULL;
@@ -701,13 +724,15 @@ void bus_remove_driver(struct device_driver *drv)
 {
 	if (!drv->bus)
 		return;
-
+	if(!strncmp(drv->name,"bcmsdh_sdmmc",12) || !strncmp(drv->name,"bcmdhd_wlan",10)  || !strncmp(drv->name,"bcm4329_wlan",12))
+		printk("CSP bus_remove_driver %s node address is %x\n",drv->name,&drv->p->knode_bus);
 	if (!drv->suppress_bind_attrs)
 		remove_bind_files(drv);
 	driver_remove_attrs(drv->bus, drv);
 	driver_remove_file(drv, &driver_attr_uevent);
 	klist_remove(&drv->p->knode_bus);
-	pr_debug("bus: '%s': remove driver %s\n", drv->bus->name, drv->name);
+	if(!strncmp(drv->name,"bcmsdh_sdmmc",12) || !strncmp(drv->name,"bcmdhd_wlan",10)  || !strncmp(drv->name,"bcm4329_wlan",12))
+		printk("CSP bus: '%s': remove driver %s\n", drv->bus->name, drv->name);
 	driver_detach(drv);
 	module_remove_driver(drv);
 	kobject_put(&drv->p->kobj);

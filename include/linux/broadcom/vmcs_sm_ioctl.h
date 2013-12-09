@@ -13,12 +13,12 @@
 *
 *****************************************************************************/
 
-#if !defined( __VMCS_SM_IOCTL_H__INCLUDED__ )
+#if !defined(__VMCS_SM_IOCTL_H__INCLUDED__)
 #define __VMCS_SM_IOCTL_H__INCLUDED__
 
 /* ---- Include Files ---------------------------------------------------- */
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 #include <linux/types.h>	/* Needed for standard types */
 #else
 #include <stdint.h>
@@ -163,28 +163,64 @@ struct vmcs_sm_ioctl_cache {
 };
 
 /* IOCTL numbers */
-#define VMCS_SM_IOCTL_MEM_ALLOC           _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_ALLOC, struct vmcs_sm_ioctl_alloc )
-#define VMCS_SM_IOCTL_MEM_ALLOC_SHARE     _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_ALLOC_SHARE, struct vmcs_sm_ioctl_alloc_share )
-#define VMCS_SM_IOCTL_MEM_LOCK            _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_LOCK, struct vmcs_sm_ioctl_lock_unlock )
-#define VMCS_SM_IOCTL_MEM_LOCK_CACHE      _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_LOCK_CACHE, struct vmcs_sm_ioctl_lock_cache )
-#define VMCS_SM_IOCTL_MEM_UNLOCK          _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_UNLOCK, struct vmcs_sm_ioctl_lock_unlock )
-#define VMCS_SM_IOCTL_MEM_RESIZE          _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_RESIZE, struct vmcs_sm_ioctl_resize )
-#define VMCS_SM_IOCTL_MEM_FREE            _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_FREE, struct vmcs_sm_ioctl_free )
-#define VMCS_SM_IOCTL_MEM_FLUSH           _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_FLUSH, struct vmcs_sm_ioctl_cache )
-#define VMCS_SM_IOCTL_MEM_INVALID         _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_INVALID, struct vmcs_sm_ioctl_cache )
+#define VMCS_SM_IOCTL_MEM_ALLOC\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_ALLOC,\
+	 struct vmcs_sm_ioctl_alloc)
+#define VMCS_SM_IOCTL_MEM_ALLOC_SHARE\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_ALLOC_SHARE,\
+	 struct vmcs_sm_ioctl_alloc_share)
+#define VMCS_SM_IOCTL_MEM_LOCK\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_LOCK,\
+	 struct vmcs_sm_ioctl_lock_unlock)
+#define VMCS_SM_IOCTL_MEM_LOCK_CACHE\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_LOCK_CACHE,\
+	 struct vmcs_sm_ioctl_lock_cache)
+#define VMCS_SM_IOCTL_MEM_UNLOCK\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_UNLOCK,\
+	 struct vmcs_sm_ioctl_lock_unlock)
+#define VMCS_SM_IOCTL_MEM_RESIZE\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_RESIZE,\
+	 struct vmcs_sm_ioctl_resize)
+#define VMCS_SM_IOCTL_MEM_FREE\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_FREE,\
+	 struct vmcs_sm_ioctl_free)
+#define VMCS_SM_IOCTL_MEM_FLUSH\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_FLUSH,\
+	 struct vmcs_sm_ioctl_cache)
+#define VMCS_SM_IOCTL_MEM_INVALID\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_INVALID,\
+	 struct vmcs_sm_ioctl_cache)
 
-#define VMCS_SM_IOCTL_SIZE_USR_HDL        _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_SIZE_USR_HANDLE, struct vmcs_sm_ioctl_size )
-#define VMCS_SM_IOCTL_CHK_USR_HDL         _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_CHK_USR_HANDLE, struct vmcs_sm_ioctl_chk )
+#define VMCS_SM_IOCTL_SIZE_USR_HDL\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_SIZE_USR_HANDLE,\
+	 struct vmcs_sm_ioctl_size)
+#define VMCS_SM_IOCTL_CHK_USR_HDL\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_CHK_USR_HANDLE,\
+	 struct vmcs_sm_ioctl_chk)
 
-#define VMCS_SM_IOCTL_MAP_USR_HDL         _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_USR_HANDLE, struct vmcs_sm_ioctl_map )
-#define VMCS_SM_IOCTL_MAP_USR_ADDRESS     _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_USR_ADDRESS, struct vmcs_sm_ioctl_map )
-#define VMCS_SM_IOCTL_MAP_VC_HDL_FR_ADDR  _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_VC_HDL_FROM_ADDR, struct vmcs_sm_ioctl_map )
-#define VMCS_SM_IOCTL_MAP_VC_HDL_FR_HDL   _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_VC_HDL_FROM_HDL, struct vmcs_sm_ioctl_map )
+#define VMCS_SM_IOCTL_MAP_USR_HDL\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_USR_HANDLE,\
+	 struct vmcs_sm_ioctl_map)
+#define VMCS_SM_IOCTL_MAP_USR_ADDRESS\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_USR_ADDRESS,\
+	 struct vmcs_sm_ioctl_map)
+#define VMCS_SM_IOCTL_MAP_VC_HDL_FR_ADDR\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_VC_HDL_FROM_ADDR,\
+	 struct vmcs_sm_ioctl_map)
+#define VMCS_SM_IOCTL_MAP_VC_HDL_FR_HDL\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_MAPPED_VC_HDL_FROM_HDL,\
+	 struct vmcs_sm_ioctl_map)
 
-#define VMCS_SM_IOCTL_VC_WALK_ALLOC       _IO( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_VC_WALK_ALLOC )
-#define VMCS_SM_IOCTL_HOST_WALK_MAP       _IO( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_MAP )
-#define VMCS_SM_IOCTL_HOST_WALK_PID_ALLOC _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_PID_ALLOC, struct vmcs_sm_ioctl_walk )
-#define VMCS_SM_IOCTL_HOST_WALK_PID_MAP   _IOR( VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_PID_MAP, struct vmcs_sm_ioctl_walk )
+#define VMCS_SM_IOCTL_VC_WALK_ALLOC\
+	_IO(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_VC_WALK_ALLOC)
+#define VMCS_SM_IOCTL_HOST_WALK_MAP\
+	_IO(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_MAP)
+#define VMCS_SM_IOCTL_HOST_WALK_PID_ALLOC\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_PID_ALLOC,\
+	 struct vmcs_sm_ioctl_walk)
+#define VMCS_SM_IOCTL_HOST_WALK_PID_MAP\
+	_IOR(VMCS_SM_MAGIC_TYPE, VMCS_SM_CMD_HOST_WALK_PID_MAP,\
+	 struct vmcs_sm_ioctl_walk)
 
 /* ---- Variable Externs ------------------------------------------------- */
 

@@ -132,6 +132,8 @@ struct __BRCM_AUDIO_Param_Stop_t {
 	TIDChanOfDev *pdev_prop;
 	Int32 callMode;
 	int stream;
+	AUDIO_SOURCE_Enum_t source;
+	AUDIO_SINK_Enum_t sink;	
 };
 #define BRCM_AUDIO_Param_Stop_t struct __BRCM_AUDIO_Param_Stop_t
 
@@ -182,6 +184,8 @@ struct __BRCM_AUDIO_Param_BufferReady_t {
 	AUDIO_DRIVER_HANDLE_t drv_handle;
 	TIDChanOfDev *pdev_prop;
 	int stream;
+	int offset;
+	int size;
 };
 #define BRCM_AUDIO_Param_BufferReady_t struct __BRCM_AUDIO_Param_BufferReady_t
 

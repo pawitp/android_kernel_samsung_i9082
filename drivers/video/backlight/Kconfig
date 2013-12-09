@@ -309,6 +309,12 @@ config BACKLIGHT_KTD3102
 	help
         backlight driver.
 
+ config BACKLIGHT_KTD3103
+	tristate "backlight driver"
+	depends on y
+	default n
+	help
+        backlight driver. 
 
 config BACKLIGHT_ADP8870
 	tristate "Backlight Driver for ADP8870 using WLED"

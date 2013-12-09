@@ -32,7 +32,11 @@
 		.speed = BSC_BUS_SPEED_430K, \
 	}, \
 	{ /* PMU BSC */ \
-		.speed = BSC_BUS_SPEED_400K, \
+		.speed = BSC_BUS_SPEED_HS, \
+	    /* No dynamic speed in HS mode */ \
+		.dynamic_speed = 0,     \
+		.retries = 5,     \
+		.is_pmu_i2c = true, \
 	}, \
 }
 #endif /* I2C_SETTINGS_H */

@@ -509,7 +509,7 @@ void wl_cfg80211_btcoex_deinit(struct wl_priv *wl)
 	if (!wl->btcoex_info)
 		return;
 
-	if (!wl->btcoex_info->timer_on) {
+	if (wl->btcoex_info->timer_on) {
 		wl->btcoex_info->timer_on = 0;
 		del_timer_sync(&wl->btcoex_info->timer);
 	}

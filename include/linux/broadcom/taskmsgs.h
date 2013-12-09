@@ -316,6 +316,11 @@ typedef enum {			// explicitly enum for easier debugging
 	**/
 	MSG_VCC_VM_PWR_SAVING_IND = MSG_GRP_NET + 0x17,
 
+	/**
+	This reports the RAT/Band change request has been completed.
+	**/
+	MSG_MS_SET_RAT_BAND_IND = MSG_GRP_NET + 0x18, /**< Payload type {::MSNetworkInfo_t} */
+
 	// End of MSG_GRP_NET (0x0200)
 
 	//---------------------------------------------------------------
@@ -7173,6 +7178,15 @@ typedef enum {			// explicitly enum for easier debugging
 	payload is ::default_proc
 	**/
 	MSG_SYS_SOFT_RESET_SYSTEM_RSP = 0x4B43,
+	 /**
+	api is SYS_SimApi_ColdResetEvt
+	**/
+	/*<Payload type {::SYS_SimApi_ColdResetEvt_Req_t}*/
+	MSG_SYS_SIM_COLD_RESET_EVT_REQ  = 0x4B48,
+	 /**
+	payload is ::default_proc
+	**/
+	MSG_SYS_SIM_COLD_RESET_EVT_RSP  = 0x4B49,
 
 	//MSG_GEN_REQ_END = 0x4BFF
 

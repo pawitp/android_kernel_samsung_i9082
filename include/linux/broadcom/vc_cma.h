@@ -12,7 +12,7 @@
 * consent.
 *****************************************************************************/
 
-#if !defined( VC_CMA_H )
+#if !defined(VC_CMA_H)
 #define VC_CMA_H
 
 #include <linux/ioctl.h>

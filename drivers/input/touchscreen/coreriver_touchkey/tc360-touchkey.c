@@ -34,8 +34,8 @@
 #include <linux/workqueue.h>
 #include <mach/pinmux.h>
 
-#define TC360_CUR_FW_VER	0x08
-#define TC360_FW_NAME		"tc360_08.fw"
+#define TC360_CUR_FW_VER	0x09
+#define TC360_FW_NAME		"tc360_09.fw"
 #define TC360_FW_BUILTIN_PATH	"coreriver"
 #define TC360_FW_HEADER_PATH
 #define TC360_FW_IN_SDCARD_PATH	"/mnt/sdcard/firmware/coreriver"
@@ -1127,7 +1127,7 @@ static void tc360_led_set(struct led_classdev *led_cdev,
 	printk("[TouchKey] data->led_brightness=%d, prev_value=%d\n",data->led_brightness, prev_value);
 
 
-	if( value >= 100 && prev_value == 0 && IsTouchkeyPowerOn)
+	if( value >= 1 && prev_value == 0 && IsTouchkeyPowerOn)
 	{	
 		touchkey_led_on(data, 1);
 	}
@@ -1170,8 +1170,9 @@ static ssize_t fac_fw_ver_ic_show(struct device *dev,
 		goto out;
 	}
 
-	dev_info(&client->dev, "%s: %#x\n", __func__, (u8)ver);
-	ret = sprintf(buf, "%#x\n", (u8)ver);
+	ret = sprintf(buf, "%#x", (u8)ver);
+	dev_info(&client->dev, "%s: %#x", __func__, (u8)ver);
+	
 out:
 	return ret;
 }
@@ -1189,9 +1190,8 @@ static ssize_t fac_fw_ver_src_show(struct device *dev,
 		goto out;
 	}
 
-	ret = sprintf(buf, "%#x\n", TC360_CUR_FW_VER);
-
-	dev_info(&client->dev, "%s: %#x\n", __func__, TC360_CUR_FW_VER);
+	ret = sprintf(buf, "%#x", TC360_CUR_FW_VER);
+	dev_info(&client->dev, "%s: %#x", __func__, TC360_CUR_FW_VER);
 
 out:
 	return ret;
@@ -1700,7 +1700,7 @@ static int __devinit tc360_probe(struct i2c_client *client,
 			goto err_request_irq;
 		}
 	}
-#if 0 // jehyun temp		
+#if 0 // auto update
 	disable_irq(client->irq);
 #endif
 	ret = data->pdata->setup_power(&client->dev, true);
@@ -1719,7 +1719,7 @@ static int __devinit tc360_probe(struct i2c_client *client,
 	 * the bottom on probe function.
 	 */
 
-#if 0 // jehyun temp	 
+#if 0 // auto update 
 		
 	ret = tc360_initialize(data);
 	if (ret < 0) {
@@ -1897,7 +1897,7 @@ static int tc360_resume(struct device *dev)
 	data->pdata->power(true);
 	IsTouchkeyPowerOn = 1;
 
-	if (data->led_brightness == 100)
+	if (data->led_brightness >= 1)
 		touchkey_led_on(data, 1);
 	
 	printk("[TouchKey] enable_irq...\n");
@@ -1967,10 +1967,6 @@ static int __devinit tc360_init(void)
 	}
 	
 	gpio_direction_input(TOUCHKEY_INT);
-
-	gpio_direction_output( TOUCHKEY_SCL , 1 );
-
-	gpio_direction_output( TOUCHKEY_SDA , 1 );
 
 	return i2c_add_driver(&tc360_driver);
 }

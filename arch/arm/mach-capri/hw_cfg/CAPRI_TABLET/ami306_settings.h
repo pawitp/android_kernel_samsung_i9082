@@ -16,7 +16,7 @@
 #define AMI306_SETTINGS_H
 
 /* I2C */
-#define AMI_I2C_BUS_NUM                 0
+#define AMI_I2C_BUS_NUM                 1
 #ifdef AMI306L
 #define AMI_I2C_ADDRESS                 0x0F    /* 7-bit Addressing */
 #else

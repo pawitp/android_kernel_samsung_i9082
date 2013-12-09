@@ -158,7 +158,7 @@ void csl_caph_audioh_deinit(void);
 void csl_caph_audioh_config(int path_id, void *pcfg);
 void csl_caph_audioh_unconfig(int path_id);
 CSL_CAPH_AUDIOH_BUFADDR_t csl_caph_audioh_get_fifo_addr(int path_id);
-void csl_caph_audioh_start(int path_id);
+void csl_caph_audioh_start(int path_id, Boolean clock_phase_rev);
 void csl_caph_audioh_stop(int path_id);
 void csl_caph_audioh_mute(int path_id, Boolean mute_ctrl);
 

@@ -1089,21 +1089,19 @@ int dma_mmap_unmap(DMA_MMAP_CFG_T * memMap, DMA_MMAP_DIRTIED_T dirtied)
 				 * dma_sync_device_to_cpu doesn't work on high
 				 * memory pages when CONFIG_HIGHMEM is set.
 				 */
-				 DMA_MMAP_PAGELIST_T *pagelist;
+				DMA_MMAP_PAGELIST_T *pagelist;
+				int pageIdx;
+				struct page **pages;
 
 				pagelist = memMap->pagelist;
 
-				{
-					struct page **pages = pagelist->pages +
-						memMap->pageListStart;
-					int pageIdx;
+				pages = pagelist->pages +
+					memMap->pageListStart;
 
-					for (pageIdx = 0;
-							(pageIdx < pagelist->numLockedPages);
-							pageIdx++)
-						flush_dcache_page(pages[pageIdx]);
-
-				}
+				for (pageIdx = 0;
+					(pageIdx < pagelist->numLockedPages);
+					pageIdx++)
+					flush_dcache_page(pages[pageIdx]);
 
 				for (segmentIdx = 0;
 				     segmentIdx < region->numSegmentsUsed;

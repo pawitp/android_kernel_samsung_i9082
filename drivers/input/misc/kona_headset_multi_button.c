@@ -76,24 +76,20 @@
 #include <plat/kona_mic_bias.h>
 #include <linux/mfd/bcmpmu.h>
 
-#define GPIO_DEBOUNCE_TIME	(64000) /* 64ms */
-#define KEY_PRESS_REF_TIME	msecs_to_jiffies(10)
-#define KEY_DETECT_DELAY	msecs_to_jiffies(60)
+#define GPIO_DEBOUNCE_TIME	(16000) /* 16ms */
+#define KEY_PRESS_REF_TIME	msecs_to_jiffies(5)
+#define KEY_DETECT_DELAY	msecs_to_jiffies(50)
 #define KEY_ENABLE_DELAY	(250)
-#ifdef CONFIG_FIVE_PIN_EARJACK_SUPPORT
-#define ACCESSORY_INSERTION_SETTLE_TIME 	msecs_to_jiffies(750)
-#else
-#define ACCESSORY_INSERTION_SETTLE_TIME 	msecs_to_jiffies(150)
-#endif
-#define ACCESSORY_REMOVE_SETTLE_TIME 		msecs_to_jiffies(50)
-#define ACCESSORY_LOOP_COUNT  (10)
-#define ADC_MAX_LOOP (5)
+#define FALSE_KEY_AVOID_DELAY (30)
+#define ACCESSORY_INSERTION_SETTLE_TIME 	msecs_to_jiffies(300)
+#define ACCESSORY_REMOVE_SETTLE_TIME 		msecs_to_jiffies(150)
+#define ADC_LOOP_COUNT  (5)
+#define ADC_CHECK_OFFSET (3)
 #define ADC_READ_RETRY_DELAY	(50)
 #define COMP1_THRESHOLD (730)
 #define COMP2_THRESHOLD (2100)
 #define WAKE_LOCK_TIME				(HZ * 5)	/* 5 sec */
 #define WAKE_LOCK_TIME_IN_SENDKEY	(HZ * 2)	/* 2 sec */
-#define PATH_FACTORYMODE "/efs/FactoryApp/factorymode"
 
 /*
 * After configuring the ADC, it takes different 'time' for the 
@@ -109,23 +105,30 @@
 *
 * Voltage defined in mv 
 */
-#define HEADPHONE_DETECT_LEVEL_MIN		0
-#define HEADPHONE_DETECT_LEVEL_MAX      950
+#define HEADPHONE_DETECT_LEVEL_MIN	0
+#ifdef CONFIG_MACH_CAPRI_SS_CRATER
+#define HEADPHONE_DETECT_LEVEL_MAX      900
+#elif CONFIG_SS_NEW_EARPHONE_SPEC
+#define HEADPHONE_DETECT_LEVEL_MAX      720
+#else
+#define HEADPHONE_DETECT_LEVEL_MAX      750
+#endif
+#define BASIC_HEADSET_DETECT_LEVEL_MIN  HEADPHONE_DETECT_LEVEL_MAX
+#define BASIC_HEADSET_DETECT_LEVEL_MAX  4096
 #define OPENCABLE_DETECT_LEVEL_MIN		3000
 #define OPENCABLE_DETECT_LEVEL_MAX		5000
+#ifdef CONFIG_MACH_CAPRI_SS_CRATER
+#define CALL_OPENCABLE_DETECT_LEVEL_MIN	BASIC_HEADSET_DETECT_LEVEL_MAX
+#else 
 #define CALL_OPENCABLE_DETECT_LEVEL_MIN	2000
+#endif
 #define CALL_OPENCABLE_DETECT_LEVEL_MAX	5000
-#define BASIC_HEADSET_DETECT_LEVEL_MIN  950
-#define BASIC_HEADSET_DETECT_LEVEL_MAX  3000
 
 enum hs_type {
 	DISCONNECTED = 0, /* Nothing is connected  */ 
 	HEADPHONE,    /* The one without MIC   */
 	OPEN_CABLE,   /* Not sent to userland  */
 	HEADSET,	  /* The one with MIC 	   */
-#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
-	OPEN_CABLE_HEADPHONE,
-#endif
 	/* If more HS types are required to be added
 	* add here, not below HS_TYPE_MAX
 	*/
@@ -145,12 +148,6 @@ enum button_state {
 	BUTTON_PRESSED
 };
 
-enum detect_state {
-	DETECT_IRQ = 0,
-	DETECT_ING,
-	DETECT_DONE
-};
-
 struct mic_t {
 	int gpio_irq;
 	int comp2_irq;
@@ -159,18 +156,16 @@ struct mic_t {
 	u32 auxmic_base;
 	u32 aci_base;
 	int hs_state;
+	int hs_detecting;
 	int button_state;
 	int button_pressed;
-	unsigned int comp1_val;
+	int button_suspend;
 	/*
 	* 1 - mic bias is ON
 	* 0 - mic bias is OFF
 	*/
 	int mic_bias_status;
-	u32 mic_bias_on_id;
-	u32 mic_bias_off_id;
 	int low_voltage_mode;
-	int detect_state;
 	int recheck_jack;
 	CHAL_HANDLE aci_chal_hdl;
 	struct clk *aci_apb_clk;
@@ -179,8 +174,10 @@ struct mic_t {
 #ifdef CONFIG_SWITCH
 	struct switch_dev sdev;
 #endif
+	struct delayed_work accessory_detect_work_deb;
 	struct delayed_work accessory_detect_work;
 	struct delayed_work accessory_remove_work;
+	struct delayed_work button_work_deb;
 	struct delayed_work button_work;
 	struct input_dev *headset_button_idev;
 	struct wake_lock accessory_wklock;
@@ -191,8 +188,6 @@ struct mic_t {
 };
 
 static struct mic_t *mic_dev = NULL;
-static int mic_bias_first_run;
-DEFINE_MUTEX(mic_bias_onoff_lock);
 
 /*
 * Default table used if the platform does not pass one
@@ -340,6 +335,7 @@ static ssize_t store_headset(struct device *pdev, struct device_attribute *attr,
 	{
 	case RECHECK:
 		{
+#ifndef CONFIG_MACH_CAPRI_SS_CRATER			
 			int recheck = 0;
 			sscanf(buf, "%d\n", &recheck);
 			if(recheck)
@@ -348,6 +344,7 @@ static ssize_t store_headset(struct device *pdev, struct device_attribute *attr,
 				mic_dev->recheck_jack = 1;
 				gpio_isr(0, mic_dev);
 			}
+#endif			
 		}
 		break;
 	}
@@ -360,13 +357,13 @@ static void dump_hw_regs (struct mic_t *p)
 {
 	int i;
 
-	pr_info("\r\n Dumping MIC BIAS registers \r\n");
+	pr_info("Dumping MIC BIAS registers\r\n");
 	for (i=0x0; i <=0x28; i+= 0x04){
 		pr_info("Addr: 0x%x  OFFSET: 0x%x  Value:0x%x \r\n",
 			p->auxmic_base + i, i, readl(p->auxmic_base + i));
 	}
 
-	pr_info("\r\n \r\n");
+	pr_info("\n");
 	pr_info("Dumping ACI registers \r\n");
 	for (i=0x30; i <=0xD8; i+= 0x04){
 		pr_info("Addr: 0x%x  OFFSET: 0x%x  Value:0x%x \r\n",
@@ -377,34 +374,7 @@ static void dump_hw_regs (struct mic_t *p)
 		pr_info("Addr: 0x%x  OFFSET: 0x%x Value:0x%x \r\n",
 			p->aci_base + i, i, readl(p->aci_base + i));
 	}
-	pr_info("\r\n \r\n");
-}
-
-static int is_factorymode(void)
-{
-	mm_segment_t  oldfs;
-	struct file *filp;
-	u8 buf[4] = {0,};
-	int ret = 0;
-
-	if((filp = filp_open(PATH_FACTORYMODE, O_RDONLY, 0)) != NULL)
-	{
-		oldfs = get_fs();
-		set_fs(get_ds());
-		filp->f_op->read(filp, buf , 4 , &filp->f_pos);
-		set_fs(oldfs);
-		filp_close(filp, NULL);
-	}
-	else
-	{        
-		pr_err("%s: check mode path not exist\n", __func__);
-		return 0;
-	}
-
-	if(buf[1] == 'F')
-		ret = 1;
-
-	return ret;
+	pr_info("\n");
 }
 
 /* Low level functions called to detect the accessory type */
@@ -436,10 +406,15 @@ static int config_adc_for_accessory_detection(int hst)
 			CHAL_ACI_BLOCK_ACTION_ENABLE,
 			CHAL_ACI_BLOCK_DIGITAL);
 
-		/* Power up the ADC */
+		/* Power up ADC */
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_DISABLE,
+			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 			CHAL_ACI_BLOCK_ACTION_ENABLE,
 			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
 
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 			CHAL_ACI_BLOCK_ACTION_ADC_RANGE,
@@ -457,8 +432,13 @@ static int config_adc_for_accessory_detection(int hst)
 #if	0
 		/* Powerup ADC */
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_DISABLE,
+			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 			CHAL_ACI_BLOCK_ACTION_ENABLE,
 			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
 
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 			CHAL_ACI_BLOCK_ACTION_ADC_RANGE,
@@ -474,9 +454,15 @@ static int config_adc_for_accessory_detection(int hst)
 
 	case HEADSET:
 #if 0
-		/* Power up the ADC */
-		chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ENABLE, 
+		/* Power up ADC */
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_DISABLE,
 			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_ENABLE,
+			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
 
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ADC_RANGE,
 			CHAL_ACI_BLOCK_ADC, CHAL_ACI_BLOCK_ADC_LOW_VOLTAGE);
@@ -541,10 +527,10 @@ static int config_adc_for_bp_detection(void)
 		CHAL_ACI_BLOCK_ACTION_COMP_THRESHOLD,
 		CHAL_ACI_BLOCK_COMP1, COMP1_THRESHOLD);
 
-	/* Clear pending interrupts if any */
+	/* Set the threshold value for accessory type detection */
 	chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
-		CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-		CHAL_ACI_BLOCK_COMP);
+		CHAL_ACI_BLOCK_ACTION_COMP_THRESHOLD,
+		CHAL_ACI_BLOCK_COMP2, COMP2_THRESHOLD);
 
 	/* 
 	* TODO: As of now this function uses the same MIC BIAS settings
@@ -559,12 +545,19 @@ static int config_adc_for_bp_detection(void)
 		CHAL_ACI_BLOCK_GENERIC, &aci_mic_bias);
 
 	/* Power up Digital block */
-	chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ENABLE, 
+	chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+		CHAL_ACI_BLOCK_ACTION_ENABLE, 
 		CHAL_ACI_BLOCK_DIGITAL);
 
 	/* Power up the ADC */
-	chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ENABLE, 
+	chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+		CHAL_ACI_BLOCK_ACTION_DISABLE,
 		CHAL_ACI_BLOCK_ADC);
+	usleep_range(1000, 1200);
+	chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+		CHAL_ACI_BLOCK_ACTION_ENABLE,
+		CHAL_ACI_BLOCK_ADC);
+	usleep_range(1000, 1200);
 
 	chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 		CHAL_ACI_BLOCK_ACTION_ADC_RANGE, CHAL_ACI_BLOCK_ADC,
@@ -576,6 +569,9 @@ static int config_adc_for_bp_detection(void)
 
 	BRCM_WRITE_REG( KONA_ACI_VA, ACI_ADC_CTRL, 0xD2);
 
+	// comp1 debounce 20ms
+	BRCM_WRITE_REG(KONA_ACI_VA, ACI_M1, 0x28E);
+
 	/* 
 	* Wait till the ADC settles, the timings might need fine tuning
 	*/
@@ -584,11 +580,51 @@ static int config_adc_for_bp_detection(void)
 	return 0;
 }
 
+static int get_adc_data(struct mic_t *mic_dev)
+{
+	int adc_data;
+	int adc_max = 0;
+	int adc_min = 0xFFFF;
+	int adc_total = 0;
+	int adc_retry_cnt = 0;
+	int i;
+
+	for (i = 0; i < ADC_LOOP_COUNT; i++) {
+
+		adc_data = chal_aci_block_read(mic_dev->aci_chal_hdl,
+					CHAL_ACI_BLOCK_ADC,
+					CHAL_ACI_BLOCK_ADC_RAW);
+
+		if (adc_data < 0) {
+			/* ADC overflow: -1 */
+			adc_retry_cnt++;
+
+			if (adc_retry_cnt > 10)
+				return adc_data;
+		}
+
+		if (i != 0) {
+			if (adc_data > adc_max)
+				adc_max = adc_data;
+			else if (adc_data < adc_min)
+				adc_min = adc_data;
+		} else {
+			adc_max = adc_data;
+			adc_min = adc_data;
+		}
+		adc_total += adc_data;
+	}
+
+	return (adc_total - adc_max - adc_min) / (ADC_LOOP_COUNT - 2);
+}
+
 static int read_adc_for_accessory_detection(int hst)
 {
 	int status = DISCONNECTED;
-	int mic_level;
-	int adc_retry = 100;
+	int mic_level, i;
+	int level_sum = 0;
+	int pre_level = 0xFFFF;
+	int retry_cnt = 50; // 1 sec
 
 	if (mic_dev == NULL) {
 		pr_err("aci_adc_config: invalid mic_dev handle \r\n");
@@ -600,11 +636,65 @@ static int read_adc_for_accessory_detection(int hst)
 		return -EFAULT;
 	}
 
-	clk_enable(mic_dev->audioh_apb_clk);
-	pr_info("AUDIORX_VREF=0x%x, AUDIORX_VMIC=0x%x, AUDIORX_BIAS=0x%x,\nACI_MIC_BIAS=0x%x, AUXMIC_AUXEN=0x%x, AUXMIC_F_PWRDWN=0x%x\n",
-		readl(KONA_AUDIOH_VA + AUDIOH_AUDIORX_VREF_OFFSET), readl(KONA_AUDIOH_VA + AUDIOH_AUDIORX_VMIC_OFFSET), readl(KONA_AUDIOH_VA + AUDIOH_AUDIORX_BIAS_OFFSET),
-		readl(KONA_ACI_VA + ACI_MIC_BIAS_OFFSET), readl(KONA_AUXMIC_VA + AUXMIC_AUXEN_OFFSET), readl(KONA_AUXMIC_VA + AUXMIC_F_PWRDWN_OFFSET));
-	clk_disable(mic_dev->audioh_apb_clk);
+	wake_lock(&mic_dev->accessory_wklock);
+	while((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq)) ^ mic_dev->headset_pd->hs_default_state)
+		&& retry_cnt && !mic_dev->recheck_jack)
+	{
+		mic_level = get_adc_data(mic_dev);
+		if(mic_level > 550 || mic_level < 30)
+			break;
+
+		retry_cnt--;
+		msleep(20);
+	}
+
+	for(i = 0; i < 3;)
+	{
+		mic_level = get_adc_data(mic_dev);
+		
+#ifdef CONFIG_MACH_CAPRI_SS_CRATER	
+		if (mic_level == -1 && level_sum == 0)
+		{
+			// exception for overflow from larger input than ADC range.
+			printk(" ++ ADC overflow from read_adc_data\r\n");
+			mic_level = BASIC_HEADSET_DETECT_LEVEL_MAX - 12;
+		}
+#endif
+
+		if(unlikely(mic_level < 0))
+		{
+			/* ADC overflow: -1 */
+			__headset_hw_init_micbias_off(mic_dev);
+			__headset_hw_init_micbias_on(mic_dev);
+			config_adc_for_accessory_detection(hst);
+			continue;
+		}
+		
+		if(mic_level >= (pre_level - ADC_CHECK_OFFSET) && mic_level <= (pre_level + ADC_CHECK_OFFSET))
+		{
+			level_sum += mic_level;
+			i++;
+		}
+		else
+		{
+			pre_level = mic_level;
+			i = 0;
+			level_sum = 0;
+		}
+		
+		if(mic_level > HEADPHONE_DETECT_LEVEL_MAX)
+		{
+			level_sum = mic_level;
+			i = 1;
+			break;
+		}
+
+		msleep(50);
+	}
+	
+	mic_level = level_sum / i;
+	wake_unlock(&mic_dev->accessory_wklock);
+	wake_lock_timeout(&mic_dev->accessory_wklock, WAKE_LOCK_TIME_IN_SENDKEY);
 
 	/*
 	* What is phone_ref_offset?
@@ -623,10 +713,7 @@ static int read_adc_for_accessory_detection(int hst)
 	* If the read value is greater than  phone_ref_offset then subtract this offset
 	* from the value read, otherwise mic_level is zero
 	*/
-	do{
-		mic_level = chal_aci_block_read(mic_dev->aci_chal_hdl,
-			CHAL_ACI_BLOCK_ADC,
-			CHAL_ACI_BLOCK_ADC_RAW);
+
 		pr_debug
 			(" ++ read_adc_for_accessory_detection:"
 			" mic_level before calc %d \r\n",
@@ -651,24 +738,11 @@ static int read_adc_for_accessory_detection(int hst)
 			else if(mic_level > BASIC_HEADSET_DETECT_LEVEL_MIN &&
 				mic_level <= BASIC_HEADSET_DETECT_LEVEL_MAX)
 			{
-				#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
 					if(mic_level >= CALL_OPENCABLE_DETECT_LEVEL_MIN &&
 						!((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq))) ^ mic_dev->headset_pd->hs_default_state))
 						status = OPEN_CABLE;
-					else if(mic_level >= CALL_OPENCABLE_DETECT_LEVEL_MIN &&
-						((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq))) ^ mic_dev->headset_pd->hs_default_state))
-						status = OPEN_CABLE_HEADPHONE;
 					else 
 						status = HEADSET;
-					
-				#else
-				if(mic_level >= CALL_OPENCABLE_DETECT_LEVEL_MIN &&
-					!((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq))) ^ mic_dev->headset_pd->hs_default_state))
-					status = OPEN_CABLE;
-				else
-					status = HEADSET;
-				#endif
-				
 			}
 
 			if(mic_dev->recheck_jack == 1)
@@ -677,7 +751,7 @@ static int read_adc_for_accessory_detection(int hst)
 					mic_level <= CALL_OPENCABLE_DETECT_LEVEL_MAX)
 					status = OPEN_CABLE;
 
-				mic_dev->recheck_jack = 0;
+			mic_dev->recheck_jack = 0;
 			}
 
 			break;
@@ -716,44 +790,7 @@ static int read_adc_for_accessory_detection(int hst)
 			break;
 		}
 
-
-#if defined(CONFIG_MACH_CAPRI_SS_CRATER)
-		if(status == OPEN_CABLE_HEADPHONE){
-			pr_info("OPEN_CABLE_HEADPHONE\n");
-			status = HEADPHONE;
-			break;
-		}
-		else if(readl(mic_dev->aci_base + ACI_COMP_DOUT_OFFSET) & (1 << 3))
-			break;
-		else
-		{
-			adc_retry--;
-			msleep(ADC_READ_RETRY_DELAY);
-			if(!((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq))) ^ mic_dev->headset_pd->hs_default_state))
-			{
-				status = OPEN_CABLE;
-				break;
-			}
-		}
-#else
-		
-		if(readl(mic_dev->aci_base + ACI_COMP_DOUT_OFFSET) & (1 << 3))
-			break;
-		else
-		{
-			adc_retry--;
-			msleep(ADC_READ_RETRY_DELAY);
-			if(!((gpio_get_value(irq_to_gpio(mic_dev->gpio_irq))) ^ mic_dev->headset_pd->hs_default_state))
-			{
-				status = OPEN_CABLE;
-				break;
-			}
-		}
-#endif
-
-	}while(adc_retry);
-
-	pr_info("status is %d mic_level is %d, retry=%d \n", status, mic_level, adc_retry);
+	pr_info("status is %d mic_level is %d\n", status, mic_level);
 	return status;
 }
 
@@ -827,8 +864,10 @@ static int detect_button_pressed (struct mic_t *mic_dev)
 	* If the read value is greater than  phone_ref_offset then subtract this offset
 	* from the value read, otherwise mic_level is zero
 	*/
-	mic_level = chal_aci_block_read(mic_dev->aci_chal_hdl,
-		CHAL_ACI_BLOCK_ADC, CHAL_ACI_BLOCK_ADC_RAW);
+/*	mic_level = chal_aci_block_read(mic_dev->aci_chal_hdl,
+		CHAL_ACI_BLOCK_ADC, CHAL_ACI_BLOCK_ADC_RAW);*/
+
+	mic_level = get_adc_data(mic_dev);
 
 	mic_level = mic_level <= 0 ? mic_level :
 		((mic_level > mic_dev->headset_pd->phone_ref_offset) ?
@@ -857,53 +896,29 @@ static int false_button_check(struct mic_t *p)
 		return 1;
 	}
 
-	if(p->detect_state != DETECT_DONE) {
-		pr_err("%s: Now DETECTING\n", __func__);
-		return 1;
-	}
-
-	if(!(readl(p->aci_base + ACI_COMP_DOUT_OFFSET) & (1 << 3)))
+	if(p->hs_detecting)
 	{
-		pr_err("%s: COMP2 DOUT is 0\n", __func__);
+		pr_err("%s: Acessory is detecting\n", __func__);
 		return 1;
 	}
 
 	return 0;
 }
 
+static void button_work_deb_func(struct work_struct *work)
+{
+	struct mic_t *p = container_of(work, struct mic_t,
+		button_work_deb.work);
+	cancel_delayed_work_sync(&(p->button_work));
+	schedule_delayed_work(&(p->button_work), KEY_DETECT_DELAY);
+}
+
 static void button_work_func(struct work_struct *work)
 {
 	struct mic_t *p = container_of(work, struct mic_t,
 		button_work.work);
-	int err = 0;
-	int button_name, button_name2;
-	int loopcnt = ADC_MAX_LOOP;
 
-	if( (p->comp1_val & 0x07) != 0x01)
-	{
-		p->comp1_val = 0;        
-		msleep(KEY_ENABLE_DELAY * 5);
-		if(is_factorymode())
-			pr_info("%s DELAY\n", __func__);
-		else
-		{
-			pr_info("%s SKIP\n", __func__);
-
-			if(false_button_check(p))
-				goto out;
-			
-			/* Acknowledge & clear the interrupt */
-			chal_aci_block_ctrl(p->aci_chal_hdl,
-				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-				CHAL_ACI_BLOCK_COMP);
-
-			chal_aci_block_ctrl(p->aci_chal_hdl,   
-				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ENABLE,
-				CHAL_ACI_BLOCK_COMP1);
-
-			return ;
-		}
-	}
+	wake_lock_timeout(&p->accessory_wklock, WAKE_LOCK_TIME_IN_SENDKEY);
 
 	if(false_button_check(p))
 		goto out;
@@ -911,19 +926,24 @@ static void button_work_func(struct work_struct *work)
 	if (readl(p->aci_base + ACI_COMP_DOUT_OFFSET) & ACI_COMP_DOUT_COMP1_DOUT_CMD_ONE)
 	{
 		if (p->button_state != BUTTON_PRESSED) {
+			int err = 0;
+			int button_name, button_name2;
+			int loopcnt = 5;
 
 			do
 			{
 				/* Find out the type of button pressed by reading the ADC values */
 				button_name = detect_button_pressed(p);
-				msleep(10);
-
+				usleep_range(10000, 12000);
 				if(false_button_check(p))
 					goto out;
-
 				button_name2 = detect_button_pressed(p);
 				loopcnt--;
 			}while(button_name != button_name2 && loopcnt);
+
+			msleep(FALSE_KEY_AVOID_DELAY);
+				if(false_button_check(p))
+					goto out;
 
 			if(loopcnt == 0)
 				button_name = BUTTON_NONE;
@@ -970,6 +990,7 @@ static void button_work_func(struct work_struct *work)
 		* Find out which button is being pressed from the context structure 
 		* Notify the corresponding release event to the input sub-system
 		*/
+
 		if(p->button_state == BUTTON_PRESSED)
 		{
 			p->button_state = BUTTON_RELEASED;
@@ -980,6 +1001,11 @@ static void button_work_func(struct work_struct *work)
 
 		if(p->hs_state == HEADSET)
 		{
+			/* Acknowledge & clear the interrupt */
+			chal_aci_block_ctrl(p->aci_chal_hdl,
+				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
+				CHAL_ACI_BLOCK_COMP1);
+
 			/* Re-enable COMP1 Interrupts */
 			chal_aci_block_ctrl(p->aci_chal_hdl,   
 				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ENABLE,
@@ -990,6 +1016,7 @@ static void button_work_func(struct work_struct *work)
 	return ;
 
 out:
+
 	if(p->button_state == BUTTON_PRESSED)
 	{
 		p->button_state = BUTTON_RELEASED;
@@ -998,14 +1025,31 @@ out:
 		input_sync(p->headset_button_idev);
 	}
 
-	msleep(KEY_ENABLE_DELAY);
-
 	if(p->hs_state == HEADSET)
 	{
+		/* Acknowledge & clear the interrupt */
+		chal_aci_block_ctrl(p->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
+			CHAL_ACI_BLOCK_COMP1);
+
 		chal_aci_block_ctrl(p->aci_chal_hdl,   
 			CHAL_ACI_BLOCK_ACTION_INTERRUPT_ENABLE,
 			CHAL_ACI_BLOCK_COMP1);
 	}
+}
+
+static void accessory_detect_work_deb_func(struct work_struct *work)
+{
+	struct mic_t *p = container_of(work, struct mic_t,
+		accessory_detect_work_deb.work);
+	int work_delay = ACCESSORY_INSERTION_SETTLE_TIME;
+
+	if(p->hs_state != DISCONNECTED)
+		work_delay = ACCESSORY_REMOVE_SETTLE_TIME;
+
+	cancel_delayed_work_sync(&(p->accessory_detect_work));
+	schedule_delayed_work(&(p->accessory_detect_work), work_delay);
+	p->hs_detecting = 1;
 }
 
 /*------------------------------------------------------------------------------
@@ -1018,24 +1062,10 @@ static void accessory_detect_work_func(struct work_struct *work)
 {
 	struct mic_t *p = container_of(work, struct mic_t,
 		accessory_detect_work.work);
-	unsigned int accessory_inserted = 0;
-
-	p->detect_state = DETECT_ING;
-
-	accessory_inserted = ((gpio_get_value(irq_to_gpio(p->gpio_irq))) ^ p->headset_pd->hs_default_state);
+	unsigned int accessory_inserted = ((gpio_get_value(irq_to_gpio(p->gpio_irq))) ^ p->headset_pd->hs_default_state);
 	pr_info("detect GPIO %d\n", accessory_inserted);
 
 	if (accessory_inserted == 1) {
-
-		if((p->hs_state != DISCONNECTED) && (p->recheck_jack != 1))
-		{
-			int state = p->hs_state;
-			__handle_accessory_removed(p);
-			msleep(KEY_ENABLE_DELAY * 2);
-
-			if(state == HEADSET)
-				__headset_hw_init_micbias_off(p);	
-		}
 
 		/* Switch ON the MIC BIAS */
 		__headset_hw_init_micbias_on(p);   
@@ -1048,9 +1078,15 @@ static void accessory_detect_work_func(struct work_struct *work)
 		if(p->hs_state == HEADSET)
 		{
 			msleep(KEY_ENABLE_DELAY);
+			
+			chal_aci_block_ctrl(p->aci_chal_hdl,
+				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
+				CHAL_ACI_BLOCK_COMP);
+
 			chal_aci_block_ctrl(p->aci_chal_hdl,	
 				CHAL_ACI_BLOCK_ACTION_INTERRUPT_ENABLE,
 				CHAL_ACI_BLOCK_COMP1);
+
 			msleep(KEY_ENABLE_DELAY);
 		}
 		else
@@ -1063,7 +1099,7 @@ static void accessory_detect_work_func(struct work_struct *work)
 
 		if(state == HEADSET)
 		{
-			int msleeptime = 400;			
+			int msleeptime = 400;
 			clk_enable(mic_dev->audioh_apb_clk);
 			if(!(readl(KONA_AUDIOH_VA + AUDIOH_AUDIORX_VRX1_OFFSET) & 0x1))	//using mic
 				msleeptime = 1000;
@@ -1073,13 +1109,14 @@ static void accessory_detect_work_func(struct work_struct *work)
 			* A delay is necessary here to allow the
 			* application to complete the routing*/
 			pr_info("Micbias off delay %dms\n", msleeptime);
-			msleep(msleeptime);
 
-			__headset_hw_init_micbias_off(p);
+			msleep(msleeptime);
 		}
+
+		__headset_hw_init_micbias_off(p);
 	}
 
-	p->detect_state = DETECT_DONE;
+	p->hs_detecting = 0;
 }
 
 static void no_gpio_accessory_insert_work_func(struct work_struct *work)
@@ -1088,7 +1125,7 @@ static void no_gpio_accessory_insert_work_func(struct work_struct *work)
 		accessory_detect_work.work);
 	int comp2_level;
 	int pre_comp2_level = CHAL_ACI_BLOCK_COMP_LINE_LOW;
-	int loopcnt = ACCESSORY_LOOP_COUNT;   
+	int loopcnt = ADC_LOOP_COUNT;   
 
 	aci_init_mic_bias.mode    = CHAL_ACI_MIC_BIAS_ON;
 	aci_init_mic_bias.voltage = CHAL_ACI_MIC_BIAS_2_1V;
@@ -1112,9 +1149,9 @@ static void no_gpio_accessory_insert_work_func(struct work_struct *work)
 			CHAL_ACI_BLOCK_COMP2,
 			CHAL_ACI_BLOCK_COMP_RAW);
 
-		loopcnt = (pre_comp2_level == comp2_level ? loopcnt - 1 : ACCESSORY_LOOP_COUNT);
+		loopcnt = (pre_comp2_level == comp2_level ? loopcnt - 1 : ADC_LOOP_COUNT);
 		pre_comp2_level = comp2_level;
-		msleep(10);
+		msleep(20);
 	}while(loopcnt != 0);
 
 	if (comp2_level == CHAL_ACI_BLOCK_COMP_LINE_LOW) {
@@ -1216,7 +1253,7 @@ static void no_gpio_accessory_remove_work_func(struct work_struct *work)
 		accessory_remove_work.work);
 	int comp2_level;
 	int pre_comp2_level = CHAL_ACI_BLOCK_COMP_LINE_HIGH;
-	int loopcnt = ACCESSORY_LOOP_COUNT;
+	int loopcnt = ADC_LOOP_COUNT;
 
 	aci_init_mic_bias.mode    = CHAL_ACI_MIC_BIAS_ON;
 	aci_init_mic_bias.voltage = CHAL_ACI_MIC_BIAS_2_1V;
@@ -1240,9 +1277,9 @@ static void no_gpio_accessory_remove_work_func(struct work_struct *work)
 			CHAL_ACI_BLOCK_COMP2,
 			CHAL_ACI_BLOCK_COMP_RAW);
 
-		loopcnt = (pre_comp2_level == comp2_level ? loopcnt - 1 : ACCESSORY_LOOP_COUNT);
+		loopcnt = (pre_comp2_level == comp2_level ? loopcnt - 1 : ADC_LOOP_COUNT);
 		pre_comp2_level = comp2_level;
-		msleep(5);
+		msleep(20);
 	}while(loopcnt != 0);
 
 	if (comp2_level == CHAL_ACI_BLOCK_COMP_LINE_HIGH) {
@@ -1301,12 +1338,26 @@ static void no_gpio_accessory_remove_work_func(struct work_struct *work)
 static void __handle_accessory_inserted (struct mic_t *p)
 {
 	int type;
+	int pre_type =	p->hs_state;
 	pr_info("ACCESSORY INSERTED\n");
 
 	if (p->headset_pd->gpio_headset_sw_en != -1)
 		gpio_set_value(p->headset_pd->gpio_headset_sw_en, 1);
 
 	p->hs_state = detect_hs_type(p);
+
+	if(pre_type == p->hs_state)
+	{
+		pr_info("Duplicated type=%d, skip type update\n", p->hs_state);
+		return ;
+	}
+	else if((pre_type == HEADSET || pre_type == HEADPHONE) &&
+		(p->hs_state == HEADSET || p->hs_state == HEADPHONE))
+	{
+		pre_type = p->hs_state;
+		__handle_accessory_removed(p);
+		p->hs_state = pre_type;
+	}
 
 	switch(p->hs_state) {
 
@@ -1323,21 +1374,11 @@ static void __handle_accessory_inserted (struct mic_t *p)
 		*/
 		p->button_state = BUTTON_RELEASED;
 
-		/* Clear pending interrupts if any */
-		chal_aci_block_ctrl(p->aci_chal_hdl,
-			CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-			CHAL_ACI_BLOCK_COMP);
-
 		/* Configure the ADC to read button press values */
 		config_adc_for_bp_detection();
 
 		/* Fall through to send the update to userland */
 	case HEADPHONE:
-
-		/* Clear pending interrupts if any */
-		chal_aci_block_ctrl(p->aci_chal_hdl,
-			CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-			CHAL_ACI_BLOCK_COMP);
 
 		/* No need to enable the button press/release irq */ 
 		/* prevent suspend to allow user space to respond to switch */
@@ -1416,7 +1457,7 @@ Return type     : int
 #ifdef CONFIG_SWITCH
 int hs_switchinit(struct mic_t *p)
 {
-	int result = 0;
+	int result;
 	p->sdev.name = "h2w";
 	p->sdev.state = 0;
 
@@ -1426,6 +1467,7 @@ int hs_switchinit(struct mic_t *p)
 
 	if (p->headset_pd->gpio_for_accessory_detection == 1)
 	{
+		INIT_DELAYED_WORK(&(p->accessory_detect_work_deb), accessory_detect_work_deb_func);
 		INIT_DELAYED_WORK(&(p->accessory_detect_work), accessory_detect_work_func);
 	}
 	else
@@ -1487,6 +1529,7 @@ static int hs_inputdev(struct mic_t *p)
 		goto inputdev_err;
 	}
 
+	INIT_DELAYED_WORK(&(p->button_work_deb), button_work_deb_func);
 	INIT_DELAYED_WORK(&(p->button_work), button_work_func);
 
 inputdev_err:
@@ -1501,28 +1544,14 @@ Return type     : irqreturn_t
 static irqreturn_t gpio_isr(int irq, void *dev_id)
 {
 	struct mic_t *p = (struct mic_t *)dev_id;
-	unsigned int int_val = readl(p->aci_base + ACI_INT_OFFSET);	
-	int work_delay = ACCESSORY_INSERTION_SETTLE_TIME;
 
-	p->detect_state = DETECT_IRQ;
+	p->hs_detecting = 1;
 
-	pr_info("%s %x\n", __func__, int_val);
+	pr_info("%s", __func__);
 
 	wake_lock_timeout(&p->accessory_wklock, WAKE_LOCK_TIME);
 
-	chal_aci_block_ctrl(p->aci_chal_hdl,
-		CHAL_ACI_BLOCK_ACTION_INTERRUPT_DISABLE,
-		CHAL_ACI_BLOCK_COMP);  
-
-	chal_aci_block_ctrl(p->aci_chal_hdl,
-		CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-		CHAL_ACI_BLOCK_COMP);
-
-	if(p->hs_state != DISCONNECTED)
-		work_delay = ACCESSORY_REMOVE_SETTLE_TIME;
-
-	cancel_delayed_work_sync(&(p->accessory_detect_work));
-	schedule_delayed_work(&(p->accessory_detect_work), work_delay);
+	schedule_delayed_work(&(p->accessory_detect_work_deb), msecs_to_jiffies(0));
 
 	return IRQ_HANDLED;
 }
@@ -1536,7 +1565,6 @@ static irqreturn_t comp1_isr(int irq, void *dev_id)
 {
 	struct mic_t *p = (struct mic_t *)dev_id;
 	unsigned int int_val = readl(p->aci_base + ACI_INT_OFFSET);
-	p->comp1_val = int_val;
 
 	pr_info("%s %x\n", __func__, int_val);
 
@@ -1549,15 +1577,9 @@ static irqreturn_t comp1_isr(int irq, void *dev_id)
 
 	chal_aci_block_ctrl(p->aci_chal_hdl,
 		CHAL_ACI_BLOCK_ACTION_INTERRUPT_DISABLE,
-		CHAL_ACI_BLOCK_COMP);
+		CHAL_ACI_BLOCK_COMP1);
 
-	/* Acknowledge & clear the interrupt */
-	chal_aci_block_ctrl(p->aci_chal_hdl,
-		CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
-		CHAL_ACI_BLOCK_COMP);
-
-	cancel_delayed_work_sync(&(p->button_work));
-	schedule_delayed_work(&(p->button_work), KEY_DETECT_DELAY);
+	schedule_delayed_work(&(p->button_work_deb), msecs_to_jiffies(0));
 
 	return IRQ_HANDLED;
 }
@@ -1644,25 +1666,6 @@ irqreturn_t comp2_inv_isr(int irq, void *dev_id)
 
 static int __headset_hw_init_micbias_off(struct mic_t *p)
 {
-	if(mic_bias_first_run)
-		mic_bias_first_run = 0;
-	else
-	{
-		if(p->recheck_jack != 1)
-		{
-			mutex_lock(&mic_bias_onoff_lock);
-			p->mic_bias_off_id = !p->mic_bias_off_id ? 1 : p->mic_bias_off_id << 1;
-			if(p->mic_bias_on_id != p->mic_bias_off_id)
-			{
-				pr_info("%s: SKIP\n", __func__);
-				mutex_unlock(&mic_bias_onoff_lock);
-				return 0;
-			}
-			mutex_unlock(&mic_bias_onoff_lock);
-		}
-	}
-	pr_info("%s: id:%x\n", __func__, p->mic_bias_off_id);	
-
 	chal_aci_block_ctrl(p->aci_chal_hdl,
 		CHAL_ACI_BLOCK_ACTION_INTERRUPT_DISABLE,
 		CHAL_ACI_BLOCK_COMP);  
@@ -1697,10 +1700,9 @@ static int __headset_hw_init_micbias_off(struct mic_t *p)
 		p->mic_bias_status = 0;
 	}
 
-         printk("\n HS_DEBUG: MICBIAS LDO OPMODE to OFF \n");
 	/* Turning MICBIAS LDO OPMODE to OFF in DSM */
 	if (p->ldo) {
-		printk("\n HS_DEBUG: Set mode to OFF here \n");
+		pr_info("\n HS_DEBUG: Set mode to OFF here \n");
 		if (regulator_disable(p->ldo))
 				pr_info("%s: Can not disable micbias LDO, \
 						still proceeding\n", __func__);
@@ -1713,25 +1715,11 @@ static int __headset_hw_init_micbias_off(struct mic_t *p)
 
 static int __headset_hw_init_micbias_on(struct mic_t *p)
 {
-	if(mic_bias_first_run)
-		mic_bias_first_run = 0;
-	else
-	{
-		if(p->recheck_jack != 1)
-		{
-			mutex_lock(&mic_bias_onoff_lock);
-			p->mic_bias_on_id = !p->mic_bias_on_id ? 1 : p->mic_bias_on_id << 1;	
-			mutex_unlock(&mic_bias_onoff_lock);
-		}
-	}
-	pr_info("%s: id:%x\n", __func__, p->mic_bias_on_id);	
-
-        printk("\n HS_DEBUG: Set MICBIAS LDO TO LPM mode \n");
         /* Set MICBIAS LDO to LPM */
 	if (!p->headset_pd->ldo_id)
 		pr_info("%s: No LDO id has been passed\n", __func__);
 	else {
-		printk("\n HS_DEBUG: Set LPM mode\n");
+		pr_info("HS_DEBUG: Set LPM mode\r\n");
 		p->ldo = regulator_get(NULL, p->headset_pd->ldo_id);
 		if (IS_ERR_OR_NULL(p->ldo)) {
 			pr_info("%s: Can not get MICBIAS LDO\n", __func__);
@@ -1758,7 +1746,7 @@ static int __headset_hw_init_micbias_on(struct mic_t *p)
 	/* Turn ON only if its not already ON */
 	if (p->mic_bias_status == 0) {
 		kona_mic_bias_on();
-		pr_debug
+		printk
 			("=== __headset_hw_init_micbias_on:"
 			"called kona_mic_bias_on\r\n");
 		p->mic_bias_status = 1;
@@ -1937,12 +1925,10 @@ Return type     : int
 static int headset_hw_init(struct mic_t *mic)
 {
 	int status = 0;
-	unsigned hs_gpio;
-	unsigned hs_sw_en_gpio;
 
 	if( mic->headset_pd->gpio_headset_sw_en != -1){
 		/* Request GPIO for HEADSET_SW_EN */
-		hs_sw_en_gpio = mic->headset_pd->gpio_headset_sw_en;
+		unsigned int hs_sw_en_gpio = mic->headset_pd->gpio_headset_sw_en;
 		pr_info("\nheadset_hw_init hs_sw_en_gpio=%d\n", hs_sw_en_gpio);
 		status = gpio_request(hs_sw_en_gpio, "hs_sw_en");
 		if (status < 0) {
@@ -1998,7 +1984,7 @@ static int headset_hw_init(struct mic_t *mic)
 	* removal detection
 	*/
 	if (mic->headset_pd->gpio_for_accessory_detection == 1) {
-		hs_gpio = irq_to_gpio(mic->gpio_irq);
+		unsigned int hs_gpio = irq_to_gpio(mic->gpio_irq);
 
 		/* Request the gpio 
 		* Note that this is an optional call for setting direction/debounce
@@ -2014,12 +2000,14 @@ static int headset_hw_init(struct mic_t *mic)
 			return status;
 		}
 
+#ifdef CONFIG_MACH_CAPRI_SS_CRATER
 		/* Set the GPIO debounce */
 		status = gpio_set_debounce(hs_gpio, GPIO_DEBOUNCE_TIME);
 		if (status < 0) {
 			pr_err("%s: gpio set debounce failed\n", __func__);
 			return status;
 		}
+#endif
 
 		/* Set the GPIO direction input */
 		status = gpio_direction_input(hs_gpio);
@@ -2027,6 +2015,12 @@ static int headset_hw_init(struct mic_t *mic)
 			pr_err("%s: gpio set direction input failed\n", __func__);
 			return status;
 		}
+
+		/*
+		* Assume that mic bias is ON, so that while initialization we can
+		* turn this OFF and put it in known state.
+		*/
+		mic->mic_bias_status = 1;
 
 		__headset_hw_init_micbias_off(mic);   
 	} else {
@@ -2063,12 +2057,19 @@ int switch_bias_voltage(int mic_status)
 			&aci_init_mic_bias);
 
 		/* Power up Digital block */
-		chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ENABLE,
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_ENABLE,
 			CHAL_ACI_BLOCK_DIGITAL);
 
-		/* Power up the ADC */
-		chal_aci_block_ctrl(mic_dev->aci_chal_hdl, CHAL_ACI_BLOCK_ACTION_ENABLE,
+		/* Power up ADC */
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_DISABLE,
 			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
+		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
+			CHAL_ACI_BLOCK_ACTION_ENABLE,
+			CHAL_ACI_BLOCK_ADC);
+		usleep_range(1000, 1200);
 
 		chal_aci_block_ctrl(mic_dev->aci_chal_hdl,
 			CHAL_ACI_BLOCK_ACTION_ADC_RANGE, CHAL_ACI_BLOCK_ADC,
@@ -2115,13 +2116,17 @@ int switch_bias_voltage(int mic_status)
 
 static int hs_suspend(struct platform_device *pdev, pm_message_t state)
 {
-	struct mic_t *mic;
-	mic = platform_get_drvdata(pdev);
+	struct mic_t *mic = platform_get_drvdata(pdev);
 
 	chal_aci_block_ctrl(mic->aci_chal_hdl,
 		CHAL_ACI_BLOCK_ACTION_INTERRUPT_ACKNOWLEDGE,
 		CHAL_ACI_BLOCK_COMP);
 
+	return 0;
+}
+
+static int hs_resume(struct platform_device *pdev)
+{
 	return 0;
 }
 
@@ -2131,6 +2136,10 @@ static int hs_remove(struct platform_device *pdev)
 
 	mic = platform_get_drvdata(pdev);
 
+	hs_unreginputdev(mic);
+	hs_unregswitchdev(mic);
+	wake_lock_destroy(&mic->accessory_wklock);
+	
 	device_destroy(mic->audio_class, pdev->dev.devt);
 	class_destroy(mic->audio_class);
 
@@ -2142,10 +2151,6 @@ static int hs_remove(struct platform_device *pdev)
 		free_irq(mic->comp2_irq, mic);
 		free_irq(mic->comp2_inv_irq, mic);
 	}
-
-	hs_unreginputdev(mic);
-	hs_unregswitchdev(mic);
-	wake_lock_destroy(&mic->accessory_wklock);
 
 	kfree(mic);
 	return 0;
@@ -2196,21 +2201,12 @@ static int __init hs_probe(struct platform_device *pdev)
 
 	mic->audio_class = class_create(THIS_MODULE, "audio");
 	mic->headset_dev = device_create(mic->audio_class, NULL, pdev->dev.devt, NULL, "earjack");
-	ret = device_create_file(mic->headset_dev, &headset_Attrs[STATE]);
-	ret = device_create_file(mic->headset_dev, &headset_Attrs[KEY_STATE]);
-	ret = device_create_file(mic->headset_dev, &headset_Attrs[RECHECK]);
+	device_create_file(mic->headset_dev, &headset_Attrs[STATE]);
+	device_create_file(mic->headset_dev, &headset_Attrs[KEY_STATE]);
+	device_create_file(mic->headset_dev, &headset_Attrs[RECHECK]);
 
 	/* setting ldo to NULL till we call regulator_get() */
 	mic->ldo = NULL;
-	/*
-	* Assume that mic bias is ON, so that while initialization we can
-	* turn this OFF and put it in known state.
-	*/
-	mic->mic_bias_status = 0;
-	mic_bias_first_run = 1;
-	mic->mic_bias_on_id = 0;
-	mic->mic_bias_off_id = 0;
-
 	mic_dev->aci_apb_clk = clk_get(&pdev->dev, mic->headset_pd->aci_clk_name);
 	mic_dev->audioh_apb_clk = clk_get(&pdev->dev, "audioh_apb_clk");
 	clk_enable(mic_dev->aci_apb_clk);
@@ -2287,9 +2283,9 @@ static int __init hs_probe(struct platform_device *pdev)
 #endif
 
 	mic->recheck_jack = 0;
-	mic->detect_state = DETECT_DONE;
 	mic->hs_state = DISCONNECTED;
 	mic->button_state = BUTTON_RELEASED;
+	mic->hs_detecting = 0;
 
 	/* Store the mic structure data as private driver data for later use */
 	platform_set_drvdata(pdev, mic);
@@ -2323,30 +2319,6 @@ static int __init hs_probe(struct platform_device *pdev)
 			free_irq(mic->comp1_irq, mic);
 			goto err1;
 		}
-
-		/* 
-		* Its important to understand why we schedule the accessory detection
-		* work queue from here.
-		*
-		* From the schematics the GPIO status should be 
-		* 1 - nothing iserted 
-		* 0 - accessory inserted
-		*
-		* The pull up for the GPIO is connecte to 1.8 V that is source by the
-		* PMU. But the PM chip's init happens after headset insertion, so
-		* reading the GPIO value during init may not give us the correct
-		* status (will read 0 always). Later after the init when the GPIO
-		* gets the 1.8 V an interrupt would be triggered for rising edge and
-		* the GPIO ISR would schedule the work queue. But if the accessory is
-		* kept connected assuming the PMU to trigger the ISR is like taking a
-		* chance. Also, if for some reason PMU init is moved before head set
-		* driver init then the GPIO state would not change after headset
-		* driver init and the GPIO interrupt may not be triggered. 
-		* Its safe to schedule detection work here becuase
-		* during bootup, irrespective of the GPIO interrupt we'll detect the
-		* accessory type. (Even if the interrupt occurs no harm done since
-		* the work queue will be any way executed only once). 
-		*/
 	} else {
 		/* Request for COMP2 IRQ */
 		ret =
@@ -2425,6 +2397,7 @@ static struct platform_driver __refdata headset_driver = {
 	.probe = hs_probe,
 	.remove = hs_remove,
 	.suspend = hs_suspend,
+	.resume = hs_resume,
 	.driver = {
 		.name = "konaaciheadset",
 		.owner = THIS_MODULE,

@@ -74,11 +74,13 @@ static int pindump_proc_show(struct seq_file *m, void *v)
 			    g_chip_pin_desc.desc_tbl[i].f_tbl[sel] -
 			    PF_FIRST_GPIO;
 			gpctr = __raw_readl(reg_base + GPIO_CTRL(gpio));
-			gpctr &= GPIO_GPCTR0_IOTR_MASK;
+			gpctr &= (GPIO_GPCTR0_IOTR_MASK |
+					GPIO_GPCTR0_GPIO_PULL_EN_MASK);
 			seq_printf(m, "%d  0x%08x /*%s\t%s*/\n", gpio, gpctr,
-				(((gpctr & 2) ==
+				(((gpctr & GPIO_GPCTR0_GPIO_PULL_EN_MASK) ==
 				GPIO_GPCTR0_IOTR_CMD_DRIVE_HIGH) ?
-				"Drive High" : "Drive Low"), (((gpctr & 1) ==
+				"Drive High" : "Drive Low"),
+				(((gpctr & GPIO_GPCTR0_IOTR_MASK) ==
 				 GPIO_GPCTR0_IOTR_CMD_INPUT) ? "Input" :
 				 "Output"));
 		}
@@ -145,11 +147,13 @@ static int dtsdump_show(struct seq_file *m, void *v)
 			    g_chip_pin_desc.desc_tbl[i].f_tbl[sel] -
 			    PF_FIRST_GPIO;
 			gpctr = get_dts_gpio_value(gpio);
-			gpctr &= GPIO_GPCTR0_IOTR_MASK;
+			gpctr &= (GPIO_GPCTR0_IOTR_MASK |
+					GPIO_GPCTR0_GPIO_PULL_EN_MASK);
 			seq_printf(m, "%d  0x%08x /*%s\t%s*/\n", gpio, gpctr,
-				(((gpctr & 2) ==
+				(((gpctr & GPIO_GPCTR0_GPIO_PULL_EN_MASK) ==
 				GPIO_GPCTR0_IOTR_CMD_DRIVE_HIGH) ?
-				"Drive High" : "Drive Low"), (((gpctr & 1) ==
+				"Drive High" : "Drive Low"),
+				(((gpctr & GPIO_GPCTR0_IOTR_MASK) ==
 				GPIO_GPCTR0_IOTR_CMD_INPUT) ? "Input" :
 				  "Output"));
 		}

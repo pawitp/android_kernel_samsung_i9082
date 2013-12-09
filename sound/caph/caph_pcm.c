@@ -239,6 +239,9 @@ static void common_log_capture(CAPTURE_POINT_t log_point,
 
 bcm_caph_audio_log_t audio_log;
 
+static spinlock_t copy_lock;
+
+
 /*+++++++++++++++++++++++++++++++++++++++++++++++++++++
  *
  *  Function Name: PcmHwParams
@@ -375,6 +378,9 @@ static int PcmPlaybackOpen(struct snd_pcm_substream *substream)
 	chip->streamCtl[substream_number].dev_prop.p[0].drv_type =
 	    AUDIO_DRIVER_PLAY_AUDIO;
 	chip->streamCtl[substream_number].pSubStream = substream;
+#if defined(DYNAMIC_DMA_PLAYBACK)
+		runtime->hw.periods_max = 8;
+#endif
 	/*open the playback device */
 	AUDIO_Ctrl_Trigger(ACTION_AUD_OpenPlay, &param_open, NULL, 1);
 	drv_handle = param_open.drv_handle;
@@ -641,7 +647,6 @@ static int PcmPlaybackTrigger(struct snd_pcm_substream *substream, int cmd)
 		{
 			BRCM_AUDIO_Param_Stop_t param_stop;
 			struct completion *compl_ptr;
-
 			if (dfs_node_created)
 			{
 				int err = 0;
@@ -658,20 +663,28 @@ static int PcmPlaybackTrigger(struct snd_pcm_substream *substream, int cmd)
 			param_stop.pdev_prop =
 			    &chip->streamCtl[substream_number].dev_prop;
 			param_stop.stream = substream_number;
+			param_stop.source = chip->streamCtl[substream_number].
+ 				dev_prop.p[0].source;
+ 			param_stop.sink = chip->streamCtl[substream_number].
+ 				dev_prop.p[0].sink;
+ 
+			
 			aTrace
 			    (LOG_ALSA_INTERFACE,
-			     "ACTION_AUD_StopPlay stream=%d\n",
-			     param_stop.stream);
+			     "ACTION_AUD_StopPlay stream=%d source = %d sink = %d callMode = %d\n",
+			     param_stop.stream,
+			     param_stop.source,
+			     param_stop.sink,
+			     callMode
+			     );
 
 			compl_ptr = &chip->streamCtl[substream_number]
 				.stopCompletion;
 			init_completion(compl_ptr);
 			chip->streamCtl[substream_number].pStopCompletion
 				= compl_ptr;
-
 			AUDIO_Ctrl_Trigger(ACTION_AUD_StopPlay, &param_stop,
 					   CtrlStopCB, (int)compl_ptr);
-
 		}
 		break;
 
@@ -725,21 +738,28 @@ static int PcmPlaybackTrigger(struct snd_pcm_substream *substream, int cmd)
 static snd_pcm_uframes_t PcmPlaybackPointer(struct snd_pcm_substream *substream)
 {
 	struct snd_pcm_runtime *runtime = substream->runtime;
-	snd_pcm_uframes_t pos = 0;
+	snd_pcm_uframes_t pos;
 	brcm_alsa_chip_t *chip = snd_pcm_substream_chip(substream);
-	UInt16 dmaPointer = 0;
 
-	pos =
-	    chip->streamCtl[substream->number].stream_hw_ptr +
-	    bytes_to_frames(runtime, dmaPointer);
+	pos = chip->streamCtl[substream->number].stream_hw_ptr;
+#if defined(DYNAMIC_DMA_PLAYBACK)
+	/*draining requires all buffer to be consumed.
+	  aplay needs this to finish properly*/
+	if (runtime->status->state == SNDRV_PCM_STATE_DRAINING &&
+	    (pos + runtime->period_size) < runtime->control->appl_ptr) {
+		BRCM_AUDIO_Param_BufferReady_t param;
+
+		/*aTrace(LOG_ALSA_INTERFACE, "%s stream %d read %x write %x\n",
+		__func__, substream->number, (int)pos,
+		(int)runtime->control->appl_ptr);*/
+		param.drv_handle = substream->runtime->private_data;
+		param.stream = substream->number;
+		param.size = 0;
+		param.offset = 0;
+		AUDIO_Ctrl_Trigger(ACTION_AUD_BufferReady, &param, NULL, 0);
+	}
+#endif
 	pos %= runtime->buffer_size;
-	/*
-	aTrace(LOG_ALSA_INTERFACE,
-		"PcmPlaybackPointer substream->number = %d pos=%lu"
-		"state=%d whichbuffer=%d, int_pos=%lu\n",
-		substream->number, pos, runtime->status->state,
-		whichbuffer, chip->streamCtl[substream->number].stream_hw_ptr);
-	*/
 	return pos;
 }
 
@@ -1073,7 +1093,6 @@ int PcmPlaybackCopy(struct snd_pcm_substream *substream, int channel,
 	    snd_pcm_uframes_t pos,
 	    void __user *buf, snd_pcm_uframes_t count)
 {
-	int periods_copied;
 	struct snd_pcm_runtime *runtime = substream->runtime;
 	AUDIO_DRIVER_HANDLE_t drv_handle = substream->runtime->private_data;
 	char *buf_start = runtime->dma_area;
@@ -1082,6 +1101,17 @@ int PcmPlaybackCopy(struct snd_pcm_substream *substream, int channel,
 	int bytes_to_copy = frames_to_bytes(runtime, count);
 	int not_copied = copy_from_user(hwbuf, buf, bytes_to_copy);
 	char *new_hwbuf = hwbuf + (bytes_to_copy - not_copied);
+#if defined(DYNAMIC_DMA_PLAYBACK)
+	BRCM_AUDIO_Param_BufferReady_t param;
+	long ret;
+	int avail, wait, once = 0;
+	int stream_id = 0;
+	int dmaSize = 0;
+	int numBlocks = 0;
+#else
+	int periods_copied;
+#endif
+	unsigned long flag;
 
 	if (not_copied) {
 		aError("%s: why didn't copy all the bytes?"
@@ -1095,6 +1125,96 @@ int PcmPlaybackCopy(struct snd_pcm_substream *substream, int channel,
 		new_hwbuf, period_bytes, bytes_to_copy, not_copied);
 	}
 
+#if defined(DYNAMIC_DMA_PLAYBACK)
+	stream_id = StreamIdOfDriver(drv_handle);
+	BUG_ON(stream_id < CSL_CAPH_STREAM_NONE ||
+		stream_id >= CSL_CAPH_STREAM_TOTAL);
+	dmaSize = csl_audio_render_get_dma_size(stream_id);
+	numBlocks = csl_audio_render_get_num_blocks(stream_id);
+	param.drv_handle = drv_handle;
+	param.stream = stream_id;
+	param.size = bytes_to_copy;
+	param.offset = frames_to_bytes(runtime, runtime->control->appl_ptr)
+		+ bytes_to_copy;
+
+	/*non-blocking cases: dyndma with big dma, aplay, legacy
+	  audio hal etc*/
+	if (numBlocks != 8
+		|| dmaSize > period_bytes
+		|| bytes_to_copy != DYNDMA_COPY_SIZE) {
+		spin_lock_irqsave(&copy_lock, flag);
+		avail = runtime->control->appl_ptr - runtime->status->hw_ptr;
+		if (avail < 0)
+			avail += runtime->buffer_size;
+		avail = frames_to_bytes(runtime, avail);
+		/*aTrace(LOG_ALSA_INTERFACE, "%s size %d, avail 0x%x dmaSize "
+		"0x%x nBlocks %d read %x, write %x offset %x\n",
+		__func__, bytes_to_copy, avail, dmaSize, numBlocks,
+		(int)runtime->status->hw_ptr, (int)runtime->control->appl_ptr,
+		param.offset);*/
+		csl_audio_render_buffer_ready(stream_id,
+								param.size,
+								param.offset);
+		spin_unlock_irqrestore(&copy_lock, flag);
+		return 0;
+	}
+
+	/*dyndma: when small dma is active, state is running, and data level
+	  is high, wait till it goes low. At least go thru the loop once.*/
+	do {
+		spin_lock_irqsave(&copy_lock, flag);
+		avail = runtime->control->appl_ptr - runtime->status->hw_ptr;
+		if (avail < 0)
+			avail += runtime->buffer_size;
+		avail = frames_to_bytes(runtime, avail);
+		wait = (avail > 2*period_bytes &&
+			runtime->status->state == SNDRV_PCM_STATE_RUNNING);
+
+		/*aTrace(LOG_ALSA_INTERFACE, "%s size %d, avail 0x%x dmaSize "
+		"0x%x nBlocks %d wait %d read %x, write %x\n",
+		__func__, bytes_to_copy, avail, dmaSize, numBlocks, wait,
+		(int)runtime->status->hw_ptr, (int)runtime->control->appl_ptr);
+		*/
+
+		if (once == 0) {
+			once = 1;
+		} else if (wait == 0) {
+			spin_unlock_irqrestore(&copy_lock, flag);
+			break;
+		}
+
+		/*data in the buffer had been counted by render.
+		just tell render to set SW RDY*/
+		csl_audio_render_buffer_ready(stream_id,
+								param.size,
+								param.offset);
+		if (wait) {
+			spin_unlock_irqrestore(&copy_lock, flag);
+			if (stream_id != 0) {
+				init_completion(&completeDynDma[stream_id]);
+				ret = wait_for_completion_timeout(
+					&completeDynDma[stream_id],
+					msecs_to_jiffies(3000));
+				if (ret == 0) {
+					aError("%s complete timeout"
+						"substream %d"
+						"stream_id %d\n", __func__,
+						substream->number, stream_id);
+					wait = 0;
+				}
+			} else {
+				/* if stream_id is 0, then copy request has
+				come before playback started,
+				don't wait in that case. */
+				wait = 0;
+			}
+
+		} else {
+			 spin_unlock_irqrestore(&copy_lock, flag);
+		}
+		param.size = 0;
+	} while (wait);
+#else
 	/**
 	 * Set DMA engine ready bit according to pos and count
 	*/
@@ -1104,6 +1224,8 @@ int PcmPlaybackCopy(struct snd_pcm_substream *substream, int channel,
 
 		param_bufferready.drv_handle = drv_handle;
 		param_bufferready.stream = substream->number;
+		param_bufferready.size = 0;
+		param_bufferready.offset = 0;
 
 		/*aTrace(LOG_ALSA_INTERFACE, "%s: stream = %d, "
 			"ACTION_AUD_BufferReady\n",
@@ -1112,6 +1234,7 @@ int PcmPlaybackCopy(struct snd_pcm_substream *substream, int channel,
 		AUDIO_Ctrl_Trigger(ACTION_AUD_BufferReady, &param_bufferready,
 			NULL, 0);
 	}
+#endif
 
 	return 0;
 
@@ -1244,6 +1367,7 @@ static void AUDIO_DRIVER_InterruptPeriodCB(void *pPrivate)
 	AUDIO_DRIVER_TYPE_t drv_type;
 	struct snd_pcm_runtime *runtime;
 	brcm_alsa_chip_t *pChip = NULL;
+	int stream_id = 0;
 
 	if (!substream) {
 		aError("Invalid substream 0x%p\n", substream);
@@ -1261,20 +1385,29 @@ static void AUDIO_DRIVER_InterruptPeriodCB(void *pPrivate)
 	AUDIO_DRIVER_Ctrl(drv_handle, AUDIO_DRIVER_GET_DRV_TYPE,
 			  (void *)&drv_type);
 
+	stream_id = StreamIdOfDriver(drv_handle);
+	BUG_ON(stream_id < CSL_CAPH_STREAM_NONE ||
+		stream_id >= CSL_CAPH_STREAM_TOTAL);
+
 	switch (drv_type) {
 	case AUDIO_DRIVER_PLAY_VOICE:
 	case AUDIO_DRIVER_PLAY_AUDIO:
 	case AUDIO_DRIVER_PLAY_RINGER:
 		{
 			/*update the PCM read pointer by period size */
-
+			int offset = runtime->period_size;
+#if defined(DYNAMIC_DMA_PLAYBACK)
+			/*period_size is actually the copy size at dyndma mode*/
+			int dmaSize = csl_audio_render_get_dma_size(stream_id);
+			if (dmaSize != 0)
+				offset = bytes_to_frames(runtime, dmaSize);
+#endif
 			pChip->streamCtl[substream->number].stream_hw_ptr +=
-			    runtime->period_size;
+				offset;
 			if (pChip->streamCtl[substream->number].stream_hw_ptr
 				> runtime->boundary)
 				pChip->streamCtl[substream->number].
 				stream_hw_ptr -= runtime->boundary;
-
 
 			/* send the period elapsed */
 			snd_pcm_period_elapsed(substream);
@@ -1366,6 +1499,10 @@ int __devinit PcmDeviceNew(struct snd_card *card)
 	DSPDRV_Init();
 #endif
 	AUDCTRL_Init();
+
+#if defined(DYNAMIC_DMA_PLAYBACK)
+	spin_lock_init(&copy_lock);
+#endif
 
 	aTrace(LOG_ALSA_INTERFACE,
 	       "\n PcmDeviceNew : PcmDeviceNew err=%d\n", err);

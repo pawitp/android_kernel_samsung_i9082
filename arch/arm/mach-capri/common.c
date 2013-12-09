@@ -21,7 +21,6 @@
 #include <linux/serial_reg.h>
 #include <linux/serial_8250.h>
 #include <linux/clk.h>
-#include <linux/pwm_backlight.h>
 #include <asm/mach-types.h>
 #include <mach/hardware.h>
 #include <mach/kona.h>
@@ -159,7 +158,7 @@ static void capri_8250_pm(struct uart_port *port, unsigned int state,
 		 },
 	};
 
-	printk(KERN_INFO "In %s port = 0x%08X state = %d old_state = %d\n",
+	pr_debug("In %s port = 0x%08X state = %d old_state = %d\n",
 	       __func__, (unsigned int)port, state, old_state);
 
 	clk = clk_get(port->dev, private_data->peri_clk);
@@ -330,24 +329,6 @@ static struct platform_device pwm_device = {
 };
 #endif
 
-#if defined(CONFIG_BACKLIGHT_PWM)
-static struct platform_pwm_backlight_data pwm_backlight_data = {
-	.pwm_name = "kona_pwmc:2",
-	.max_brightness = 255,
-	.dft_brightness = 255,
-	.pwm_period_ns = 55555,
-	.polarity = 1
-};
-
-static struct platform_device pwm_backlight_device = {
-	.name = "pwm-backlight",
-	.id = -1,
-	.dev = {
-		.platform_data = &pwm_backlight_data,
-		},
-};
-#endif
-
 #if defined(CONFIG_MPCORE_WATCHDOG)
 static struct resource wdt_device_resource[] = {
 	[0] = {
@@ -453,6 +434,37 @@ static struct platform_device kona_sspi_spi0_device = {
 	.resource = kona_sspi_spi0_resource,
 	.num_resources = ARRAY_SIZE(kona_sspi_spi0_resource),
 };
+
+#ifdef CONFIG_SPI_KONA_SSP3_SUPPORT
+static struct resource kona_sspi_spi3_resource[] = {
+	[0] = {
+		.start = SSP3_BASE_ADDR,
+		.end = SSP3_BASE_ADDR + SZ_4K - 1,
+		.flags = IORESOURCE_MEM,
+		},
+	[1] = {
+		.start = BCM_INT_ID_SSP3_ERR,
+		.end = BCM_INT_ID_SSP3_ERR,
+		.flags = IORESOURCE_IRQ,
+		},
+};
+
+static struct spi_kona_platform_data sspi_spi3_info = {
+	.enable_dma = 1,
+	.cs_line = 1,
+	.mode = SPI_LOOP | SPI_MODE_3 | SPI_3WIRE,
+};
+
+static struct platform_device kona_sspi_spi3_device = {
+	.dev = {
+		.platform_data = &sspi_spi3_info,
+		},
+	.name = "kona_sspi_spi",
+	.id = 2,
+	.resource = kona_sspi_spi3_resource,
+	.num_resources = ARRAY_SIZE(kona_sspi_spi3_resource),
+};
+#endif /* CONFIG_SPI_KONA_SSP3_SUPPORT */
 
 #ifdef CONFIG_USB_DWC_OTG
 static struct resource kona_hsotgctrl_platform_resource[] = {
@@ -560,23 +572,23 @@ static struct resource board_tmon_resource[] = {
 static struct tmon_data tmon_pdata = {
 	.critical_temp = 105000,
 	.warning_temp_thresholds = {
-				    [0] = 85000,
-				    [1] = 90000,
-				    [2] = 95000,
-				    [3] = 100000,
-				    },
+		[0] = 85000,
+		[1] = 90000,
+		[2] = 95000,
+		[3] = 100000,
+	},
 	.threshold_enable = {
-			     [0] = THRES_ENABLE,
-			     [1] = THRES_ENABLE,
-			     [2] = THRES_ENABLE,
-			     [3] = THRES_ENABLE,
-			     },
+		[0] = THRES_DISABLE,
+		[1] = THRES_DISABLE,
+		[2] = THRES_DISABLE,
+		[3] = THRES_DISABLE,
+	},
 	.max_cpufreq = {
-			[0] = 800000,
-			[1] = 600000,
-			[2] = 312000,
-			[3] = 156000,
-			},
+		[0] = 800000,
+		[1] = 800000,
+		[2] = 800000,
+		[3] = 312000,
+	},
 	.polling_interval_ms = 500,
 	.temp_hysteresis = 500,
 };
@@ -739,7 +751,7 @@ void capri_cpufreq_init(void)
 	a9_pll_chnl0 = clk_get(NULL, A9_PLL_CHNL0_CLK_NAME_STR);
 	a9_pll_chnl1 = clk_get(NULL, A9_PLL_CHNL1_CLK_NAME_STR);
 
-	BUG_ON(IS_ERR_OR_NULL(a9_pll_chnl0) || IS_ERR_OR_NULL(a9_pll_chnl1));
+	BUG_ON(IS_ERR(a9_pll_chnl0) || IS_ERR(a9_pll_chnl1));
 
 	/*Update DVFS freq table based on PLL settings done by the loader */
 #ifdef CONFIG_CAPRI_156M
@@ -750,6 +762,7 @@ void capri_cpufreq_init(void)
 	pr_info("%s a9_pll_chnl0 freq = %dKhz a9_pll_chnl1 freq = %dKhz\n",
 		__func__, kona_freq_tbl[3].cpu_freq, kona_freq_tbl[4].cpu_freq);
 #else
+	kona_freq_tbl[1].cpu_freq = 3 * clk_get_rate(a9_pll_chnl0) / 1000 / 4;
 	kona_freq_tbl[2].cpu_freq = clk_get_rate(a9_pll_chnl0) / 1000;
 	kona_freq_tbl[3].cpu_freq = clk_get_rate(a9_pll_chnl1) / 1000;
 
@@ -784,10 +797,11 @@ void avs_silicon_type_notify(u32 silicon_type_csr,
 			     u32 silicon_type_msr, u32 silicon_type_vsr,
 			     int freq_id)
 {
-	pr_info("%s: silicon_type_csr = %d\n", __func__, silicon_type_csr);
-	pr_info("%s: silicon_type_msr = %d\n", __func__, silicon_type_msr);
-	pr_info("%s: silicon_type_vsr = %d\n", __func__, silicon_type_vsr);
-	pr_info("%s: freq_id = %d\n", __func__, freq_id);
+	pr_info("%s:\n", __func__);
+	pr_info("    silicon_type_csr = %d\n", silicon_type_csr);
+	pr_info("    silicon_type_msr = %d\n", silicon_type_msr);
+	pr_info("    silicon_type_vsr = %d\n", silicon_type_vsr);
+	pr_info("    OTPed freq_id    = %d\n", freq_id);
 
 	pm_init_pmu_sr_vlt_map_table(silicon_type_csr,
 				     silicon_type_msr, silicon_type_vsr,
@@ -825,11 +839,11 @@ static struct kona_ate_lut_entry_csr ate_lut_csr[] = {
 	{A9_FREQ_1200_MHZ, SILICON_TT},	/* 8  */
 	{A9_FREQ_1200_MHZ, SILICON_TS},	/* 9  */
 	{A9_FREQ_1200_MHZ, SILICON_SS},	/* 10 */
-	{A9_FREQ_1500_MHZ, SILICON_FF},	/* 11 */
-	{A9_FREQ_1500_MHZ, SILICON_TF},	/* 12  */
-	{A9_FREQ_1500_MHZ, SILICON_TT},	/* 13  */
-	{A9_FREQ_1500_MHZ, SILICON_TS},	/* 14 */
-	{A9_FREQ_1500_MHZ, SILICON_SS},	/* 15 */
+	{A9_FREQ_1400_MHZ, SILICON_FF},	/* 11 */
+	{A9_FREQ_1400_MHZ, SILICON_TF},	/* 12  */
+	{A9_FREQ_1400_MHZ, SILICON_TT},	/* 13  */
+	{A9_FREQ_1400_MHZ, SILICON_TS},	/* 14 */
+	{A9_FREQ_1400_MHZ, SILICON_SS},	/* 15 */
 };
 
 static u32 ate_lut_msr[] = {
@@ -899,6 +913,8 @@ struct platform_device kona_avs_device = {
 };
 
 #endif
+
+atomic_t nohz_pause = ATOMIC_INIT(0);
 
 #ifdef CONFIG_DMAC_PL330
 static struct kona_pl330_data capri_pl330_pdata = {
@@ -1100,6 +1116,9 @@ void __init board_common_reserve(void)
 static struct platform_device *board_common_plat_devices[] __initdata = {
 	&board_serial_device,
 	&kona_sspi_spi0_device,
+#if defined(CONFIG_SPI_KONA_SSP3_SUPPORT)
+	&kona_sspi_spi3_device,
+#endif /* CONFIG_SPI_KONA_SSP3_SUPPORT */
 #if defined(CONFIG_MPCORE_WATCHDOG)
 	&wdt_device,
 #endif
@@ -1129,10 +1148,6 @@ static struct platform_device *board_common_plat_devices[] __initdata = {
 
 #ifdef CONFIG_KONA_AVS
 	&kona_avs_device,
-#endif
-
-#if defined(CONFIG_BACKLIGHT_PWM)
-	&pwm_backlight_device,
 #endif
 
 #ifdef CONFIG_KONA_CPU_FREQ_DRV

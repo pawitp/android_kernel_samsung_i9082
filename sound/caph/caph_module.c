@@ -407,7 +407,9 @@ BCMAudLOG_write(struct file *file, const char __user *buf,
 		__func__, count - number);
 
 	count--;
+#ifdef CONFIG_BCM_MODEM
 	CSL_LOG_Write(buffer[0], logpoint_buffer_idx, &buffer[1], count);
+#endif
 
 	return count;
 }

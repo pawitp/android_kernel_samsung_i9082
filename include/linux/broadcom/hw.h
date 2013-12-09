@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/hw.h
+*	@file	include/linux/broadcom/hw.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -16,7 +16,8 @@
 #ifndef HW_H
 #define HW_H
 
-/* Macros to make managing spinlocks a bit more controlled in terms of naming. */
+/* Macros to make managing spinlocks a bit more controlled
+ in terms of naming. */
 #if defined(__KERNEL__)
 
 #include <linux/spinlock.h>
@@ -25,7 +26,8 @@
 #define HW_DECLARE_SPINLOCK(name)  DEFINE_SPINLOCK(g##name##RegLock);
 #define HW_EXTERN_SPINLOCK(name)   extern spinlock_t g##name##RegLock;
 #define HW_IRQ_SAVE(name, val)     spin_lock_irqsave(&g##name##RegLock, (val))
-#define HW_IRQ_RESTORE(name, val)  spin_unlock_irqrestore(&g##name##RegLock, (val))
+#define HW_IRQ_RESTORE(name, val)\
+	spin_unlock_irqrestore(&g##name##RegLock, (val))
 
 #define __REG32(x)   (*((volatile u32 *)(x)))
 #define __REG16(x)   (*((volatile u16 *)(x)))

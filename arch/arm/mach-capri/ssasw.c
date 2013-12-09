@@ -376,6 +376,12 @@ static int ssasw_set_clock(SSASW_ChalHandle_t * chal_handle, int enable)
 
 	if (enable) {
 		gSRCMixer_clk = clk_get(NULL, "caph_srcmixer_clk");
+		if (IS_ERR(gSRCMixer_clk)) {
+			printk(KERN_ERR
+			       "%s: failed to get CAPH SRC Mixer clock %d!\n",
+				__func__, PTR_ERR(gSRCMixer_clk));
+			return PTR_ERR(gSRCMixer_clk);
+		}
 		err = clk_set_rate(gSRCMixer_clk, 26000000);
 		if (err) {
 			printk(KERN_ERR

@@ -18,7 +18,7 @@
 *  @brief   Audio Mixer Port Proxy User IOCTL definitions
 *
 *****************************************************************************/
-#if !defined( AMXR_PORT_IOCTL_H )
+#if !defined(AMXR_PORT_IOCTL_H)
 #define AMXR_PORT_IOCTL_H
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -56,13 +56,13 @@ struct amxr_port_ioctl_createport {
 };
 
 struct amxr_port_ioctl_setportfreq {
-	int hz;			/**< (i) Sampling frequency in Hz */
-	int bytes;		/**< (i) Period size in bytes */
+	int hz;		/**< (i) Sampling frequency in Hz */
+	int bytes;	/**< (i) Period size in bytes */
 };
 
 struct amxr_port_ioctl_setportchans {
-	int chans;		/**< (i) Number of channels: 1 for mono, 2 for stereo, etc */
-	int bytes;		/**< (i) Period size in bytes */
+	int chans;/**< (i) Number of channels: 1 for mono, 2 for stereo, etc */
+	int bytes;/**< (i) Period size in bytes */
 };
 
 /* Message definitions */
@@ -84,13 +84,18 @@ struct amxr_port_msg {
 };
 
 /* IOCTL numbers */
-#define AMXR_PORT_IOCTL_CREATE_PORT _IOR( AMXR_PORT_MAGIC, AMXR_PORT_CMD_CREATE_PORT, struct amxr_port_ioctl_createport )
-#define AMXR_PORT_IOCTL_SET_PORT_DST_FREQ _IOR( AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_DST_FREQ, struct amxr_port_ioctl_setportfreq )
-#define AMXR_PORT_IOCTL_SET_PORT_SRC_FREQ _IOR( AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_SRC_FREQ, struct amxr_port_ioctl_setportfreq )
-#define AMXR_PORT_IOCTL_SET_PORT_DST_CHANS _IOR( AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_DST_CHANS, struct amxr_port_ioctl_setportchans )
-#define AMXR_PORT_IOCTL_SET_PORT_SRC_CHANS _IOR( AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_SRC_CHANS, struct amxr_port_ioctl_setportchans )
-#define AMXR_PORT_IOCTL_GET_MSG _IO( AMXR_PORT_MAGIC, AMXR_PORT_CMD_GET_MSG )
-#define AMXR_PORT_IOCTL_RELEASE _IO( AMXR_PORT_MAGIC, AMXR_PORT_CMD_RELEASE )
+#define AMXR_PORT_IOCTL_CREATE_PORT\
+ _IOR(AMXR_PORT_MAGIC, AMXR_PORT_CMD_CREATE_PORT, struct amxr_port_ioctl_createport)
+#define AMXR_PORT_IOCTL_SET_PORT_DST_FREQ\
+ _IOR(AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_DST_FREQ, struct amxr_port_ioctl_setportfreq)
+#define AMXR_PORT_IOCTL_SET_PORT_SRC_FREQ\
+ _IOR(AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_SRC_FREQ, struct amxr_port_ioctl_setportfreq)
+#define AMXR_PORT_IOCTL_SET_PORT_DST_CHANS\
+ _IOR(AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_DST_CHANS, struct amxr_port_ioctl_setportchans)
+#define AMXR_PORT_IOCTL_SET_PORT_SRC_CHANS\
+ _IOR(AMXR_PORT_MAGIC, AMXR_PORT_CMD_SET_PORT_SRC_CHANS, struct amxr_port_ioctl_setportchans)
+#define AMXR_PORT_IOCTL_GET_MSG _IO(AMXR_PORT_MAGIC, AMXR_PORT_CMD_GET_MSG)
+#define AMXR_PORT_IOCTL_RELEASE _IO(AMXR_PORT_MAGIC, AMXR_PORT_CMD_RELEASE)
 
 /* ---- Variable Externs ------------------------------------------ */
 /* ---- Function Prototypes --------------------------------------- */

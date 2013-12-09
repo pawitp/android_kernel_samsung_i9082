@@ -4,7 +4,7 @@
 * Unless you and Broadcom execute a separate written software license
 * agreement governing use of this software, this software is licensed to you
 * under the terms of the GNU General Public License version 2, available at
-* http://www.broadcom.com/licenses/GPLv2.php (the "GPL"). 
+* http://www.broadcom.com/licenses/GPLv2.php (the "GPL").
 *
 * Notwithstanding the above, under no circumstances may you combine this
 * software in any way with any other Broadcom software provided under a
@@ -38,7 +38,8 @@ typedef struct {
 #define BSC_CMD_QUERY            0x82
 
 #define BSC_IOCTL_REGISTER       _IOW(BSC_MAGIC, BSC_CMD_REGISTER, BSC_PARAM_T)
-#define BSC_IOCTL_UNREGISTER     _IOW(BSC_MAGIC, BSC_CMD_UNREGISTER, char)	/* arg is char[] */
+#define BSC_IOCTL_UNREGISTER     _IOW(BSC_MAGIC, BSC_CMD_UNREGISTER, char)
+	/* arg is char[] */
 #define BSC_IOCTL_QUERY          _IOWR(BSC_MAGIC, BSC_CMD_QUERY, BSC_PARAM_T)
 
 /*

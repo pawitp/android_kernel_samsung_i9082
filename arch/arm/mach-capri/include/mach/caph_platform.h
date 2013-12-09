@@ -18,11 +18,12 @@
 struct extern_audio_platform_cfg {
 	int ihf_ext_amp_gpio;
 	int dock_aud_route_gpio;
-#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)		
-	int mode_sel_aud_route_gpio;
 	int mic_sel_aud_route_gpio;
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)|| defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)	
+	int mode_sel_aud_route_gpio;
 	int bt_sel_aud_route_gpio;
 #endif
+
 };
 
 struct audio_controller_platform_cfg {

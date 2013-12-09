@@ -63,6 +63,12 @@ config AUDIO_S2
         default n
         help
           Say Y here to enable Audio S2 features
+config AUDIO_MIXSTEREO_MONOOUT
+        boolean "Define if S2 featuers are enabled"
+        depends on BCM_ALSA_SOUND
+        default n
+        help
+          Say Y here to enable Audio S2 features
 config AUDIO_FEATURE_SET_DISABLE_ECNS
 	boolean "Broadcom enable BT NREC off feature"
 	depends on BCM_MODEM

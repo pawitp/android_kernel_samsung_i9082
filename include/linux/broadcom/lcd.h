@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/lcd.h
+*	@file	include/linux/broadcom/lcd.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -137,31 +137,61 @@ typedef struct {
 
 #define LCDFB_IOCTL_UPDATE_LCD 0x46ff
 
-#define LCD_IOCTL_RESET                         _IO(LCD_MAGIC, LCD_CMD_RESET)	/* arg is int */
-#define LCD_IOCTL_ENABLE_BACKLIGHT              _IO(LCD_MAGIC, LCD_CMD_ENABLE_BACKLIGHT)	/* arg is int */
-#define LCD_IOCTL_ENABLE_SUB_BACKLIGHT          _IO(LCD_MAGIC, LCD_CMD_ENABLE_SUB_BACKLIGHT)	/* arg is int */
-#define LCD_IOCTL_ENABLE_CS                     _IO(LCD_MAGIC, LCD_CMD_ENABLE_CS)	/* arg is int */
-#define LCD_IOCTL_SCOPE_TIMEOUT                 _IO(LCD_MAGIC, LCD_CMD_SCOPE_TIMEOUT)	/* arg is int */
-#define LCD_IOCTL_INIT                          _IO(LCD_MAGIC, LCD_CMD_INIT)
-#define LCD_IOCTL_INIT_ALL                      _IO(LCD_MAGIC, LCD_CMD_INIT_ALL)
-#define LCD_IOCTL_SETUP                         _IO(LCD_MAGIC, LCD_CMD_SETUP)	/* arg is int */
-#define LCD_IOCTL_HOLD                          _IO(LCD_MAGIC, LCD_CMD_HOLD)	/* arg is int */
-#define LCD_IOCTL_PULSE                         _IO(LCD_MAGIC, LCD_CMD_PULSE)	/* arg is int */
-#define LCD_IOCTL_REG                           _IOW(LCD_MAGIC, LCD_CMD_REG, LCD_Reg_t)	/* arg is LCD_Reg_t * */
-#define LCD_IOCTL_RECT                          _IOW(LCD_MAGIC, LCD_CMD_RECT, LCD_Rect_t)	/* arg is LCD_Rect_t * */
-#define LCD_IOCTL_COLOR_TEST                    _IO(LCD_MAGIC, LCD_CMD_COLOR_TEST)	/* arg is int */
-#define LCD_IOCTL_DIRTY_ROWS                    _IOW(LCD_MAGIC, LCD_CMD_DIRTY_ROWS, LCD_DirtyRows_t)	/* arg is LCD_DirtyRows_t * */
-#define LCD_IOCTL_DIRTY_RECT                    _IOW(LCD_MAGIC, LCD_CMD_DIRTY_RECT, LCD_DirtyRect_t)	/* arg is LCD_DirtyRect_t * */
-#define LCD_IOCTL_PRINT_REGS                    _IOW(LCD_MAGIC, LCD_CMD_PRINT_REGS, LCD_PrintRegs_t)	/* arg is LCD_PrintRegs_t * */
-#define LCD_IOCTL_PRINT_DATA                    _IOW(LCD_MAGIC, LCD_CMD_PRINT_DATA, LCD_PrintData_t)	/* arg is LCD_PrintData_t * */
-#define LCD_IOCTL_PWR_OFF                       _IO(LCD_MAGIC, LCD_CMD_PWR_OFF)
-#define LCD_IOCTL_IS_DISPLAY_REGION_SUPPORTED   _IO(LCD_MAGIC, LCD_CMD_IS_DISPLAY_REGION_SUPPORTED)
-#define LCD_IOCTL_INFO                          _IO(LCD_MAGIC, LCD_CMD_INFO)
-#define LCD_IOCTL_IS_DIRTY_ROW_UPDATE_SUPPORTED _IO(LCD_MAGIC, LCD_CMD_IS_DIRTY_ROW_UPDATE_SUPPORTED)
-#define LCD_IOCTL_SET_DISPLAY_LAYER_NUM         _IO(LCD_MAGIC, LCD_CMD_SET_DISPLAY_LAYER_NUM)	/* arg is int */
-#define LCD_IOCTL_DIRTY_ROW_BITS                _IOW(LCD_MAGIC, LCD_CMD_DIRTY_ROW_BITS, LCD_DirtyRowBits_t)	/* arg is LCD_DirtyRowBits_t * */
-#define LCD_IOCTL_COPYAREA                      _IOW(LCD_MAGIC, LCD_CMD_COPYAREA, struct fb_copyarea)
-#define LCD_IOCTL_FILLRECT_COLOR                _IOW(LCD_MAGIC, LCD_CMD_FILLRECT_COLOR, LCD_FillRectColor_t)
+#define LCD_IOCTL_RESET\
+	_IO(LCD_MAGIC, LCD_CMD_RESET)	/* arg is int */
+#define LCD_IOCTL_ENABLE_BACKLIGHT\
+	_IO(LCD_MAGIC, LCD_CMD_ENABLE_BACKLIGHT)	/* arg is int */
+#define LCD_IOCTL_ENABLE_SUB_BACKLIGHT\
+	_IO(LCD_MAGIC, LCD_CMD_ENABLE_SUB_BACKLIGHT)	/* arg is int */
+#define LCD_IOCTL_ENABLE_CS\
+	_IO(LCD_MAGIC, LCD_CMD_ENABLE_CS)	/* arg is int */
+#define LCD_IOCTL_SCOPE_TIMEOUT\
+	_IO(LCD_MAGIC, LCD_CMD_SCOPE_TIMEOUT)	/* arg is int */
+#define LCD_IOCTL_INIT\
+	_IO(LCD_MAGIC, LCD_CMD_INIT)
+#define LCD_IOCTL_INIT_ALL\
+	_IO(LCD_MAGIC, LCD_CMD_INIT_ALL)
+#define LCD_IOCTL_SETUP\
+	_IO(LCD_MAGIC, LCD_CMD_SETUP)	/* arg is int */
+#define LCD_IOCTL_HOLD\
+	_IO(LCD_MAGIC, LCD_CMD_HOLD)	/* arg is int */
+#define LCD_IOCTL_PULSE\
+	_IO(LCD_MAGIC, LCD_CMD_PULSE)	/* arg is int */
+#define LCD_IOCTL_REG\
+	_IOW(LCD_MAGIC, LCD_CMD_REG, LCD_Reg_t)	/* arg is LCD_Reg_t * */
+#define LCD_IOCTL_RECT\
+	_IOW(LCD_MAGIC, LCD_CMD_RECT, LCD_Rect_t) /* arg is LCD_Rect_t * */
+#define LCD_IOCTL_COLOR_TEST\
+	_IO(LCD_MAGIC, LCD_CMD_COLOR_TEST)	/* arg is int */
+#define LCD_IOCTL_DIRTY_ROWS\
+	_IOW(LCD_MAGIC, LCD_CMD_DIRTY_ROWS, LCD_DirtyRows_t)
+	/* arg is LCD_DirtyRows_t * */
+#define LCD_IOCTL_DIRTY_RECT\
+	_IOW(LCD_MAGIC, LCD_CMD_DIRTY_RECT, LCD_DirtyRect_t)
+	/* arg is LCD_DirtyRect_t * */
+#define LCD_IOCTL_PRINT_REGS\
+	_IOW(LCD_MAGIC, LCD_CMD_PRINT_REGS, LCD_PrintRegs_t)
+	/* arg is LCD_PrintRegs_t * */
+#define LCD_IOCTL_PRINT_DATA\
+	_IOW(LCD_MAGIC, LCD_CMD_PRINT_DATA, LCD_PrintData_t)
+	/* arg is LCD_PrintData_t * */
+#define LCD_IOCTL_PWR_OFF\
+	_IO(LCD_MAGIC, LCD_CMD_PWR_OFF)
+#define LCD_IOCTL_IS_DISPLAY_REGION_SUPPORTED\
+	_IO(LCD_MAGIC, LCD_CMD_IS_DISPLAY_REGION_SUPPORTED)
+#define LCD_IOCTL_INFO\
+	_IO(LCD_MAGIC, LCD_CMD_INFO)
+#define LCD_IOCTL_IS_DIRTY_ROW_UPDATE_SUPPORTED\
+	_IO(LCD_MAGIC, LCD_CMD_IS_DIRTY_ROW_UPDATE_SUPPORTED)
+#define LCD_IOCTL_SET_DISPLAY_LAYER_NUM\
+	_IO(LCD_MAGIC, LCD_CMD_SET_DISPLAY_LAYER_NUM)	/* arg is int */
+#define LCD_IOCTL_DIRTY_ROW_BITS\
+	_IOW(LCD_MAGIC, LCD_CMD_DIRTY_ROW_BITS, LCD_DirtyRowBits_t)
+	/* arg is LCD_DirtyRowBits_t * */
+#define LCD_IOCTL_COPYAREA\
+	_IOW(LCD_MAGIC, LCD_CMD_COPYAREA, struct fb_copyarea)
+#define LCD_IOCTL_FILLRECT_COLOR\
+	_IOW(LCD_MAGIC, LCD_CMD_FILLRECT_COLOR, LCD_FillRectColor_t)
 
 /* ---- Variable Externs ------------------------------------------------- */
 

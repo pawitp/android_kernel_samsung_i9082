@@ -100,7 +100,7 @@ typedef struct vchiq_arm_state_struct {
 	** be able to suspend after this point.
 	*/
 	int first_connect;
-	
+
 	unsigned long long suspend_start_time;
 	unsigned long long sleep_start_time;
 	unsigned long long resume_start_time;

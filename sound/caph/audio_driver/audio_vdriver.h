@@ -331,6 +331,17 @@ void AUDDRV_CPResetCleanup(void);
 void AUDDRV_Telephony_DeinitHW(void);
 CSL_CAPH_DEVICE_e AUDDRV_GetDRVDeviceFromSpkr(AUDIO_SINK_Enum_t spkr);
 CSL_CAPH_DEVICE_e AUDDRV_GetDRVDeviceFromMic(AUDIO_SOURCE_Enum_t mic);
+CSL_CAPH_DEVICE_e AUDDRV_GetSecMicDRVDeviceFromSpkr(AUDIO_SINK_Enum_t spkr);
+void AUDDRV_SetPrimaryMicFromSpkr(AUDIO_SINK_Enum_t spkr,
+		AUDIO_SOURCE_Enum_t mic);
+AUDIO_SOURCE_Enum_t AUDDRV_GetPrimaryMicFromSpkr(AUDIO_SINK_Enum_t spkr);
+void AUDDRV_SetSecMicFromSpkr(AUDIO_SINK_Enum_t spkr,
+		AUDIO_SOURCE_Enum_t mic);
+AUDIO_SOURCE_Enum_t AUDDRV_GetSecMicFromSpkr(AUDIO_SINK_Enum_t spkr);
+void AUDDRV_PrintAllMics(void);
 void AUDDRV_SetCallSampleRate(UInt32 voiceSampleRate);
 void AUDDRV_SetIHFDLSampleRate(int mode);
+int AUDDRV_Get_TrEqParm(void *param, unsigned int size, AudioApp_t app,
+	unsigned int sample_rate);
+int AUDDRV_Get_MBCParm(void *param, int size);
 #endif				/* __AUDIO_VDRIVER_H__ */

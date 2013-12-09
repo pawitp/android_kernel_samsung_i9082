@@ -581,6 +581,19 @@ static int __devinit bcmpmu_probe(struct platform_device *pdev)
 			 "Failed to read bcmpmu revision ID: %d\n", ret);
 		goto err;
 	} else {
+		printk(KERN_INFO "%s: PMUrev = 0x%0X.\n", __func__, val);
+#ifdef CONFIG_MFD_BCM59054
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xA4, 0x33, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xA7, 0xD2, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xAA, 0xD2, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xAB, 0x6F, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xAD, 0xD2, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xAE, 0x6F, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xB0, 0x33, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xB3, 0xD2, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xB6, 0xD2, 0xFF);
+			bcmpmu->write_dev_drct(bcmpmu, 0, 0xB7, 0xEF, 0xFF);
+#else
 		if (val == 0x11) {
 			bcmpmu->pmu_rev = BCMPMU_REV_A0;
 			bcmpmu->write_dev_drct(bcmpmu, 0, 0xA3, 0x01, 0xFF);
@@ -632,6 +645,10 @@ static int __devinit bcmpmu_probe(struct platform_device *pdev)
 				__func__, val);
 			goto err;
 		}
+
+#endif
+
+
 	}
 
 	bcmpmu_register_init(bcmpmu);
@@ -674,9 +691,10 @@ static int __devinit bcmpmu_probe(struct platform_device *pdev)
 	/* Make device data accessible */
 	bcmpmu_core = bcmpmu;
 	
-	for (i = 0; i <ARRAY_SIZE(bcmpmu_fellow_devices); i++)
+	for (i = 0; i <ARRAY_SIZE(bcmpmu_fellow_devices); i++){
+	    printk(KERN_INFO "felllow driver:%s\n",bcmpmu_fellow_devices[i]->name);
 		bcmpmu_fellow_devices[i]->dev.platform_data = bcmpmu;
-
+    }
 	ret = platform_add_devices(bcmpmu_fellow_devices,
 			     ARRAY_SIZE(bcmpmu_fellow_devices));
 	if (ret) {

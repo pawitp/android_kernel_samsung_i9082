@@ -68,6 +68,7 @@ enum hdmi_ioctl_t {
 
 #if defined(__KERNEL__)
 int hdmi_set_wifi_hdmi(int enable);
+void hdmi_detection_power_ctrl(bool enable);
 #endif
 
 #endif /* LINUX_HDMI_H */

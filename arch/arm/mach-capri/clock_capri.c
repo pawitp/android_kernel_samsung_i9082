@@ -2953,7 +2953,7 @@ static struct ref_clk CLK_NAME(bbl_32k) = {
 .flags = BBL_32K_REF_CLK_FLAGS,.clk_type = CLK_TYPE_REF,.id =
 		    CLK_BBL_32K_REF_CLK_ID,.name =
 		    BBL_32K_REF_CLK_NAME_STR,.rate =
-		    32000,.ops = &gen_ref_clk_ops,},.ccu_clk =
+		    32768,.ops = &gen_ref_clk_ops,},.ccu_clk =
 	    &CLK_NAME(khubaon),};
 
 /*
@@ -3628,7 +3628,7 @@ static struct peri_clk CLK_NAME(hub_timer) = {
 		    pll_select_shift =
 		    KHUBAON_CLK_MGR_REG_HUB_TIMER_DIV_HUB_TIMER_PLL_SELECT_SHIFT,},.
 	    src_clk = {
-.count = 3,.src_inx = 1,.clk =
+.count = 3,.src_inx = 0,.clk =
 		    hub_timer_peri_clk_src_list,},.soft_reset_offset =
 	    KHUBAON_RST_MGR_REG_SOFT_RSTN0_OFFSET,.clk_reset_mask =
 	    KHUBAON_RST_MGR_REG_SOFT_RSTN0_HUB_TIMER_SOFT_RSTN_MASK,};
@@ -5826,7 +5826,7 @@ static struct peri_clk CLK_NAME(timers) = {
 		    pll_select_shift =
 		    KPS_CLK_MGR_REG_TIMERS_DIV_TIMERS_PLL_SELECT_SHIFT,},.
 	    src_clk = {
-.count = 2,.src_inx = 1,.clk =
+.count = 2,.src_inx = 0,.clk =
 		    timers_peri_clk_src_list,},.soft_reset_offset =
 	    KPS_RST_MGR_REG_APB1_SOFTRST_OFFSET,.clk_reset_mask =
 	    KPS_RST_MGR_REG_APB1_SOFTRST_TIMERS_SOFT_RSTN_MASK,};

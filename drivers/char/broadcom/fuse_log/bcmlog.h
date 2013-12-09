@@ -83,6 +83,14 @@ extern "C" {
 /* log a signal */
 #define BCMLOG_IOC_LOGSIGNAL	104
 
+#define BCMLOG_IOREMAP_GUARD		(SZ_4K)
+#define BCMLOG_IOREMAP_AREA_SZ		(SZ_8K)
+#define BCMLOG_IOREMAP_AREA		(0)
+#define BCMLOG_IOREMAP_NUM_PAGES	((BCMLOG_IOREMAP_AREA_SZ +	\
+			BCMLOG_IOREMAP_GUARD) >> PAGE_SHIFT)
+
+#define free_size_bcmlog(size) (size + BCMLOG_IOREMAP_GUARD)
+
 /**
  *  for ioctl cmd BCMLOG_IOC_LOGSTR, a variable of this type
  *	is passed as the 'arg' to ioctl()
@@ -296,6 +304,7 @@ extern "C" {
 #ifdef CONFIG_BRCM_CP_CRASH_DUMP_EMMC
 	extern int ap_triggered;
 #endif
+	extern struct vm_struct *ipc_cpmap_area;
 	extern int cp_crashed;
 	extern int brcm_klogging(char *data, int length);
 	extern int brcm_retrive_early_printk(void);

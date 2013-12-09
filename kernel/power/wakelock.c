@@ -141,6 +141,48 @@ static int wakelock_stats_show(struct seq_file *m, void *unused)
 	return 0;
 }
 
+static int active_wakelocks_show(struct seq_file *m, void *unused)
+{
+	unsigned long irqflags;
+	struct wake_lock *lock;
+	int type;
+	static char *wakelock_type_name[WAKE_LOCK_TYPE_COUNT] = {
+		"suspend",
+		"idle",
+	};
+
+	spin_lock_irqsave(&list_lock, irqflags);
+
+	for (type = 0; type < WAKE_LOCK_TYPE_COUNT; type++) {
+		list_for_each_entry(lock, &active_wake_locks[type], link) {
+			if (lock->flags & WAKE_LOCK_ACTIVE) {
+				seq_printf(m, "%s [type:%s]\t",
+					lock->name, wakelock_type_name[type]);
+				if (lock->flags & WAKE_LOCK_AUTO_EXPIRE) {
+					long timeout = lock->expires - jiffies;
+					if (timeout > 0)
+						seq_printf(
+						m,
+						"will timeout in %d ms\n",
+						jiffies_to_msecs(abs(timeout))
+						);
+					else
+						seq_printf(
+						m,
+						"already timeout for %d ms\n",
+						jiffies_to_msecs(abs(timeout))
+						);
+				} else {
+					seq_printf(m, "\n");
+				}
+			}
+		}
+	}
+
+	spin_unlock_irqrestore(&list_lock, irqflags);
+	return 0;
+}
+
 static void wake_unlock_stat_locked(struct wake_lock *lock, int expired)
 {
 	ktime_t duration;
@@ -559,6 +601,20 @@ static const struct file_operations wakelock_stats_fops = {
 	.release = single_release,
 };
 
+static int active_wakelocks_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, active_wakelocks_show, NULL);
+}
+
+static const struct file_operations active_wakelocks_fops = {
+	.owner = THIS_MODULE,
+	.open = active_wakelocks_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+
 static int __init wakelocks_init(void)
 {
 	int ret;
@@ -596,6 +652,7 @@ static int __init wakelocks_init(void)
 
 #ifdef CONFIG_WAKELOCK_STAT
 	proc_create("wakelocks", S_IRUGO, NULL, &wakelock_stats_fops);
+	proc_create("active_wakelocks", S_IRUGO, NULL, &active_wakelocks_fops);
 #endif
 
 	return 0;

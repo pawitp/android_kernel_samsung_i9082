@@ -27,10 +27,6 @@
 #define __LINUX_WD_TAPPER_H
 #include <mach/timex.h>
 
-/* Seconds to ticks conversion */
-#define sec_to_ticks(x) ((x)*CLOCK_TICK_RATE)
-#define ticks_to_sec(x) ((x)/CLOCK_TICK_RATE)
-
 #define TAPPER_DEFAULT_TIMEOUT	0xFFFFFFFF
 
 unsigned int wd_tapper_get_timeout(void);

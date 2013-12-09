@@ -501,6 +501,20 @@ config INPUT_SMB380
 	Say Y here if you want to support Bosch SMB380/BMA023 connected via an I2C bus.
 	To compile this driver as a module, choose M here: the module will be called smb380.
 
+config INPUT_MAG_DEBUG
+	boolean "Debug support for ALPS GeoMagneticSensor drivers"
+	default n
+	depends on DEBUG_KERNEL
+	help
+	  Say "yes" to enable debug messaging.
+
+config INPUT_HSCDTD006A
+	tristate "006A GeoMagneticSensor Driver"
+	default n
+	depends on I2C
+	help
+	  Say Y here if you want support for the HSCDTD006A GeoMagneticSensor Driver.
+
 config INPUT_PONKEY_BCMPMU
         bool "BCMPMU PowerOnKey input events"
         depends on MFD_BCMPMU
@@ -546,5 +560,12 @@ endchoice
 config FIVE_PIN_EARJACK_SUPPORT
 	tristate "For 5PIN earjack"
 	default n
+
+config SS_NEW_EARPHONE_SPEC
+	default n
+	tristate "For Samsung new earphone spec"
+
+source "drivers/input/misc/mpu6050/Kconfig"
+source "drivers/input/misc/mpu6500/Kconfig"
 
 endif

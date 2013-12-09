@@ -83,7 +83,6 @@ static struct bcmpmu_rw_data register_init_data[] = {
 	{.map = 0,.addr = 0x7F,.val = 0x00,.mask = 0xff},
 	{.map = 0,.addr = 0x80,.val = 0x00,.mask = 0xff},
 	{.map = 0,.addr = 0x81,.val = 0x00,.mask = 0xff},
-	{.map = 0,.addr = 0xC0,.val = 0x24,.mask = 0xff},
 	{.map = 0,.addr = 0xC1,.val = 0x00,.mask = 0xff},
 	{.map = 0,.addr = 0x8E,.val = 0x02,.mask = 0xff},
 	{.map = 0,.addr = 0x8F,.val = 0x00,.mask = 0xff},
@@ -398,19 +397,11 @@ static struct regulator_init_data bcm59056_mmcldo1_data = {
 			.max_uV = 3300000,
 			.valid_ops_mask = REGULATOR_CHANGE_STATUS |
 			REGULATOR_CHANGE_MODE | REGULATOR_CHANGE_VOLTAGE,
-#if defined(CONFIG_CAPRI_28155)
 			.always_on = 0,
 			.state_standby = {
 					  .disabled = 1,	/* 0 for LPM, 1 for OFF */
 					  /* NOT used for MMCLDO1 */
 					  },
-#else
-			.always_on = 1,
-			.state_standby = {
-					  .disabled = 0,	/* 0 for LPM, 1 for OFF */
-					  /* NOT used for MMCLDO1 */
-					  },
-#endif
 			},
 	.num_consumer_supplies = ARRAY_SIZE(mmc1_supply),
 	.consumer_supplies = mmc1_supply,
@@ -702,7 +693,7 @@ struct bcmpmu_regulator_init_data bcm59056_regulators[BCMPMU_REGULATOR_MAX] = {
 				     &bcm59056_vibldo_data, 0xff, 1},
 	[BCMPMU_REGULATOR_AUDLDO] = {
 				     BCMPMU_REGULATOR_AUDLDO,
-				     &bcm59056_audldo_data, 0x02, 0},
+				     &bcm59056_audldo_data, 0xff, 1},
 	[BCMPMU_REGULATOR_MICLDO] = {
 				     BCMPMU_REGULATOR_MICLDO,
 				     &bcm59056_micldo_data, 0xff, 1},

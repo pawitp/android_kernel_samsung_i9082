@@ -61,6 +61,14 @@ enum _VoIF_HeadsetType_t {
 };
 #define VoIF_HeadsetType_t enum _VoIF_HeadsetType_t
 
+enum _VoIF_Band_t {
+	VOIF_NARROW_BAND = 0,
+	VOIF_WIDE_BAND,
+	VOIF_BAND_MAX
+};
+
+#define VoIF_Band_t enum _VoIF_Band_t
+
 /**
 * Start the VOIF processing.
 *
@@ -79,7 +87,6 @@ enum _VoIF_HeadsetType_t {
 *	@note
 **************************************************************************/
 	void VoIF_Deinit(void);
-
 
 #ifdef CONFIG_ENABLE_VOIF
 /**

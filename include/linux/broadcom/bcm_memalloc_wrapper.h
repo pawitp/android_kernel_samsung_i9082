@@ -22,7 +22,7 @@ struct memalloc_logic {
 	int (*AllocMemory) (MEMALLOC_HDL hdl, unsigned long *busaddr,
 			    unsigned int size);
 	int (*FreeMemory) (MEMALLOC_HDL hdl, unsigned long *busaddr);
-	int (*open) (MEMALLOC_HDL * hdlp);
+	int (*open) (MEMALLOC_HDL *hdlp);
 	int (*release) (MEMALLOC_HDL hdl);
 	int (*mmap) (unsigned long size, unsigned long pgoff);
 	int (*init) (unsigned int memory_size, unsigned int phy_start_address);

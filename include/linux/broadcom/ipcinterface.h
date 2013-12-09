@@ -1,4 +1,5 @@
-/* Requires the following header files before its inclusion in a c file
+/* Requires the following header files before its inclusion in a c file */
+/*
 #include "mobcom_types.h"
 */
 #ifndef IPCInterface_h
@@ -7,39 +8,64 @@
 /*
 	(c)2007-2009 Broadcom Corporation
 
-	Unless you and Broadcom execute a separate written software license
-	agreement governing use of this software, this software is licensed to you
-	under the terms of the GNU General Public License version 2, available
-	at http://www.gnu.org/licenses/old-licenses/gpl-2.0.html (the "GPL").
-
-   Notwithstanding the above, under no circumstances may you combine this
-   software in any way with any other Broadcom software provided under a license
-   other than the GPL, without Broadcom's express prior written consent.
+Unless you and Broadcom execute a separate written software license
+agreement governing use of this software, this software is licensed
+to you under the terms of the GNU General Public License version 2,
+available at http://www.gnu.org/licenses/old-licenses/gpl-2.0.html
+(the "GPL").
+Notwithstanding the above, under no circumstances may you combine this
+software in any way with any other Broadcom software provided under a
+license other than the GPL, without Broadcom's express prior written
+consent.
 */
 
 /* ============================================================
-// IPCInterface.h
-//
-// The interface to the IPC
-//============================================================ */
+* IPCInterface.h
+*
+* The interface to the IPC
+============================================================*/
 
-/* ============================================================ */
+/*============================================================*/
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* ============================================================
-// Switch for direct IPC buffer allocate/send
-//#define DIRECT_IPC_BUFFERING
+#define IPC_IOREMAP_GUARD		(SZ_4K)
+#define IPC_CP_CRASH_SUMMARY_AREA_SZ	(SZ_4K)
+#define IPC_CP_ASSERT_BUF_AREA_SZ	(SZ_4K)
+#define IPC_CP_STRING_MAP_AREA_SZ	(SZ_4K)
+#define IPC_CP_RAMDUMP_BLOCK_AREA_SZ	(SZ_4K)
+#define IPC_CP_CRASH_SUMMARY_AREA	(0)
+#define IPC_CP_ASSERT_BUF_AREA		(IPC_CP_CRASH_SUMMARY_AREA +	\
+		IPC_CP_CRASH_SUMMARY_AREA_SZ + IPC_IOREMAP_GUARD)
+#define IPC_CP_STRING_MAP_AREA		(IPC_CP_ASSERT_BUF_AREA +	\
+		IPC_CP_ASSERT_BUF_AREA_SZ + IPC_IOREMAP_GUARD)
+#define IPC_CP_RAMDUMP_BLOCK_AREA	(IPC_CP_STRING_MAP_AREA +	\
+		IPC_CP_STRING_MAP_AREA_SZ + IPC_IOREMAP_GUARD)
 
-//============================================================
-// Switch To turn on IPC sanity checking code
-// Undefine for better performance
-//#define IPC_DEBUG */
+#define IPC_CPMAP_NUM_PAGES ((IPC_CP_CRASH_SUMMARY_AREA_SZ +	\
+		IPC_IOREMAP_GUARD +				\
+		IPC_CP_ASSERT_BUF_AREA_SZ +			\
+		IPC_IOREMAP_GUARD +				\
+		IPC_CP_STRING_MAP_AREA_SZ +			\
+		IPC_IOREMAP_GUARD +				\
+		IPC_CP_RAMDUMP_BLOCK_AREA_SZ +			\
+		IPC_IOREMAP_GUARD) >> PAGE_SHIFT)
+
+#define free_size_ipc(size) (size + IPC_IOREMAP_GUARD)
 
 /* ============================================================
-// Types
-//============================================================ */
+* Switch for direct IPC buffer allocate/send
+* #define DIRECT_IPC_BUFFERING
+*/
+/*============================================================
+* Switch To turn on IPC sanity checking code
+* Undefine for better performance
+* #define IPC_DEBUG
+*/
+/* ============================================================
+* Types
+* ============================================================*/
 	typedef unsigned int IPC_U32;
 
 	typedef IPC_U32 IPC_Boolean;
@@ -51,15 +77,15 @@ extern "C" {
 #define FUSE_IPC_CRASH_SUPPORT 1
 
 /* ============================================================
-// References to Internal data structures
-//============================================================ */
+* References to Internal data structures
+* ============================================================*/
 
 	typedef IPC_U32 IPC_Buffer;
 	typedef IPC_U32 IPC_BufferPool;
 
 /* ============================================================
-// "Enums"
-//============================================================ */
+* "Enums"
+* ============================================================ */
 
 	typedef IPC_U32 IPC_SmCPUSleepState_T;
 
@@ -174,9 +200,9 @@ extern "C" {
 
 #ifdef FUSE_IPC_CRASH_SUPPORT
 /*************************************************
-// Crash information enum
-// AP Time Out Code is dependent upon this enum, so please
-// make sure that this is in sync with IpcAPtimeOutCode */
+* Crash information enum
+* AP Time Out Code is dependent upon this enum, so please
+* make sure that this is in sync with IpcAPtimeOutCode */
 
 #define	IPC_CP_NOT_CRASHED              0
 #define	IPC_CP_ANALYSING_CRASH          1
@@ -203,8 +229,8 @@ extern "C" {
 #endif				/* FUSE_IPC_CRASH_SUPPORT */
 
 /* ============================================================
-// Callback Prototypes
-//============================================================
+* Callback Prototypes
+* ============================================================
 
 **************************************************/
 	typedef void (*IPC_RaiseInterruptFPtr_T) (void);
@@ -248,8 +274,8 @@ extern "C" {
 #endif				/* FUSE_IPC_CRASH_SUPPORT */
 
 /* ============================================================
-// Structures
-//============================================================
+* Structures
+*============================================================
 
 **************************************************/
 	typedef struct IPC_PlatformSpecificPowerSavingInfo_S {
@@ -290,10 +316,10 @@ extern "C" {
 	typedef struct IPC_PowerSavingInfo_S {
 		volatile IPC_Boolean ApDeepSleepEnabled;
 		volatile IPC_Boolean ApAccessSharedPowerDWORD;
-		volatile IPC_SmCPUSleepState_T ApSleepMode_DUMMY;	/* not used */
+		volatile IPC_SmCPUSleepState_T ApSleepMode_DUMMY;/* not used */
 		volatile IPC_Boolean CpDeepSleepEnabled;
 		volatile IPC_Boolean CpAccessSharedPowerDWORD;
-		volatile IPC_SmCPUSleepState_T CpSleepMode_DUMMY;	/* not used */
+		volatile IPC_SmCPUSleepState_T CpSleepMode_DUMMY;/* not used */
 	} IPC_PowerSavingInfo_T;
 
 /**************************************************/
@@ -303,18 +329,18 @@ extern "C" {
 	} IPC_LinkList_T;
 
 /* ============================================================
-// Management functions
-//============================================================ */
+* Management functions
+*============================================================ */
 
 /******************************************
-// Must be called before any other IPC functions
-// Sets up shared memory data structures */
+* Must be called before any other IPC functions
+* Sets up shared memory data structures */
 
 	void IPC_Initialise
 	    (void *Sm_BaseAddress,
 	     IPC_U32 Sm_Size,
 	     IPC_CPU_ID_T CPUID,
-	     IPC_ControlInfo_T * ControlInfo,
+	     IPC_ControlInfo_T *ControlInfo,
 	     IPCConfiguredFPtr_T IPCConfigured, IPCResetFPtr_T IPCReset
 #ifdef	FUSE_IPC_CRASH_SUPPORT
 	     , IPCCPCrashCbFptr_T IPCCPCrashedCb
@@ -322,8 +348,8 @@ extern "C" {
 	    );
 
 /**************************************************
-// Register an endpoint
-// Must be called before the endpoint is used */
+* Register an endpoint
+* Must be called before the endpoint is used */
 
 	void IPC_EndpointRegister
 	    (IPC_EndpointId_T EndpointId,
@@ -331,32 +357,32 @@ extern "C" {
 	     IPC_BufferDeliveryFPtr_T DeliveryFunction, IPC_U32 HeaderSize);
 
 /****************************************
-// Must be called after all endpoints have been registered
-// After this is called by both CPUs:
-//	IPCConfiguredFPtr_T	() is called */
+* Must be called after all endpoints have been registered
+* After this is called by both CPUs:
+*	IPCConfiguredFPtr_T	() is called */
 
 	void IPC_Configured(void);
 
 /**************************************************
-// Called by support software on an interrupt from the other CPU */
+* Called by support software on an interrupt from the other CPU */
 
 	void IPC_ProcessEvents(void);
 
 /**************************************************
-// Check if an endpoint is registered */
+* Check if an endpoint is registered */
 
 	IPC_Boolean IPC_SmIsEndpointRegistered(IPC_EndpointId_T EndpointId);
 
 /* ============================================================
-// Pool Level functions
-//============================================================ */
+* Pool Level functions
+*============================================================ */
 
 /**************************************************
-// Creates a Buffer Pool in shared Memory
-//
-// Returns:
-//	IPC_BufferPool	- Success
-//	0				- Error */
+* Creates a Buffer Pool in shared Memory
+*
+* Returns:
+*	IPC_BufferPool	- Success
+*	0				- Error */
 
 	IPC_BufferPool IPC_CreateBufferPool
 	    (IPC_EndpointId_T SourceEndpointId,
@@ -365,194 +391,194 @@ extern "C" {
 	     IPC_U32 BufferSize, IPC_U32 FlowStartLimit, IPC_U32 FlowStopLimit);
 
 /**************************************************
-// Updates the User parameter for the specified pool
-//
-// Returns TRUE on success, FALSE if the pool was not valid */
+* Updates the User parameter for the specified pool
+*
+* Returns TRUE on success, FALSE if the pool was not valid */
 
 	IPC_Boolean IPC_PoolUserParameterSet
 	    (IPC_BufferPool Pool, IPC_U32 Parameter);
 
 /**************************************************
-// Returns the User parameter for the specified pool
-//
-// Returns 0 on failure */
+* Returns the User parameter for the specified pool
+*
+* Returns 0 on failure */
 
 	IPC_U32 IPC_PoolUserParameterGet(IPC_BufferPool Pool);
 
 /**************************************************
-// Returns the Source Endpoint for the specified pool
-//
-// Returns IPC_EP_NONE  on failure */
+* Returns the Source Endpoint for the specified pool
+*
+* Returns IPC_EP_NONE  on failure */
 
 	IPC_EndpointId_T IPC_PoolSourceEndpointId(IPC_BufferPool Pool);
 
 /**************************************************
-// Returns the Destination Endpoint for the specified pool
-//
-// Returns IPC_EP_NONE  on failure */
+* Returns the Destination Endpoint for the specified pool
+*
+* Returns IPC_EP_NONE  on failure */
 
 	IPC_EndpointId_T IPC_PoolDestinationEndpointId(IPC_BufferPool Pool);
 
 /**************************************************
-// Sets a callback function to be called when a buffer is returned to this pool
-// Note, Buffer is not automatically freed after this is called
-// The callback must call IPC_BufferDone to do this */
+* Sets a callback function to be called when a buffer is returned to this pool
+* Note, Buffer is not automatically freed after this is called
+* The callback must call IPC_BufferDone to do this */
 
 	void IPC_PoolSetFreeCallback(IPC_BufferPool Pool,
 				     IPC_BufferFreeFPtr_T BufferFreeFunction);
 
 /* ============================================================
-// Buffer Level functions
-//============================================================ */
+* Buffer Level functions
+*============================================================ */
 
 /*****************************************
-// Allocates a buffer from a pool
-//
-// Returns:
-//	IPC_Buffer	- success
-//	0			- when pool is empty.
-//	This should be interpreted as a Flow Control Condition */
+* Allocates a buffer from a pool
+*
+* Returns:
+*	IPC_Buffer	- success
+*	0			- when pool is empty.
+*	This should be interpreted as a Flow Control Condition */
 
 	IPC_Buffer IPC_AllocateBuffer(IPC_BufferPool Pool);
 
 /****************************************
-// Allocates a buffer from a pool with a wait if the pool is empty
-//
-// Returns:
-//	IPC_Buffer	- success
-//	0			- A) If a timeout was supplied, then indicates timeout
-//				   B) Otherwise indicates an error */
+* Allocates a buffer from a pool with a wait if the pool is empty
+*
+* Returns:
+*	IPC_Buffer	- success
+*	0	- A) If a timeout was supplied, then indicates timeout
+*	B) Otherwise indicates an error */
 
 	IPC_Buffer IPC_AllocateBufferWait(IPC_BufferPool Pool,
 					  IPC_U32 MilliSeconds);
 
 /****************************************
-// Sends a buffer to the correct destination */
+* Sends a buffer to the correct destination */
 
 	IPC_ReturnCode_T IPC_SendBuffer
 	    (IPC_Buffer Buffer, IPC_Priority_T Priority);
 
 /****************************************
-// Frees a buffer, returning it to the correct pool */
+* Frees a buffer, returning it to the correct pool */
 
 	void IPC_FreeBuffer(IPC_Buffer Buffer);
 
 /**************************************************
-// Returns number of free buffers in the pool */
+* Returns number of free buffers in the pool */
 	IPC_U32 IPC_PoolFreeBuffers(IPC_BufferPool Pool);
 
 /****************************************
-// Returns a buffer to its local pool.
-// For use by IPC_PoolSetFreeCallback callbacks */
+* Returns a buffer to its local pool.
+* For use by IPC_PoolSetFreeCallback callbacks */
 
 	void IPC_BufferDone(IPC_Buffer Buffer);
 
 /*============================================================
-// Buffer Access functions
-//============================================================*/
+* Buffer Access functions
+*============================================================*/
 
 /****************************************
-// Places user data from Data to Length into the buffer
-//
-// Returns:
-//	Pointer to the start of data in the buffer
-//	NULL if failed e.g. data too big */
+* Places user data from Data to Length into the buffer
+*
+* Returns:
+*	Pointer to the start of data in the buffer
+*	NULL if failed e.g. data too big */
 
 	void *IPC_BufferFill
 	    (IPC_Buffer Buffer, void *SourcePtr, IPC_U32 SourceLength);
 
 /****************************************
-// Places user data described by a link list into the buffer
-//
-// Returns:
-//	Pointer to the start of data in the buffer
-//	NULL if failed e.g. data too big */
+* Places user data described by a link list into the buffer
+*
+* Returns:
+*	Pointer to the start of data in the buffer
+*	NULL if failed e.g. data too big */
 
 	void *IPC_BufferFillByLinkList
 	    (IPC_Buffer Buffer,
-	     IPC_LinkList_T * LinkListPtr, IPC_U32 LinkListLength);
+	     IPC_LinkList_T *LinkListPtr, IPC_U32 LinkListLength);
 
 /****************************************
-// Returns a pointer to the user data currently in the buffer */
+* Returns a pointer to the user data currently in the buffer */
 
 	void *IPC_BufferDataPointer(IPC_Buffer Buffer);
 
 /********************************************
-// Increment the data pointer by offset. */
+* Increment the data pointer by offset. */
 	void IPC_IncrementBufferDataPointer(IPC_Buffer Buffer, IPC_U32 offset);
 
 /********************************************
-// Decrement the data pointer by offset. */
+* Decrement the data pointer by offset. */
 	void IPC_DecrementBufferDataPointer(IPC_Buffer Buffer, IPC_U32 offset);
 /****************************************
-// Returns the size in bytes of the user data currently in the buffer */
+* Returns the size in bytes of the user data currently in the buffer */
 
 	IPC_U32 IPC_BufferDataSize(IPC_Buffer Buffer);
 
 /****************************************
-// Sets the size in bytes of the user data currently in the buffer */
+* Sets the size in bytes of the user data currently in the buffer */
 
 	IPC_U32 IPC_BufferSetDataSize(IPC_Buffer Buffer, IPC_U32 Length);
 
 /****************************************
-// Sets the size in bytes of the header in the buffer
-// Returns a pointer to the start of this area */
+* Sets the size in bytes of the header in the buffer
+* Returns a pointer to the start of this area */
 	void *IPC_BufferHeaderSizeSet(IPC_Buffer Buffer, IPC_U32 HeaderSize);
 
 /****************************************
-// Adds the size in bytes to the beginning of header in the buffer
-// Returns a pointer to the start of this area */
+* Adds the size in bytes to the beginning of header in the buffer
+* Returns a pointer to the start of this area */
 
 	void *IPC_BufferHeaderAdd(IPC_Buffer Buffer, IPC_U32 HeaderSize);
 
 /****************************************
-// Removes the size in bytes from the beginning of the header in the buffer
-// Returns a pointer to the start of this area */
+* Removes the size in bytes from the beginning of the header in the buffer
+* Returns a pointer to the start of this area */
 
 	void *IPC_BufferHeaderRemove(IPC_Buffer Buffer, IPC_U32 HeaderSize);
 
 /****************************************
-// Returns the size of the header area currently in the buffer */
+* Returns the size of the header area currently in the buffer */
 	IPC_U32 IPC_BufferHeaderSizeGet(IPC_Buffer Buffer);
 
 /****************************************
-// Returns a pointer to the header area currently in the buffer */
+* Returns a pointer to the header area currently in the buffer */
 
 	void *IPC_BufferHeaderPointer(IPC_Buffer Buffer);
 
 /****************************************
-// Returns the source Endpoint of a buffer
-//
-// Returns IPC_EP_None if not successful */
+* Returns the source Endpoint of a buffer
+*
+* Returns IPC_EP_None if not successful */
 
 	IPC_EndpointId_T IPC_BufferSourceEndpointId(IPC_Buffer Buffer);
 
 /****************************************
-// Returns the destination Endpoint of a buffer
-//
-// Returns IPC_EP_None if not successful */
+* Returns the destination Endpoint of a buffer
+*
+* Returns IPC_EP_None if not successful */
 
 	IPC_EndpointId_T IPC_BufferDestinationEndpointId(IPC_Buffer Buffer);
 
 /****************************************
-// Returns the user parameter of the pool that owns the buffer */
+* Returns the user parameter of the pool that owns the buffer */
 
 	IPC_U32 IPC_BufferPoolUserParameter(IPC_Buffer Buffer);
 
 /****************************************
-// Returns the user parameter of the  buffer */
+* Returns the user parameter of the  buffer */
 
 	IPC_U32 IPC_BufferUserParameterGet(IPC_Buffer Buffer);
 
 /****************************************
-// Sets the user parameter of the  buffer */
+* Sets the user parameter of the  buffer */
 
 	IPC_Boolean IPC_BufferUserParameterSet(IPC_Buffer Buffer,
 					       IPC_U32 Value);
 
 /* ============================================================
-// Sleep Mode interface
-//============================================================*/
+* Sleep Mode interface
+*============================================================*/
 
 /****************************************/
 /* not used,use deep sleep API instead */
@@ -577,11 +603,11 @@ extern "C" {
 #endif
 
 /*============================================================
-// Trace and debug
-//============================================================*/
+* Trace and debug
+*============================================================*/
 /*************************************************************
-// Enables/Disables trace output for the specified channel
-// Use IPC_Channel_All to enable/disable all tracing */
+* Enables/Disables trace output for the specified channel
+* Use IPC_Channel_All to enable/disable all tracing */
 
 	IPC_Boolean IPC_SetTraceChannel
 	    (IPC_Channel_E Channel, IPC_Boolean etting);
@@ -598,12 +624,10 @@ extern "C" {
 	void IPC_UpdateIrqStats(void);
 
 /*============================================================
-
-//============================================================
-// Persistent Data Store interface
-// This is used for parameters that the CP uses and modifies and wishes to save and retrieve
-// between power cycles.
-//==========================================================*/
+* Persistent Data Store interface
+* This is used for parameters that the CP uses and modifies and
+* wishes to save and retrieve between power cycles.
+*==========================================================*/
 /*********************************************
 Size on U32's */
 /* Mainly 64K of GPS LTO data + 8K General GPS Data +
@@ -622,7 +646,7 @@ Size on U32's */
 
 #ifdef FUSE_IPC_CRASH_SUPPORT
 /*============================================================
-// Crash handling functions AP side */
+* Crash handling functions AP side */
 
 /****************************************/
 	void IPCAP_GetCrashData(IPC_CrashCode_T *CrashCode, void **Dump);
@@ -649,12 +673,12 @@ Size on U32's */
 #endif				/* FUSE_IPC_CRASH_SUPPORT */
 
 /*============================================================
-// Property Interface
-// Properties are 32 bit values that are read\write by one processor but read only by the other
-//processor. This allows atomic access to be guaranteed. These are used to allow information
-//to be shared without the overhead of CAPI2 message exchanges. Useful for device drivers
-//that work across IPC.
-//==========================================================*/
+* Property Interface
+* Properties are 32 bit values that are read\write by one processor but read
+* only by the other processor. This allows atomic access to be guaranteed.
+* These are used to allow information to be shared without the overhead of
+* CAPI2 message exchanges. Useful for device drivers that work across IPC.
+*==========================================================*/
 
 /******************************************/
 	IPC_Boolean IPC_SetProperty(IPC_PropertyID_E PropertyId, IPC_U32 value);

@@ -98,8 +98,8 @@ static void *alloc_mem(dma_mem_t * mem, size_t numBytes)
 
 	pr_warn
 	    ("dma_alloc_writecombine of %d bytes returned virtPtr: "
-	     "0x%08lx physPstr: %08x\n",
-	     numBytes, (unsigned long)mem->virtPtr, mem->physPtr);
+	     "%p physPstr: %08x\n",
+	     numBytes, mem->virtPtr, mem->physPtr);
 
 	return mem->virtPtr;
 }
@@ -163,7 +163,7 @@ static int dma_test_set(int chan)
 	{
 		int rc;
 
-		BUG_ON(chan >= (sizeof(device) / sizeof(device[0])));
+		BUG_ON(chan >= ARRAY_SIZE(device));
 
 		rc = sdma_set_device_handler(device[chan], dmaHandler,
 					     (void *)chan);
@@ -205,9 +205,9 @@ static int dma_test_wait(int chan)
 			pr_info("timer_get_tick_rate() = %lu\n",
 				(unsigned long)rate);
 			pr_warn
-			    ("DMAd %lu bytes on channel %d in %lums "
+			    ("DMAd %zu bytes on channel %d in %lums "
 			     "(%lu bytes/s)\n",
-			     (unsigned long)alloc_size, chan,
+			     alloc_size, chan,
 			     (unsigned long)timer_ticks_to_msec(elapsed),
 			     alloc_size * rate / elapsed);
 		} else {
@@ -217,14 +217,14 @@ static int dma_test_wait(int chan)
 			     "assuming rate is %luHz\n", (unsigned long)rate);
 			pr_warn
 			    ("DMAd %lu bytes on channel %d in %luus"
-			     " (%lu bytes/s)\n",
-			     (unsigned long)alloc_size, chan,
+			     " (%zu bytes/s)\n",
+			     alloc_size, chan,
 			     elapsed / (rate / 1000000),
 			     alloc_size * (rate / elapsed));
 		}
 	} else {
-		pr_warn("DMAd %lu bytes on channel %d\n",
-			(unsigned long)alloc_size, chan);
+		pr_warn("DMAd %zu bytes on channel %d\n",
+			alloc_size, chan);
 	}
 
 	return 0;
@@ -415,6 +415,7 @@ static void memcpy_tests(long iterations)
 	for (i = 0; (i < iterations) && !rc; i++) {
 		for (chan = 0; chan < test_channels; chan++) {
 			/* Acquire a DMA channel */
+			pr_info("Requesting channel %d\n", chan);
 #if defined(CONFIG_DMAC_PL330)
 			rc = dma_request_chan(&dmaHandle[chan],
 					      NULL /*memory<->memory */ );
@@ -564,6 +565,17 @@ static void dma_test_run(long iterations)
 #endif
 }
 
+static int dma_read_proc_tst_speed(char *buffer,
+				   char **buffer_location,
+				   off_t offset, int buffer_length,
+				   int *eof, void *data)
+{
+	/* All done on the first call */
+	if (offset > 0)
+		return 0;
+	return snprintf(buffer, buffer_length, "%d\n", report_speeds);
+}
+
 static ssize_t dma_write_proc_tst_speed(struct file *file,
 					const char __user *buf,
 					unsigned long count, void *data)
@@ -590,11 +602,13 @@ static int dma_register_tst_speed_file(void)
 {
 	struct proc_dir_entry *gDmaDir;
 
-	gDmaDir = create_proc_entry("dma_test/test_speed", S_IWUGO, NULL);
+	gDmaDir = create_proc_entry("dma_test/test_speed",
+				    S_IRUGO | S_IWUGO, NULL);
 
 	if (gDmaDir == NULL)
 		pr_err("Unable to create /proc/dma_test/test_speed\n");
 	else
+		gDmaDir->read_proc = dma_read_proc_tst_speed;
 		gDmaDir->write_proc = dma_write_proc_tst_speed;
 
 	return 0;
@@ -603,6 +617,17 @@ static int dma_register_tst_speed_file(void)
 static void dma_unregister_tst_speed_file(void)
 {
 	remove_proc_entry("dma_test/test_speed", NULL);
+}
+
+static int dma_read_proc_tst_chans(char *buffer,
+				   char **buffer_location,
+				   off_t offset, int buffer_length,
+				   int *eof, void *data)
+{
+	/* All done on the first call */
+	if (offset > 0)
+		return 0;
+	return snprintf(buffer, buffer_length, "%d\n", test_channels);
 }
 
 static ssize_t dma_write_proc_tst_chans(struct file *file,
@@ -637,11 +662,13 @@ static int dma_register_tst_chans_file(void)
 {
 	struct proc_dir_entry *gDmaDir;
 
-	gDmaDir = create_proc_entry("dma_test/test_channels", S_IWUGO, NULL);
+	gDmaDir = create_proc_entry("dma_test/test_channels",
+				    S_IRUGO | S_IWUGO, NULL);
 
 	if (gDmaDir == NULL)
 		pr_err("Unable to create /proc/dma_test/test_channels\n");
 	else
+		gDmaDir->read_proc = dma_read_proc_tst_chans;
 		gDmaDir->write_proc = dma_write_proc_tst_chans;
 
 	return 0;
@@ -650,6 +677,17 @@ static int dma_register_tst_chans_file(void)
 static void dma_unregister_tst_chans_file(void)
 {
 	remove_proc_entry("dma_test/test_channels", NULL);
+}
+
+static int dma_read_proc_tst_size(char *buffer,
+				  char **buffer_location,
+				  off_t offset, int buffer_length,
+				  int *eof, void *data)
+{
+	/* All done on the first call */
+	if (offset > 0)
+		return 0;
+	return snprintf(buffer, buffer_length, "%zu\n", alloc_size);
 }
 
 static ssize_t dma_write_proc_tst_size(struct file *file,
@@ -678,11 +716,13 @@ static int dma_register_tst_size_file(void)
 {
 	struct proc_dir_entry *gDmaDir;
 
-	gDmaDir = create_proc_entry("dma_test/test_size", S_IWUGO, NULL);
+	gDmaDir = create_proc_entry("dma_test/test_size",
+				    S_IRUGO | S_IWUGO, NULL);
 
 	if (gDmaDir == NULL)
 		pr_err("Unable to create /proc/dma_test/test_size\n");
 	else
+		gDmaDir->read_proc = dma_read_proc_tst_size;
 		gDmaDir->write_proc = dma_write_proc_tst_size;
 
 	return 0;
@@ -782,6 +822,7 @@ static void __exit dma_test_exit(void)
 	dma_unregister_tst_size_file();
 	dma_unregister_tst_speed_file();
 	dma_unregister_test_file();
+	remove_proc_entry("dma_test", NULL);
 }
 
 /****************************************************************************/

@@ -20,10 +20,10 @@
 *
 ****************************************************************************/
 
-#if !defined( CSX_FRAMEWORK_H )
+#if !defined(CSX_FRAMEWORK_H)
 #define CSX_FRAMEWORK_H
 
-#if defined( __KERNEL__ )
+#if defined(__KERNEL__)
 
 /* ---- Include Files ---------------------------------------------------- */
 #include <linux/broadcom/csx.h>

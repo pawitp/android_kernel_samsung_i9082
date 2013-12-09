@@ -28,6 +28,9 @@
 #include <linux/wait.h>
 #include <linux/hwmon.h>
 #include <linux/hwmon-sysfs.h>
+#include <linux/spinlock.h>
+#include <linux/wakelock.h>
+#include <linux/time.h>
 
 #include <linux/mfd/bcmpmu.h>
 
@@ -69,8 +72,15 @@ struct bcmpmu_adc {
 	int rtm_for_hk;
 	int rtm_upper_lmt;
 	int ntc_upper_boundary;
+	enum bcmpmu_adc_sig adc_ntc;
+	enum bcmpmu_adc_sig adc_patemp;
+	enum bcmpmu_adc_sig adc_32ktemp;
 	int fg_offset;
 	int fg_gain;
+	struct wake_lock wake_lock;
+	unsigned int ref_count;
+	u64 rtm_time;
+	int rtm_cnt;
 };
 
 struct bcmpmu_env {
@@ -90,6 +100,20 @@ struct bcmpmu_adc_temp_cal_data {
 	int gain;
 	int offset;
 };
+
+static DEFINE_SPINLOCK(wl_lock);
+
+u64 time_ms(void)
+{
+	struct timeval tv;
+	u64 time64;
+
+	do_gettimeofday(&tv);
+	time64 = timeval_to_ns(&tv);
+	do_div(time64, USEC_PER_SEC);
+
+	return time64;
+}
 
 static int bcmpmu_get_fg_currsmpl(struct bcmpmu *bcmpmu, int *data);
 static int bcmpmu_get_fg_fst_currsmpl(struct bcmpmu *bcmpmu, int *data);
@@ -550,9 +574,17 @@ static int bcmpmu_adc_request(struct bcmpmu *bcmpmu, struct bcmpmu_adc_req *req)
 	unsigned adcsyngpio;
 	enum PIN_FUNC adcsyngpiomux;	
 	int insurance = 100;
+	u64 current_time;
 
-	pr_hwmon(FLOW, "%s: called: ->sig %d, tm %d, flags %d\n", __func__,
+	pr_hwmon(DATA, "%s: called: ->sig %d, tm %d, flags %d\n", __func__,
 		 req->sig, req->tm, req->flags);
+	if (req->sig == PMU_ADC_NTC)
+		req->sig = padc->adc_ntc;
+	else if (req->sig == PMU_ADC_PATEMP)
+		req->sig = padc->adc_patemp;
+	else if (req->sig == PMU_ADC_32KTEMP)
+		req->sig = padc->adc_32ktemp;
+
 	if (req->flags == PMU_ADC_RAW_ONLY || 
 	    req->flags == PMU_ADC_RAW_AND_UNIT) {
 		if ((req->tm == PMU_ADC_TM_RTM_SW) || 
@@ -561,7 +593,12 @@ static int bcmpmu_adc_request(struct bcmpmu *bcmpmu, struct bcmpmu_adc_req *req)
 		else
 			timeout = padc->adcsetting->txrx_timeout;
 
+		spin_lock(&wl_lock);
+		if (padc->ref_count++ == 0)
+			wake_lock(&padc->wake_lock);
+		spin_unlock(&wl_lock);
 		mutex_lock(&padc->lock);
+
 		switch (req->tm) {
 		case PMU_ADC_TM_HK:
 			if ((req->sig == PMU_ADC_FG_CURRSMPL) ||
@@ -572,7 +609,8 @@ static int bcmpmu_adc_request(struct bcmpmu *bcmpmu, struct bcmpmu_adc_req *req)
 				do {
 					ret = update_adc_result(padc, req);
 					insurance--;
-					usleep_range(20000, 30000);
+					if (req->raw == -EINVAL && ret == 0)
+						usleep_range(20000, 30000);
 				} while (req->raw == -EINVAL &&
 					insurance &&
 					ret == 0);
@@ -580,8 +618,26 @@ static int bcmpmu_adc_request(struct bcmpmu *bcmpmu, struct bcmpmu_adc_req *req)
 			} else {
 				if (padc->rtm_upper_lmt != 0) {
 					padc->rtm_upper_lmt = 0;
-					usleep_range(10000, 20000);
+					usleep_range(20000, 30000);
+					pr_hwmon(FLOW,
+						"%s: rtm limit trigged.\n",
+						__func__);
 				}
+
+				current_time = time_ms();
+				if ((current_time - padc->rtm_time) > 8)
+					padc->rtm_cnt = 0;
+				else
+					padc->rtm_cnt++;
+				if (padc->rtm_cnt >= 5) {
+					padc->rtm_cnt = 0;
+					usleep_range(20000, 30000);
+					pr_hwmon(FLOW,
+						"%s: rtm limit reached.\n",
+						__func__);
+				}
+				padc->rtm_time = current_time;
+
 				padc->bcmpmu->write_dev_drct(padc->bcmpmu,
 					padc->ctrlmap[PMU_ADC_RTM_SEL].map,
 					padc->ctrlmap[PMU_ADC_RTM_SEL].addr,
@@ -782,6 +838,12 @@ static int bcmpmu_adc_request(struct bcmpmu *bcmpmu, struct bcmpmu_adc_req *req)
 			ret = -EINVAL;
 		}
 		mutex_unlock(&padc->lock);
+
+		spin_lock(&wl_lock);
+		BUG_ON(padc->ref_count == 0);
+		if (--padc->ref_count == 0)
+			wake_unlock(&padc->wake_lock);
+		spin_unlock(&wl_lock);
 
 		if (ret < 0)
 			return ret;
@@ -1123,11 +1185,12 @@ static int bcmpmu_get_fg_fst_currsmpl(struct bcmpmu *bcmpmu, int *data)
 			PMU_REG_FG_OFFSET0, &val, PMU_BITMASK_ALL);
 		ret |= bcmpmu->read_dev(bcmpmu,
 			PMU_REG_FG_OFFSET1, &val1, PMU_BITMASK_ALL);
-	if (ret != 0) {
+		if (ret != 0) {
 			pr_hwmon(ERROR, "%s failed to read fg offset.\n",
 				__func__);
 		return ret;
-	}
+		}
+
 		if ((val & 0x80) == 0)
 			padc->fg_offset = (int)(val1 | (val << 8));
 		else
@@ -1381,8 +1444,25 @@ static ssize_t fg_status_show(struct device *dev, struct device_attribute *attr,
 		       pfg->fg_sns_res, pfg->fg_factor);
 }
 
+static ssize_t fg_factor_show(struct device *dev, struct device_attribute *attr,
+                          char *buf)
+{
+       struct bcmpmu *bcmpmu = dev->platform_data;
+       struct bcmpmu_fg *pfg = bcmpmu->fginfo;
+       return sprintf(buf, "fg_factor=%d\n", pfg->fg_factor);
+}
+static ssize_t fg_factor_store(struct device *dev, struct device_attribute *att,
+                           const char *buf, size_t count)
+{
+       struct bcmpmu *bcmpmu = dev->platform_data;
+       struct bcmpmu_fg *pfg = bcmpmu->fginfo;
+       sscanf(buf, "%d", &pfg->fg_factor);
+       return count;
+}
+
 static DEVICE_ATTR(dbgmsk, 0644, dbgmsk_show, dbgmsk_store);
 static DEVICE_ATTR(fg_status, 0644, fg_status_show, NULL);
+static DEVICE_ATTR(fg_factor, 0644, fg_factor_show, fg_factor_store);
 #endif
 
 static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
@@ -1406,6 +1486,10 @@ static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
 	init_waitqueue_head(&padc->wait);
 	mutex_init(&padc->lock);
 	mutex_init(&padc->cal_lock);
+	wake_lock_init(&padc->wake_lock, WAKE_LOCK_SUSPEND, "adc");
+	padc->ref_count = 0;
+	padc->rtm_time = time_ms();
+	padc->rtm_cnt = 0;
 	padc->bcmpmu = bcmpmu;
 	padc->adcmap = bcmpmu_get_adcmap(bcmpmu);
 	padc->adcunit = bcmpmu_get_adcunit(bcmpmu);
@@ -1424,6 +1508,9 @@ static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
 	bcmpmu->adc_req = bcmpmu_adc_request;
 	bcmpmu->unit_get = bcmpmu_get_adcunit_data;
 	bcmpmu->unit_set = bcmpmu_set_adcunit_data;
+	padc->adc_ntc = pdata->adc_channel_ntc;
+	padc->adc_patemp = pdata->adc_channel_patemp;
+	padc->adc_32ktemp = pdata->adc_channel_32ktemp;
 
 	padc->die_temp_slope = pdata->die_temp_slope;
 	padc->die_temp_offset = pdata->die_temp_offset;
@@ -1505,10 +1592,8 @@ static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
 	pfg->bcmpmu->fg_trim_write = bcmpmu_fg_trim_write;
 	bcmpmu->fginfo = pfg;
 
-	if (pdata->support_fg) {
 		bcmpmu_fg_enable(bcmpmu, 1);
 		bcmpmu_fg_offset_cal(bcmpmu);
-	}
 
 	padc->hwmon_dev = hwmon_device_register(&pdev->dev);
 	if (IS_ERR(padc->hwmon_dev)) {
@@ -1538,7 +1623,7 @@ static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
 		padc->bcmpmu->write_dev_drct(padc->bcmpmu,
 			padc->ctrlmap[PMU_ADC_RST_CNT].map,
 			padc->ctrlmap[PMU_ADC_RST_CNT].addr,
-			0x02,
+			0x03,
 			padc->ctrlmap[PMU_ADC_RST_CNT].mask);
 	}
 	bcmpmu->register_irq(bcmpmu, PMU_IRQ_RTM_UPPER, adc_isr, padc);
@@ -1547,6 +1632,7 @@ static int __devinit bcmpmu_hwmon_probe(struct platform_device *pdev)
 #ifdef CONFIG_MFD_BCMPMU_DBG
 	ret = device_create_file(&pdev->dev, &dev_attr_dbgmsk);
 	ret = device_create_file(&pdev->dev, &dev_attr_fg_status);
+    ret = device_create_file(&pdev->dev, &dev_attr_fg_factor);
 #endif
 	return ret;
 
@@ -1565,9 +1651,18 @@ static int __devexit bcmpmu_hwmon_remove(struct platform_device *pdev)
 {
 	struct bcmpmu *bcmpmu = pdev->dev.platform_data;
 	struct bcmpmu_adc *padc = bcmpmu->adcinfo;
+	struct bcmpmu_env *penv = bcmpmu->envinfo;
+	struct bcmpmu_fg *pfg = bcmpmu->fginfo;
 
 	if (padc->rtm_for_hk == 0)
 		bcmpmu->unregister_irq(bcmpmu, PMU_IRQ_RTM_DATA_RDY);
+
+	mutex_destroy(&padc->lock);
+	mutex_destroy(&padc->cal_lock);
+	kfree(padc);
+	kfree(penv->env_regs);
+	kfree(penv);
+	kfree(pfg);
 	return 0;
 }
 

@@ -52,6 +52,7 @@ Copyright 2009 - 2011  Broadcom Corporation
 #include "csl_caph_hwctrl.h"
 #include "audio_controller.h"
 #include "audio_trace.h"
+#include "audio_caph.h"
 
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
@@ -81,6 +82,10 @@ static ktime_t ktime;
 #else
 #define START_VOIF				0x1
 #endif
+
+/* this amout of data will be zeroed out */
+/* make sure not to exceed buffer size */
+#define INIT_CAPTURE_GLITCH_MS  20 /* in ms */
 
 #define PTT_FRAME_SIZE			320
 struct _ARM2SP_PLAYBACK_t {
@@ -176,8 +181,7 @@ static Boolean endOfBuffer = FALSE;
 static const UInt16 sVoIPDataLen[] = { 0, 322, 160, 38, 166, 642, 70 };
 static CSL_VP_Mode_AMR_t prev_amr_mode = (CSL_VP_Mode_AMR_t) 0xffff;
 static Boolean telephony_amr_if2;
-static int wait_cnt, waitcnt_thold = 2;
-static UInt32 isDTXEnabled = 0;
+static UInt32 isDTXEnabled;
 
 static struct work_struct voip_work;
 static struct workqueue_struct *voip_workqueue; /* init to NULL */
@@ -185,6 +189,7 @@ static DJB_InputFrame *djbBuf; /* init to NULL */
 static Boolean inVoLTECall = FALSE;
 static AUDDRV_VOIF_t voifDrv = { 0 };
 static Boolean voif_enabled; /* init to 0 */
+static Boolean init_mic_data_zeroed = FALSE;
 
 /* Private function prototypes */
 
@@ -429,6 +434,7 @@ AUDIO_DRIVER_HANDLE_t AUDIO_DRIVER_Open(AUDIO_DRIVER_TYPE_t drv_type)
 		break;
 
 	case AUDIO_DRIVER_PTT:
+#if defined(CONFIG_BCM_MODEM)
 		if (pttLockInit == FALSE) {
 			spin_lock_init(&audio_ptt_driver.audio_lock);
 			pttLockInit = TRUE;
@@ -437,6 +443,7 @@ AUDIO_DRIVER_HANDLE_t AUDIO_DRIVER_Open(AUDIO_DRIVER_TYPE_t drv_type)
 		audio_ptt_driver.aud_drv_p = aud_drv;
 		spin_unlock_irqrestore(&audio_ptt_driver.audio_lock, flags);
 		CSL_RegisterPTTStatusHandler(Ptt_FillDL_CB);
+#endif
 		break;
 
 	default:
@@ -489,12 +496,14 @@ void AUDIO_DRIVER_Close(AUDIO_DRIVER_HANDLE_t drv_handle)
 		break;
 	case AUDIO_DRIVER_PTT:
 		{
+#if defined(CONFIG_BCM_MODEM)
 			CSL_RegisterPTTStatusHandler(NULL);
 			spin_lock_irqsave(&audio_ptt_driver.audio_lock, flags);
 			audio_ptt_driver.aud_drv_p = NULL;
 			spin_unlock_irqrestore(
 				&audio_ptt_driver.audio_lock,
 				flags);
+#endif
 		}
 		break;
 	default:
@@ -746,6 +755,7 @@ static Result_t AUDIO_DRIVER_ProcessRenderCmd(AUDIO_DDRIVER_t *aud_drv,
 			open->start->stop->start in android */
 			csl_audio_render_deinit(aud_drv->stream_id);
 			ResetPlaybackStreamHandle(aud_drv->stream_id);
+			aud_drv->stream_id = 0;
 		}
 		break;
 	case AUDIO_DRIVER_PAUSE:
@@ -765,11 +775,19 @@ static Result_t AUDIO_DRIVER_ProcessRenderCmd(AUDIO_DDRIVER_t *aud_drv,
 	case AUDIO_DRIVER_BUFFER_READY:
 		{
 			/*notify render a new buffer is ready*/
+			BRCM_AUDIO_Param_BufferReady_t *param_tmp = pCtrlStruct;
+			int offset = 0, size = 0;
+
 			result_code = RESULT_OK;
+			if (param_tmp != NULL) {
+				offset = param_tmp->offset;
+				size = param_tmp->size;
+			}
+
 			if (aud_drv->stream_id) {
 				result_code =
 				csl_audio_render_buffer_ready
-				(aud_drv->stream_id);
+				(aud_drv->stream_id, size, offset);
 			}
 		}
 		break;
@@ -1176,19 +1194,6 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 			spin_unlock_irqrestore(&audio_capture_driver
 				.audio_lock, flags);
 
-			if (AUDCTRL_InVoiceCall()) {
-				wait_cnt = 100;
-				waitcnt_thold = 2;
-			} else {
-				if (num_frames >= 3)
-					waitcnt_thold = 2;
-				else if (num_frames == 2)
-					waitcnt_thold = 4;
-				else
-					waitcnt_thold = 8;
-				wait_cnt = 0;
-			}
-
 			memset(&capt_start, 0, sizeof(VOCAPTURE_start_t));
 			capt_start.recordMode = recordMode;
 			capt_start.samplingRate = aud_drv->sample_rate;
@@ -1220,8 +1225,8 @@ static Result_t AUDIO_DRIVER_ProcessCaptureVoiceCmd(AUDIO_DDRIVER_t *aud_drv,
 			result_code = RESULT_OK;
 			index = 1;	/* reset */
 			endOfBuffer = FALSE;
-			wait_cnt = 0;
 
+			init_mic_data_zeroed = FALSE;
 			/* de-init during stop as the android sequence is
 			open->start->stop->start */
 			spin_lock_irqsave(
@@ -1263,6 +1268,7 @@ static Result_t AUDIO_DRIVER_ProcessPttCmd(AUDIO_DDRIVER_t *aud_drv,
 	aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_ProcessPttCmd::%d\n",
 			ctrl_cmd);
 
+#if defined(CONFIG_BCM_MODEM)
 	switch (ctrl_cmd) {
 	case AUDIO_DRIVER_START:
 	{
@@ -1318,6 +1324,7 @@ static Result_t AUDIO_DRIVER_ProcessPttCmd(AUDIO_DDRIVER_t *aud_drv,
 	break;
 	}
 
+#endif
 	return result_code;
 }
 
@@ -1341,6 +1348,7 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 	aTrace(LOG_AUDIO_DRIVER, "AUDIO_DRIVER_ProcessVoIPCmd::%d\n",
 			ctrl_cmd);
 
+#if defined(CONFIG_BCM_MODEM)
 	switch (ctrl_cmd) {
 	case AUDIO_DRIVER_START:
 	{
@@ -1354,7 +1362,6 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 			isDTXEnabled =
 			    ((voip_data_t *) pCtrlStruct)->
 			    isDTXEnabled;
-	
 		}
 
 		if (codec_type == 0)
@@ -1387,7 +1394,6 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 		/* VoLTE call */
 		inVoLTECall = ((voip_data_t *) pCtrlStruct)->isVoLTE;
 		if (inVoLTECall) {
-#ifdef CONFIG_BCM_MODEM
 			if ((aud_drv->voip_config.codec_type & CSL_VOIP_AMR475)
 			    || (aud_drv->voip_config.codec_type &
 				CSL_VOIP_AMR_WB_MODE_7k)) {
@@ -1427,10 +1433,6 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 		prev_amr_mode = encode_amr_mode;
 		VPRIPCMDQ_DSP_AMR_RUN((UInt16) encode_amr_mode,
 			      telephony_amr_if2, FALSE);
-#else
-		aTrace(LOG_AUDIO_DRIVER,
-			"AUDIO_DRIVER_ProcessVoIPCmd : VoLTE start dummy for AP only (no DSP)\n");
-#endif
 
 		result_code = RESULT_OK;
 	}	else
@@ -1539,17 +1541,21 @@ static Result_t AUDIO_DRIVER_ProcessVoIPCmd(AUDIO_DDRIVER_t *aud_drv,
 			}
 
 			aTrace(LOG_AUDIO_DRIVER,
-					"AUDDRV_VOIP_SET_DTX: %d\r\n", (int)isDTXEnabled);
+				"AUDDRV_VOIP_SET_DTX: %d\n", (int)isDTXEnabled);
 			result_code = RESULT_OK;
 		}
 		break;
-	
+
 
 	default:
 		aWarn(
 			"AUDIO_DRIVER_ProcessVoIPCmd::Unsupported command\n");
 	break;
 	}
+#else
+	aTrace(LOG_AUDIO_DRIVER,
+			"AUDIO_DRIVER_ProcessVoIPCmd : dummy for AP only");
+#endif
 
 	return result_code;
 }
@@ -2265,15 +2271,7 @@ void VPU_Capture_Request(UInt16 buf_index)
 			"VPU_Capture_Request:: Spurious call back\n");
 		return;
 	}
-	/* get rid of HW glitch in VPU recording */
-	if (wait_cnt < waitcnt_thold) {
-		spin_unlock_irqrestore(&audio_capture_driver.audio_lock, flags);
-		aTrace(LOG_AUDIO_DRIVER,
-			"VPU_Capture_Request:: wait_cnt = %d, thold=%d\n",
-			wait_cnt, waitcnt_thold);
-		wait_cnt++;
-		return;
-	}
+
 	/*aTrace(LOG_AUDIO_DRIVER,
 		"VPU_Capture_Request:: buf_index\n", buf_index);
 	aTrace(LOG_AUDIO_DRIVER, " aud_drv->write_index = %d\n",
@@ -2292,6 +2290,12 @@ void VPU_Capture_Request(UInt16 buf_index)
 	/* update the write index */
 	dest_index += recv_size;
 #endif
+	if (init_mic_data_zeroed == FALSE) {
+		memset(pdest_buf, 0,
+			INIT_CAPTURE_GLITCH_MS * aud_drv->sample_rate
+			* sizeof(UInt16) / 1000);
+		init_mic_data_zeroed = TRUE;
+	}
 	if (dest_index >= aud_drv->ring_buffer_size) {
 		dest_index -= aud_drv->ring_buffer_size;
 		endOfBuffer = TRUE;
@@ -2450,9 +2454,9 @@ static Boolean VOIP_DumpUL_CB(UInt8 *pSrc, UInt32 amrMode)
 				"VOIP_DumpUL_CB :: Invalid codecType = 0x%x\n",
 				codecType);
 	else {
-		aTrace(LOG_AUDIO_DRIVER,
-			"VOIP_DumpUL_CB :: codecType = 0x%x, index = %d\n",
-			codecType, index);
+//		aTrace(LOG_AUDIO_DRIVER,
+//			"VOIP_DumpUL_CB :: codecType = 0x%x, index = %d\n",
+//			codecType, index);
 
 		if (inVoLTECall) {
 
@@ -2567,7 +2571,7 @@ static Boolean VOIP_FillDL_CB(UInt32 nFrames)
 		else
 			dtx_mode = FALSE;
 #endif
-	
+
 #if defined(CONFIG_BCM_MODEM)
 	VoIP_StartMainAMRDecodeEncode((CSL_VP_Mode_AMR_t) aud_drv->voip_config.
 				      codec_type, (UInt8 *) aud_drv->tmp_buffer,
@@ -2685,11 +2689,13 @@ static void Ptt_FillDL_CB(UInt32 buf_index, UInt32 ptt_flag, UInt32 int_rate)
 		return;
 	}
 	aTrace(LOG_AUDIO_DRIVER, "Int rate-%ld\n", int_rate);
+#if defined(CONFIG_BCM_MODEM)
 	buf_ptr = CSL_GetULPTTBuffer(buf_index);
 	audio_ptt_driver.aud_drv_p->ptt_config.pPttDLCallback(
 		audio_ptt_driver.aud_drv_p->ptt_config.pPttCBPrivate , buf_ptr,
 		PTT_FRAME_SIZE);
 	spin_unlock_irqrestore(&audio_ptt_driver.audio_lock, flags);
+#endif
 	return;
 }
 

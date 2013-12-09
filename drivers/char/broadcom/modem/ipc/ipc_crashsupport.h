@@ -13,6 +13,8 @@
  * other than the GPL, without Broadcom's express prior written consent.
  */
 
+#include <linux/vmalloc.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

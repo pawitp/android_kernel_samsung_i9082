@@ -1088,21 +1088,22 @@ static int setup_v3d_clock(void)
 	}
 
 	v3d_clk = clk_get(NULL, "v3d_axi_clk");
-	if (!v3d_clk) {
+	if (IS_ERR(v3d_clk)) {
 		KLOG_E("%s: error get clock\n", __func__);
-		return -EIO;
+		return PTR_ERR(v3d_clk);
 	}
 
 	rc = clk_enable(v3d_clk);
 	if (rc) {
 		KLOG_E("%s: error enable clock\n", __func__);
-		return -EIO;
+		clk_put(v3d_clk);
+		return rc;
 	}
 
 	rate = clk_get_rate(v3d_clk);
 	printk("v3d_clk_clk rate %lu\n", rate);
 
-	return (rc);
+	return 0;
 }
 
 static bool v3d_is_not_idle(void)

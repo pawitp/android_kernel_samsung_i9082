@@ -46,6 +46,8 @@
 #define SPA_DBG_LEVEL2 2U
 #define SPA_DBG_LEVEL3 3U 
 #define SPA_DBG_LEVEL4 4U // maximum log
+/* #define SPA_DBG_LEVEL_INTERNAL SPA_DBG_LEVEL4 */
+/* #define SPA_DBG_LEVEL_OUT SPA_DBG_LEVEL4 */
 #define SPA_DBG_LEVEL_INTERNAL SPA_DBG_LEVEL3
 #define SPA_DBG_LEVEL_OUT SPA_DBG_LEVEL1
 #define SPA_DBG_LOG_SIZE	4096*100
@@ -63,8 +65,16 @@
 		} \
 	} while(0)
 
+#if defined(CONFIG_USB_SWITCH_FSA9485)	
+extern int get_acc_status();
+#endif
+
 static char spa_log_buffer[SPA_DBG_LOG_SIZE];
 static unsigned int spa_log_offset=0;
+
+#define SPA_PROBE_STATUS_BEGIN	0
+#define SPA_PROBE_STATUS_READY	1
+static unsigned char probe_status = SPA_PROBE_STATUS_BEGIN;
 
 static void spa_log_internal(const char *log, ...)
 {
@@ -539,6 +549,7 @@ static int spa_back_charging_work(struct work_struct *work)
 	}
 
 	pr_spa_dbg(LEVEL3, "%s : leave \n", __func__);
+	return ret;
 }
 #endif
 
@@ -561,7 +572,8 @@ static int spa_set_charge(struct spa_power_desc *spa_power_iter, unsigned int ac
 			spa_power_iter->charger_info.charging_current=pdata->charging_cur_wall;
 		}
 		else if(spa_power_iter->charger_info.charger_type == POWER_SUPPLY_TYPE_USB ||
-				spa_power_iter->charger_info.charger_type == POWER_SUPPLY_TYPE_USB_CDP)
+				spa_power_iter->charger_info.charger_type == POWER_SUPPLY_TYPE_USB_CDP ||
+				spa_power_iter->charger_info.charger_type == POWER_SUPPLY_TYPE_USB_ACA)
 		{
 			spa_power_iter->charger_info.charging_current=pdata->charging_cur_usb;
 		}
@@ -825,7 +837,7 @@ static int spa_get_batt_voltage(struct spa_power_desc *spa_power_iter)
 	do
 	{
 		ps->get_property(ps, POWER_SUPPLY_PROP_VOLTAGE_NOW, &value);
-		if(value.intval < 2800 || value.intval > 4200)
+		if(value.intval < 2800 || value.intval > 4500)
 		{
 			pass_cond=0;
 		}
@@ -1174,7 +1186,7 @@ static void spa_stop_charge_timer(SPA_CHARGING_STATUS_T endtype, void *data)
 
 static void spa_expire_charge_timer(struct work_struct *work)
 {
-	struct spa_power_desc *spa_power_iter = container_of(work, struct spa_power_desc, spa_expire_charge_work);
+	struct spa_power_desc *spa_power_iter = container_of(work, struct spa_power_desc, spa_expire_charge_work.work);
 
 	volatile unsigned int times_expired=0;
 
@@ -1331,6 +1343,13 @@ static void spa_update_power_supply_charger(struct spa_power_desc *spa_power_ite
 		ps->set_property(ps, POWER_SUPPLY_PROP_ONLINE, &value);
 		pr_spa_dbg(LEVEL1, "%s : Charger Online : USB TYPE\n", __func__);
 	}
+	else if(spa_power_iter->charger_info.charger_type == POWER_SUPPLY_TYPE_USB_ACA)
+	{
+		ps = power_supply_get_by_name(POWER_SUPPLY_WALL);
+		value.intval = 1;
+		ps->set_property(ps, POWER_SUPPLY_PROP_ONLINE, &value);
+		pr_spa_dbg(LEVEL1, "%s : Charger Online : ACA TYPE\n", __func__);
+	}
 	else
 	{
 		ps = power_supply_get_by_name(POWER_SUPPLY_WALL);
@@ -1376,7 +1395,10 @@ static void spa_batt_work(struct work_struct *work)
 	struct spa_power_data *pdata = spa_power_iter->pdata;
 #endif
 
-	pr_spa_dbg(LEVEL4,"%s : enter \n", __func__);
+	pr_spa_dbg(LEVEL4, "%s : enter\n", __func__);
+
+	if (!wake_lock_active(&spa_power_iter->batt_wakelock))
+		wake_lock(&spa_power_iter->batt_wakelock);
 
 	if(spa_power_iter->dbg_simul != 1)
 	{
@@ -1470,7 +1492,11 @@ static void spa_batt_work(struct work_struct *work)
 
 	schedule_delayed_work(&spa_power_iter->battery_work, 
 			msecs_to_jiffies(spa_power_iter->batt_info.update_interval));
-	pr_spa_dbg(LEVEL4, "%s : leave \n", __func__);
+
+	if (wake_lock_active(&spa_power_iter->batt_wakelock))
+		wake_unlock(&spa_power_iter->batt_wakelock);
+
+	pr_spa_dbg(LEVEL4, "%s : leave\n", __func__);
 }
 
 int spa_event_handler(int evt, void *data)
@@ -1479,7 +1505,7 @@ int spa_event_handler(int evt, void *data)
 
 	pr_spa_dbg(LEVEL4,"%s : enter \n", __func__);
 
-	if(spa_power_iter == NULL)
+	if(spa_power_iter == NULL || probe_status != SPA_PROBE_STATUS_READY )
 	{ // not initialised yet. queue the event to be handled surely.
 		pr_spa_dbg(LEVEL2, "%s : event has come before init.\n",__func__);	
 		return -1;
@@ -1640,7 +1666,7 @@ static void spa_init_config(struct spa_power_desc *spa_power_iter)
 	struct spa_power_data *pdata = (struct spa_power_data *)spa_power_iter->pdata;
 	// charger init values
 	spa_power_iter->charger_info.charger_name=pdata->charger_name;
-	//spa_power_iter->charger_info.charger_name="bcm59039_charger";
+	//spa_power_iter->charger_info.charger_name="bcm59054_charger";
 	spa_power_iter->charger_info.charger_type = POWER_SUPPLY_TYPE_BATTERY;
 	spa_power_iter->charger_info.charging_current=0;
 	spa_power_iter->charger_info.eoc_current = pdata->eoc_current;
@@ -1749,15 +1775,20 @@ static void spa_delayed_init_work(struct work_struct *work)
 
 	if(spa_power_iter->charger_info.charger_type != POWER_SUPPLY_TYPE_BATTERY)
 	{
+#if defined(CONFIG_USB_SWITCH_FSA9485)	
+		if(get_acc_status())
+			spa_power_iter->charger_info.charger_type = POWER_SUPPLY_TYPE_USB_ACA;
+
+#endif		
 		ret=spa_event_handler(SPA_EVT_CHARGER, (void *)(spa_power_iter->charger_info.charger_type));
 	}
-
+		pr_spa_dbg(LEVEL1, "%s : test1\n",__func__);
 		// dummy, temporary before actual charger detection in case of power off charging
 		if(spa_power_iter->lp_charging == 1)
 		{
 			spa_power_iter->charger_info.charger_type = 1;
 		}
-
+		pr_spa_dbg(LEVEL1, "%s : test2\n",__func__);
 #if defined(CONFIG_SEC_BATT_EXT_ATTRS)
 	{
 		int i=0;
@@ -1767,6 +1798,7 @@ static void spa_delayed_init_work(struct work_struct *work)
 			}
 		}
 #endif
+		pr_spa_dbg(LEVEL1, "%s : test3\n",__func__);
 	 schedule_delayed_work(&spa_power_iter->battery_work, 
 			msecs_to_jiffies(0));
 		schedule_delayed_work(&spa_power_iter->delayed_init_work, 
@@ -1789,7 +1821,7 @@ extern int spa_ps_init(struct platform_device *pdev);
 static int spa_power_probe(struct platform_device *pdev)
 {
 	int ret=0;
-	struct spa_power_desc *spa_power_iter;
+	struct spa_power_desc *spa_power_iter=NULL;
 
 	pr_spa_dbg(LEVEL3,"%s : enter \n", __func__);
 
@@ -1809,8 +1841,12 @@ static int spa_power_probe(struct platform_device *pdev)
 	spa_power_iter->pdata=(struct spa_power_data *)pdev->dev.platform_data;
 
 	// Initialsing wakelock
-	wake_lock_init(&spa_power_iter->spa_wakelock, WAKE_LOCK_SUSPEND, "spa_charge");
-	wake_lock_init(&spa_power_iter->acc_wakelock, WAKE_LOCK_SUSPEND, "acc_wakelock");
+	wake_lock_init(&spa_power_iter->spa_wakelock,
+			WAKE_LOCK_SUSPEND, "spa_charge");
+	wake_lock_init(&spa_power_iter->acc_wakelock,
+			WAKE_LOCK_SUSPEND, "acc_wakelock");
+	wake_lock_init(&spa_power_iter->batt_wakelock,
+			WAKE_LOCK_SUSPEND, "spa_batt");
 
 	// Create workqueue
 	spa_power_iter->spa_workqueue = create_singlethread_workqueue("spa_power_wq");
@@ -1849,6 +1885,8 @@ static int spa_power_probe(struct platform_device *pdev)
 	// schedule_delayed_work(&spa_power_iter->battery_work, 
 	//		msecs_to_jiffies(60));
 
+	probe_status = SPA_PROBE_STATUS_READY;
+	
 	goto label_SPA_POWER_PROBE_SUCCESS;
 
 label_SPA_POWER_PROBE_ERROR:
@@ -1874,6 +1912,7 @@ static void __devexit spa_power_remove(struct platform_device *pdev)
 	destroy_workqueue(spa_power_iter->spa_workqueue);
 
 	wake_lock_destroy(&spa_power_iter->spa_wakelock);
+	wake_lock_destroy(&spa_power_iter->batt_wakelock);
 
 	{
 		int i=0;
@@ -1889,8 +1928,13 @@ static void __devexit spa_power_remove(struct platform_device *pdev)
 
 static int spa_power_suspend(struct platform_device *pdev, pm_message_t state)
 {
+	struct spa_power_desc *spa_power_iter = g_spa_power;
+
 	pr_spa_dbg(LEVEL4,"%s : enter \n", __func__);
-	// To Do : 
+	if(spa_power_iter)
+	{
+		cancel_delayed_work_sync(&spa_power_iter->battery_work);
+	}
 	pr_spa_dbg(LEVEL4, "%s : leave \n", __func__);
 	return 0;
 }

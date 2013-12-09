@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/PowerManager.h
+*	@file	include/linux/broadcom/PowerManager.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -44,17 +44,20 @@
 #define PM_CMD_GETEVENT            0x83
 #define PM_CMD_LAST                0x83
 
-typedef enum {			/* If you change this, please update PM_PowerLevelTable as well */
-	    PM_PWR_OFF,		/* Virtual level where everything is powered off */
-	PM_PWR_CHARGING,	/* ARM sleep mode enabled, Wireless powered off completely */
-	PM_PWR_STANDBY,		/* ARM sleep mode enabled, Wireless power save on */
-	PM_PWR_HIGH,		/* ARM Running at highest rate, Wireless power save on */
-	PM_PWR_FULL,		/* ARM Running at highest rate, Wireless power save off */
+typedef enum {
+	/* If you change this, please update PM_PowerLevelTable as well */
+	PM_PWR_OFF,	/* Virtual level where everything is powered off */
+	PM_PWR_CHARGING,
+		/* ARM sleep mode enabled, Wireless powered off completely */
+	PM_PWR_STANDBY,	/* ARM sleep mode enabled, Wireless power save on */
+	PM_PWR_HIGH,/* ARM Running at highest rate, Wireless power save on */
+	PM_PWR_FULL,/* ARM Running at highest rate, Wireless power save off */
 
 	PM_NUM_POWER_LEVELS	/* Number of system power levels */
 } PM_PowerLevel;
 
-#define PM_BATT_MAX_LEVELS   5	/* number of quantization levels in battery level table */
+#define PM_BATT_MAX_LEVELS   5
+/* number of quantization levels in battery level table */
 
 typedef struct {
 	int battLevel;		/* battery bar level */
@@ -76,8 +79,9 @@ typedef enum {
 	PM_EVENT_BATTMGRTASK,	/* Battery Manager event */
 } PM_Event;
 
-typedef enum {			/* If you change this, please update PM_ComponentTable as well */
-	    PM_COMP_LCD = 0,
+typedef enum {
+	/* If you change this, please update PM_ComponentTable as well */
+	PM_COMP_LCD = 0,
 	PM_COMP_CAMERA,
 	PM_COMP_USB,
 	PM_COMP_ETHERNET,
@@ -89,10 +93,14 @@ typedef enum {			/* If you change this, please update PM_ComponentTable as well 
 	PM_NUM_COMPONENTS
 } PM_Component;
 
-typedef enum {			/* If you change this, please update PM_CompPowerLevelTable as well */
-	    PM_COMP_PWR_OFF,	/* Uninitialized and power off.  Should not draw any power. */
-	PM_COMP_PWR_STANDBY,	/* Device in low power state or possibly off.  Allowed to interrupt host. */
-	PM_COMP_PWR_ON,		/* Fully powered on and initialized. */
+typedef enum {
+	/* If you change this, please update PM_CompPowerLevelTable as well */
+	PM_COMP_PWR_OFF,/* Uninitialized and power off.
+	Should not draw any power. */
+	PM_COMP_PWR_STANDBY,
+	/* Device in low power state or possibly off.
+	Allowed to interrupt host. */
+	PM_COMP_PWR_ON,	/* Fully powered on and initialized. */
 } PM_CompPowerLevel;
 
 typedef struct {
@@ -126,13 +134,19 @@ void pm_enable_early_shutoff(void);
 
 #else
 
-#define pm_submit_event(event, data1, data2, data3) ((void)(event), (void)(data1), (void)(data2), (void)(data3), 0)
-#define pm_submit_event_and_wait(event, data1, data2, data3) ((void)(event), (void)(data1), (void)(data2), (void)(data3), 0)
-#define pm_submit_delayed_event(event, delay, data1, data2, data3) ((void)(event), (void)(delay), (void)(data1), (void)(data2), (void)(data3), 0)
+#define pm_submit_event(event, data1, data2, data3)\
+	((void)(event), (void)(data1), (void)(data2), (void)(data3), 0)
+#define pm_submit_event_and_wait(event, data1, data2, data3)\
+	((void)(event), (void)(data1), (void)(data2), (void)(data3), 0)
+#define pm_submit_delayed_event(event, delay, data1, data2, data3)\
+	((void)(event), (void)(delay), (void)(data1), (void)(data2),\
+	(void)(data3), 0)
 #define pm_status_event() (0)
 
-#define pm_register_component(component, ops) ((ops)->update_power_level(PM_COMP_PWR_ON, PM_PWR_FULL))
-#define pm_unregister_component(component, ops) ((ops)->update_power_level(PM_COMP_PWR_ON, PM_PWR_OFF))
+#define pm_register_component(component, ops)\
+	((ops)->update_power_level(PM_COMP_PWR_ON, PM_PWR_FULL))
+#define pm_unregister_component(component, ops)\
+	((ops)->update_power_level(PM_COMP_PWR_ON, PM_PWR_OFF))
 
 #endif
 

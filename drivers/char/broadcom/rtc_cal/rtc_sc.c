@@ -25,6 +25,7 @@
 #include <linux/mfd/bcm590xx/bcm59055_A0.h>
 #include <linux/mfd/bcm590xx/core.h>
 #include <linux/io.h>
+#include <linux/timer.h>
 #include <linux/broadcom/resultcode.h>
 #include "mobcom_types.h"
 #include "taskmsgs.h"
@@ -65,6 +66,7 @@ static UInt32 rtc_sc_temp = RTCSC_INVALID_TEMP;
 
 static UInt8 RTCSCClientId = RTCSC_CLIENT_ID;
 static int first_time = 1;
+static struct timer_list rtcsc_timer;
 
 static RTCSC_Config rtcsc_configCB = (RTCSC_Config) 0;
 
@@ -299,26 +301,53 @@ void HandleRTCSCEventRspCb(RPC_Msg_t *pMsg,
 	RPC_SYSFreeResultDataBuffer(dataBufHandle);
 }
 
-static void HandleRTCSCCPResetCb(RPC_CPResetEvent_t event, UInt8 clientID)
+static void HandleRTCSCRPCNotification(
+	struct RpcNotificationEvent_t event, UInt8 clientID)
 {
-	/* **FIXME** MAG - what is needed to do here ? */
-	pr_info("HandleRTCSCCPResetCb: event %s client %d\n",
-		RPC_CPRESET_START == event ?
+	switch (event.event) {
+	case RPC_CPRESET_EVT:
+		/* **FIXME** MAG - what is needed to do here ? */
+		pr_info("HandleRTCSCRPCNotification: event %s client %d\n",
+		RPC_CPRESET_START == event.param ?
 		"RPC_CPRESET_START" : "RPC_CPRESET_COMPLETE", clientID);
 
 	if (clientID != RTCSCClientId) {
-		pr_err("HandleRTCSCCPResetCb wrong client ID\n");
+		pr_err("HandleRTCSCRPCNotification wrong client ID\n");
 		pr_err("  expected %d got %d\n", RTCSCClientId, clientID);
 	}
 
 	/* for now, just ack that we're ready... */
-	if (RPC_CPRESET_START == event)
+	if (RPC_CPRESET_START == event.param)
 		RPC_AckCPReset(RTCSCClientId);
+
+		break;
+	default:
+		pr_err(
+			"HandleRTCSCRPCNotification: Unsupported event %d\n",
+			(int) event.event);
+		break;
+	}
+}
+
+static void rtcsc_timer_function(unsigned long data)
+{
+	UInt32 ratio;
+
+	/* Get RTC ratio and adjust */
+	RPC_GetProperty(RPC_PROP_CP_RTC_RATIO, &ratio);
+/* printk(KERN_DEBUG "rtcsc_timer_function: ratio=%d\n", (int) ratio); */
+	bcm_rtc_cal_ratio(ratio, 0);
+
+	/* reschedule for 2 hours */
+	mod_timer(&rtcsc_timer,
+		(jiffies + msecs_to_jiffies(7200000)));
+	return;
 }
 
 void RTCSC_InitRpc(void)
 {
 
+	/* printk(KERN_DEBUG "RTCSC_InitRpc\n"); */
 	if (first_time) {
 
 		RPC_InitParams_t params = { 0 };
@@ -329,7 +358,7 @@ void RTCSC_InitRpc(void)
 				     / sizeof(RPC_XdrInfo_t));
 		params.xdrtbl = RTCSC_Prim_dscrm;
 		params.respCb = HandleRTCSCEventRspCb;
-		params.cpResetCb = HandleRTCSCCPResetCb;
+		params.rpcNtfFn = HandleRTCSCRPCNotification;
 
 		handle = RPC_SYS_RegisterClient(&params);
 		RTCSCClientId = RTCSC_CLIENT_ID;
@@ -338,5 +367,13 @@ void RTCSC_InitRpc(void)
 		first_time = 0;
 		rtc_sc_isupdated = FALSE;
 
+		init_timer(&rtcsc_timer);
+		rtcsc_timer.function = rtcsc_timer_function;
+		rtcsc_timer.data = 0;
+		/* schedule for 2 hours */
+		mod_timer(&rtcsc_timer,
+			(jiffies + msecs_to_jiffies(7200000)));
 	}
 }
+
+

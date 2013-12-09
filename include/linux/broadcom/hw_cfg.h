@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/hw_cfg.h
+*	@file	include/linux/broadcom/hw_cfg.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -13,17 +13,19 @@
 * other than the GPL, without Broadcom's express prior written consent.
 *******************************************************************************/
 
-/* --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
 /* Design-specific hardware configuration interface file. */
-/* --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------- */
 #ifndef _HW_CFG_H_
 #define _HW_CFG_H_
 
 /* ---- Include Files ---------------------------------------- */
 /* ---- Constants and Types ---------------------------------- */
 
-/* GPIO Assignments - pins not showing up here are either preallocated (e.g. keyboard 0-3, 8-14), */
-/* or used by the hardware internally (e.g. BT, codec), or are unassigned (e.g. 31). */
+/* GPIO Assignments - pins not showing up here are either preallocated
+ (e.g. keyboard 0-3, 8-14), */
+/* or used by the hardware internally (e.g. BT, codec), or are unassigned
+ (e.g. 31). */
 
 /* output: wl host ctrlr. write 0 to pull down */
 #define HW_GPIO_SDIOH_PIN_1               32
@@ -157,7 +159,7 @@
 #define HW_GPIO_PIN_LCD_BL_PWM                              17
 
 /* used by vclcd.c */
-#define HW_LCD_BACKLIGHT_PIN	                            HW_GPIO_PIN_LCD_BL_PWM
+#define HW_LCD_BACKLIGHT_PIN	HW_GPIO_PIN_LCD_BL_PWM
 
 /* ---- Variable Externs ------------------------------------- */
 /* ---- Function Prototypes ---------------------------------- */

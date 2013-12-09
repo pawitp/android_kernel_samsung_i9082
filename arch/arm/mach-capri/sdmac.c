@@ -31,13 +31,18 @@
 #include <linux/hugetlb.h>
 #include <linux/version.h>
 #include <linux/sched.h>
+#include <linux/clk.h>
+#include <linux/delay.h>
+#include <linux/workqueue.h>
 
 #include <linux/mm.h>
 #include <linux/pfn.h>
 #include <linux/atomic.h>
 #include <mach/sdma.h>
+#include <mach/clock.h>
 #include <chal/chal_dma.h>
 #include <chal/chal_dmux.h>
+#include <plat/clock.h>
 
 #ifdef CONFIG_BCM_KNLLOG_IRQ
 #include <linux/broadcom/knllog.h>
@@ -58,6 +63,9 @@
 #define SECURE_FLAG 0
 #endif
 
+/* Delay after which SDMAC work is scheduled */
+#define SDMAC_WORK_DELAY_MS 10
+
 /* ---- Private Variables ------------------------------------------------ */
 
 static SDMA_Global_t gSDMA;
@@ -66,6 +74,9 @@ static CHAL_HANDLE gSecDmaHandle;
 static CHAL_HANDLE gOpenDmaHandle;
 spinlock_t gHwDmaLock;		/* acquired when starting DMA channel */
 spinlock_t gDmaDevLock;
+static bool dma_work_resched;
+static struct clk *dma_axi_clk;	       /* DMA AXI clock */
+static struct delayed_work sdmac_work; /* SDMAC work structure */
 
 #define DEVICE_MEM_TO_MEM(n) \
 { \
@@ -103,6 +114,47 @@ spinlock_t gDmaDevLock;
 	.peripheralId = 0, \
 }
 
+#if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)||defined(CONFIG_MACH_CAPRI_SS_CRATER_CMCC)		
+
+#define DEVICE_SSPI_DEV_TO_MEM(n, periph_id) \
+{ \
+	.flags = SECURE_FLAG, \
+	.name = n, \
+	.config = \
+	{ \
+		.dstBurstLen	 = CHAL_DMA_BURST_LEN_4, \
+		.dstBurstSize	 = CHAL_DMA_BURST_SIZE_4_BYTES, \
+		.dstEndpoint	 = CHAL_DMA_ENDPOINT_MEMORY, \
+		.srcBurstLen	 = CHAL_DMA_BURST_LEN_4, \
+		.srcBurstSize	 = CHAL_DMA_BURST_SIZE_4_BYTES, \
+		.srcEndpoint	 = CHAL_DMA_ENDPOINT_PERIPHERAL, \
+		.descType		= CHAL_DMA_DESC_LIST, \
+		.alwaysBurst	 = TRUE, \
+	}, \
+	.peripheralId = periph_id, \
+}
+
+#define DEVICE_SSPI_MEM_TO_DEV(n, periph_id) \
+{ \
+	.flags = SECURE_FLAG, \
+	.name = n, \
+	.config = \
+	{ \
+		.dstBurstLen	 = CHAL_DMA_BURST_LEN_4, \
+		.dstBurstSize	 = CHAL_DMA_BURST_SIZE_4_BYTES, \
+		.dstEndpoint	 = CHAL_DMA_ENDPOINT_PERIPHERAL, \
+		.srcBurstLen	 = CHAL_DMA_BURST_LEN_4, \
+		.srcBurstSize	 = CHAL_DMA_BURST_SIZE_4_BYTES, \
+		.srcEndpoint	 = CHAL_DMA_ENDPOINT_MEMORY, \
+		.descType		 = CHAL_DMA_DESC_LIST, \
+		.alwaysBurst	 = TRUE, \
+	}, \
+	.peripheralId = periph_id, \
+}
+
+
+#else
+
 #define DEVICE_SSPI_DEV_TO_MEM(n, periph_id) \
 { \
 	.flags = SECURE_FLAG, \
@@ -138,6 +190,7 @@ spinlock_t gDmaDevLock;
 	}, \
 	.peripheralId = periph_id, \
 }
+#endif
 
 SDMA_DeviceAttribute_t SDMA_gDeviceAttribute[DMA_NUM_DEVICE_ENTRIES] = {
 	[DMA_DEVICE_MEM_TO_MEM] = DEVICE_MEM_TO_MEM("mem-to-mem"),
@@ -149,6 +202,50 @@ SDMA_DeviceAttribute_t SDMA_gDeviceAttribute[DMA_NUM_DEVICE_ENTRIES] = {
 	[DMA_DEVICE_MEM_TO_MEM_6] = DEVICE_MEM_TO_MEM("mem-to-mem6"),
 	[DMA_DEVICE_MEM_TO_MEM_7] = DEVICE_MEM_TO_MEM("mem-to-mem7"),
 	[DMA_DEVICE_MEM_TO_MEM_32] = DEVICE_MEM_TO_MEM_32("mem-to-mem32"),
+	[DMA_DEVICE_MEM_TO_MEM_16BIT] = {
+					.flags = SECURE_FLAG,
+					.name = "mem-to-mem16",
+					.config = {
+						.dstBurstLen =
+						CHAL_DMA_BURST_LEN_8,
+						.dstBurstSize =
+						CHAL_DMA_BURST_SIZE_2_BYTES,
+						.dstEndpoint =
+						CHAL_DMA_ENDPOINT_MEMORY,
+						.srcBurstLen =
+						CHAL_DMA_BURST_LEN_8,
+						.srcBurstSize =
+						CHAL_DMA_BURST_SIZE_2_BYTES,
+						.srcEndpoint =
+						CHAL_DMA_ENDPOINT_MEMORY,
+						.descType =
+						CHAL_DMA_DESC_LIST,
+						.alwaysBurst = FALSE
+						},
+					.peripheralId = 0,
+					},
+	[DMA_DEVICE_MEM_TO_MEM_BYTE] = {
+					.flags = SECURE_FLAG,
+					.name = "mem-to-mem8",
+					.config = {
+						.dstBurstLen =
+						CHAL_DMA_BURST_LEN_8,
+						.dstBurstSize =
+						CHAL_DMA_BURST_SIZE_1_BYTE,
+						.dstEndpoint =
+						CHAL_DMA_ENDPOINT_MEMORY,
+						.srcBurstLen =
+						CHAL_DMA_BURST_LEN_8,
+						.srcBurstSize =
+						CHAL_DMA_BURST_SIZE_1_BYTE,
+						.srcEndpoint =
+						CHAL_DMA_ENDPOINT_MEMORY,
+						.descType =
+						CHAL_DMA_DESC_LIST,
+						.alwaysBurst = FALSE
+						},
+					.peripheralId = 0,
+					},
 	[DMA_DEVICE_SPUM_MEM_TO_DEV] = {
 					.flags = SECURE_FLAG,
 					.name = "spu mem-to-dev",
@@ -662,6 +759,81 @@ static int sdma_register_proc_clear_device_counters(void)
 
 /****************************************************************************/
 /**
+*   Reenables DMA AXI clock autogating depending on the states of the DMA
+*   channel threads. Also properly moves any FAULTING DMA channels to the
+*   STOPPED state.
+*/
+/****************************************************************************/
+static void sdmac_work_func(struct work_struct *work)
+{
+	int i, retries;
+	bool reschedule = 0;
+	unsigned long flags;
+	SDMA_Channel_t *channel;
+
+	/* Clear the flag which is set when the transfer
+	*  is started
+	*/
+	spin_lock_irqsave(&gHwDmaLock, flags);
+	dma_work_resched = 0;
+	spin_unlock_irqrestore(&gHwDmaLock, flags);
+
+	down(&gSDMA.lock);
+	for (i = 0; i < SDMA_NUM_CHANNELS; i++) {
+		channel = &gSDMA.channel[i];
+
+		/* Skip ununsed channels */
+		if (!(channel->flags & DMA_CHANNEL_FLAG_IN_USE))
+			continue;
+
+		/* Check if channel in FAULTING state */
+		if (chal_dma_get_channel_status(channel->sdmacHandle)
+		    == CHAL_DMA_STATUS_FAULT) {
+			/* Put channel in STOPPED state */
+			chal_dma_shutdown_channel(channel->sdmacHandle);
+			retries = 10;
+			while (--retries >= 0) {
+				udelay(1);
+				if (chal_dma_get_channel_status(
+							channel->sdmacHandle)
+				    == CHAL_DMA_STATUS_SUCCESS)
+					break;
+			}
+			/* If no luck reschedule work */
+			if (retries < 0) {
+				reschedule = 1;
+				break;
+			}
+
+			/* Done. Move to next channel */
+			continue;
+		}
+
+		/* Check if channel is in STOPPED state */
+		if (chal_dma_get_channel_status(channel->sdmacHandle)
+		    != CHAL_DMA_STATUS_SUCCESS) {
+			reschedule = 1;
+			break;
+		}
+	}
+	up(&gSDMA.lock);
+
+	spin_lock_irqsave(&gHwDmaLock, flags);
+
+	/* Reschedule work if a new transfer has started or if
+	* any of the DMA channel threads are still active
+	*/
+	if (dma_work_resched || reschedule)
+		schedule_delayed_work(&sdmac_work,
+				      msecs_to_jiffies(SDMAC_WORK_DELAY_MS));
+	else
+		clk_enable_autogate(dma_axi_clk);
+
+	spin_unlock_irqrestore(&gHwDmaLock, flags);
+}
+
+/****************************************************************************/
+/**
 *   Determines if a DMA_Device_t is "valid".
 *
 *   @return
@@ -1145,6 +1317,15 @@ int sdma_init(void)
 	spin_lock_init(&gHwDmaLock);
 	spin_lock_init(&gDmaDevLock);
 	init_waitqueue_head(&gSDMA.freeChannelQ);
+
+	dma_work_resched = 0;
+	dma_axi_clk = clk_get(NULL, DMA_AXI_BUS_CLK_NAME_STR);
+	if (IS_ERR(dma_axi_clk)) {
+		printk(KERN_ERR "Failed to get DMA AXI clock\n");
+		return PTR_ERR(dma_axi_clk);
+	}
+
+	INIT_DELAYED_WORK(&sdmac_work, sdmac_work_func);
 
 	/* Initialze OPEN DMA  */
 	gOpenDmaHandle = chal_dma_init(CHAL_DMA_STATE_OPEN);
@@ -1842,6 +2023,7 @@ int sdma_start_transfer(SDMA_Handle_t handle	/* DMA Handle */
 	SDMA_Channel_t *channel;
 	SDMA_DeviceAttribute_t *devAttr;
 	unsigned long flags;
+	int rc = 0;
 
 	channel = HandleToChannel(handle);
 	if (channel == NULL)
@@ -1865,6 +2047,16 @@ int sdma_start_transfer(SDMA_Handle_t handle	/* DMA Handle */
 
 	spin_lock_irqsave(&gHwDmaLock, flags);
 
+	/* Signal DMA work reschedule, disable DMA AXI clock autogating
+	*  and scheduled DMA AXI autogate watchdog
+	*/
+	if (!dma_work_resched) {
+		dma_work_resched = 1;
+		clk_disable_autogate(dma_axi_clk);
+		schedule_delayed_work(&sdmac_work,
+			msecs_to_jiffies(SDMAC_WORK_DELAY_MS));
+	}
+
 	/* And kick off the transfer */
 	devAttr->transferStartTime = timer_get_tick_count();
 
@@ -1875,11 +2067,15 @@ int sdma_start_transfer(SDMA_Handle_t handle	/* DMA Handle */
 	}
 #endif
 
-	chal_dma_start_transfer(channel->sdmacHandle);
+	if (chal_dma_start_transfer(channel->sdmacHandle) !=
+	    CHAL_DMA_STATUS_SUCCESS) {
+		WARN_ON(1);
+		rc = -EBUSY;
+	}
 
 	spin_unlock_irqrestore(&gHwDmaLock, flags);
 
-	return 0;
+	return rc;
 }
 
 EXPORT_SYMBOL(sdma_start_transfer);
@@ -1897,14 +2093,22 @@ EXPORT_SYMBOL(sdma_start_transfer);
 int sdma_stop_transfer(DMA_Handle_t handle)
 {
 	SDMA_Channel_t *channel;
+	unsigned long flags;
+	int rc = 0;
 
 	channel = HandleToChannel(handle);
 	if (channel == NULL)
 		return -ENODEV;
 
-	chal_dma_shutdown_channel(channel->sdmacHandle);
+	spin_lock_irqsave(&gHwDmaLock, flags);
+	if (chal_dma_shutdown_channel(channel->sdmacHandle) !=
+	    CHAL_DMA_STATUS_SUCCESS) {
+		WARN_ON(1);
+		rc = -EBUSY;
+	}
+	spin_unlock_irqrestore(&gHwDmaLock, flags);
 
-	return 0;
+	return rc;
 }
 
 EXPORT_SYMBOL(sdma_stop_transfer);
@@ -2117,7 +2321,7 @@ int sdma_dump_debug_info(SDMA_Handle_t handle	/* DMA Handle */
 	SDMA_Channel_t *channel;
 
 	channel = HandleToChannel(handle);
-	if (channel == NULL || channel->sdmacHandle == NULL)
+	if (channel == NULL)
 		return -ENODEV;
 	chal_dma_dump_register(channel->sdmacHandle, printk);
 

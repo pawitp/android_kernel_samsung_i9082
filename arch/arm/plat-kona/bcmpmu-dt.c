@@ -45,25 +45,26 @@ struct bcmpmu_dt_batt_data {
 	uint32_t *cutoff_volt_map_width;
 	unsigned long cutoff_volt_map_size;
 	uint32_t *cutoff_volt_map;
-	uint32_t *max_volt;	
+	uint32_t *max_volt;
 	uint32_t *eoc_volt;
 	uint32_t *resume_volt;
 	uint32_t *low_volt;
+	uint32_t *pre_eoc_min_curr;
 };
 struct bcmpmu_dt_batt_data battdata = {0};
 
 struct bcmpmu_dt_pmu_data {
 	int valid;
-	uint32_t *cutoff;
 	uint32_t *fg_slp_curr_ua;
 	uint32_t *fg_factor;
 	uint32_t *fg_sns_res;
 	uint32_t *reginit_len;
 	uint32_t *reginit_width;
+	uint32_t *max_batt_ov;
 	unsigned long reginit_size;
 	uint32_t *reginit_data;
 	unsigned long curr_lmt_size;
-	uint32_t *curr_lmt_data;	
+	uint32_t *curr_lmt_data;
 	uint32_t *ntc_upper_boundary;
 	char *adc_ntc;
 	char *adc_patemp;
@@ -183,12 +184,6 @@ int __init early_init_dt_scan_pmu(unsigned long node, const char *uname,
 	if (depth != 1 || strcmp(uname, "bcmpmu") != 0)
 		return 0;
 
-	prop = of_get_flat_dt_prop(node, "cutoff", &size);
-	if (prop == NULL)
-		printk(KERN_INFO "%s: cutoff not found\n", __func__);
-	else
-		pmudata.cutoff = (uint32_t *)prop;
-
 	prop = of_get_flat_dt_prop(node, "fg_slp_curr_ua", &size);
 	if (prop == NULL)
 		printk(KERN_INFO "%s: fg_slp_curr_ua not found\n", __func__);
@@ -224,7 +219,7 @@ int __init early_init_dt_scan_pmu(unsigned long node, const char *uname,
 		pmudata.reginit_size = size/4;
 		pmudata.reginit_data = (uint32_t *)prop;
 	}
-	
+
 	prop = of_get_flat_dt_prop(node, "chrgr_curr_lmt", &size);
 	if (prop == NULL)
 		printk(KERN_INFO "%s: chrgr_curr_lmt not found\n", __func__);
@@ -232,12 +227,18 @@ int __init early_init_dt_scan_pmu(unsigned long node, const char *uname,
 		pmudata.curr_lmt_size = size/4;
 		pmudata.curr_lmt_data = (uint32_t *)prop;
 	}
-		
+
 	prop = of_get_flat_dt_prop(node, "ntc_upper_boundary", &size);
 	if (prop == NULL)
 		printk(KERN_INFO "%s: ntc_upper_boundary not found\n", __func__);
 	else
 		pmudata.ntc_upper_boundary = (uint32_t *)prop;
+
+	prop = of_get_flat_dt_prop(node, "max_batt_ov", &size);
+	if (prop == NULL)
+		printk(KERN_INFO "%s: max_batt_ov not found\n", __func__);
+	else
+		pmudata.max_batt_ov = (uint32_t *)prop;
 
 	prop = of_get_flat_dt_prop(node, "adc-chnl-ntc", &size);
 	if (prop == NULL)
@@ -289,6 +290,12 @@ int __init early_init_dt_scan_batt(unsigned long node, const char *uname,
 		printk(KERN_INFO "%s: battery capacity not found\n", __func__);
 	else
 		battdata.cpcty = (uint32_t *)prop;
+
+	prop = of_get_flat_dt_prop(node, "pre_eoc_min_curr", &size);
+	if (prop == NULL)
+		printk(KERN_INFO "%s: pre_eoc_min_curr not found\n", __func__);
+	else
+		battdata.pre_eoc_min_curr = (uint32_t *)prop;
 
 	prop = of_get_flat_dt_prop(node, "vcmap-size", &size);
 	if (prop == NULL)
@@ -434,10 +441,13 @@ void bcmpmu_update_pdata_dt_batt(struct bcmpmu_platform_data *pdata)
 		pdata->chrg_1c_rate = be32_to_cpu(*battdata.chrg_1c);
 	if (battdata.cpcty != 0)
 		pdata->fg_capacity_full = be32_to_cpu(*battdata.cpcty) * 3600;
+	if (battdata.pre_eoc_min_curr != 0)
+		pdata->pre_eoc_min_curr =
+			be32_to_cpu(*battdata.pre_eoc_min_curr);
 	if (battdata.model != 0)
 		pdata->batt_model = battdata.model;
 	if (battdata.max_volt != NULL)
-		pdata->max_vfloat = be32_to_cpu(*battdata.max_volt);	
+		pdata->max_vfloat = be32_to_cpu(*battdata.max_volt);
 	if (battdata.eoc_volt != NULL)
 		pdata->fg_fbat_lvl = be32_to_cpu(*battdata.eoc_volt);
 	if (battdata.resume_volt != NULL)
@@ -536,12 +546,12 @@ void bcmpmu_update_pdata_dt_pmu(struct bcmpmu_platform_data *pdata)
 	if (pmudata.valid == 0)
 		return;
 
-	if (pmudata.cutoff != 0)
-		pdata->cutoff_volt = be32_to_cpu(*pmudata.cutoff);
 	if (pmudata.fg_slp_curr_ua != NULL)
 		pdata->fg_slp_curr_ua = be32_to_cpu(*pmudata.fg_slp_curr_ua);
 	if (pmudata.fg_factor != 0)
 		pdata->fg_factor = be32_to_cpu(*pmudata.fg_factor);
+	if (pmudata.max_batt_ov != 0)
+		pdata->max_batt_ov = be32_to_cpu(*pmudata.max_batt_ov);
 	if (pmudata.fg_sns_res != 0)
 		pdata->fg_sns_res = be32_to_cpu(*pmudata.fg_sns_res);
 

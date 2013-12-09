@@ -976,10 +976,6 @@ static void assign_and_init_hc(dwc_otg_hcd_t * hcd, dwc_otg_qh_t * qh)
 	qtd = DWC_CIRCLEQ_FIRST(&qh->qtd_list);
 	
 	urb = qtd->urb;
-	if (!urb) {
-		DWC_ERROR("USB Host %s: Received NULL urb!\n", __func__);
-		return;
-	}
 	/* Remove the host channel from the free list. */
 	DWC_CIRCLEQ_REMOVE_INIT(&hcd->free_hc_list, hc, hc_list_entry);
 
@@ -1234,15 +1230,10 @@ dwc_otg_transaction_type_e dwc_otg_hcd_select_transactions(dwc_otg_hcd_t * hcd)
 
 		qh = DWC_LIST_ENTRY(qh_ptr, dwc_otg_qh_t, qh_list_entry);
 		qtd = DWC_CIRCLEQ_FIRST(&qh->qtd_list);
-		/*if a qh's first qtd has null urb then free it up */
 		if (!qtd->urb) {
-			DWC_ERROR("USB Host: QTD with NULL urb! Removing bad qtd.\n");
-			DWC_CIRCLEQ_REMOVE(&qh->qtd_list, qtd, qtd_list_entry);
-			if(DWC_CIRCLEQ_EMPTY(&qh->qtd_list)) {
-				DWC_ERROR("USB Host: Empty qtd list so remove qh from list.\n");
-				DWC_LIST_REMOVE(&qh->qh_list_entry);
-				return ret_val;
-			}
+			DWC_ERROR("USB Host: QTD with NULL urb!\n");
+			//BUG();
+			return DWC_OTG_TRANSACTION_NONE;
 		}
 		assign_and_init_hc(hcd, qh);
 

@@ -24,6 +24,7 @@
 #include <asm/gpio.h>
 #include <mach/hardware.h>
 #include <mach/irqs.h>
+#include <mach/chipregHw_inline.h>
 #include <linux/io.h>
 #include <linux/uaccess.h>
 #include <linux/i2c.h>
@@ -35,6 +36,10 @@
 
 #if defined(CONFIG_MACH_CAPRI_SS_S2VE)
 #include <CAPRI_SS_S2VE/board-bcm59056_config.h>
+#elif defined(CONFIG_MACH_CAPRI_TABLET)
+#include <CAPRI_TABLET/board-bcm59056_config.h>
+#elif defined(CONFIG_MACH_CAPRI_GARNET)
+#include <CAPRI_GARNET/board-bcm59056_config.h>
 #elif defined(CONFIG_MACH_CAPRI_SS_BAFFIN)
 #include <CAPRI_SS_BAFFIN/board-bcm59056_config.h>
 #elif defined(CONFIG_MACH_CAPRI_SS_CRATER)
@@ -77,6 +82,29 @@ static struct platform_device bcmpmu_chrgr_spa_device = {
 };
 #endif
 
+#define HW_FIXED_REG_NULL_PARAM \
+	.supply_name = NULL, \
+	.microvolts = 0, \
+	.gpio = -1, \
+	.startup_delay = 0, \
+	.enable_high = 0, \
+	.enabled_at_boot = 0, \
+	.init_data = NULL
+
+static struct fixed_voltage_config boost5v = {
+#ifdef HW_BOOST_5V_PARAM
+	HW_BOOST_5V_PARAM,
+#else
+	HW_FIXED_REG_NULL_PARAM,
+#endif
+};
+
+static struct platform_device boost_device_5v = {
+	.name = "reg-fixed-voltage",
+	.id = -1,
+	.dev.platform_data = &boost5v,
+};
+
 static struct platform_device *bcmpmu_client_devices[] = {
 	&bcmpmu_audio_device,
 #ifdef CONFIG_CHARGER_BCMPMU_SPA
@@ -98,6 +126,10 @@ static int __init bcmpmu_init_platform_hw(struct bcmpmu *bcmpmu)
 		bcmpmu_client_devices[i]->dev.platform_data = bcmpmu;
 	platform_add_devices(bcmpmu_client_devices,
 			     ARRAY_SIZE(bcmpmu_client_devices));
+
+	if (get_chip_version() == CAPRI_A2 &&
+		bcmpmu->pmu_rev == BCMPMU_REV_B0)
+		platform_device_register(&boost_device_5v);
 
 	return 0;
 }
@@ -161,6 +193,49 @@ static struct bcmpmu_charge_zone chrg_zone[] = {
 	{.tl = -50,.th = 600,.v = 0,.fc = 0,.qc = 0},	/* Zone OUT */
 };
 
+#ifdef CONFIG_MACH_CAPRI_TABLET
+static struct bcmpmu_voltcap_map batt_voltcap_map[] = {
+	/*
+	* Average Open-Cell Voltage vs Remaining Capacity for
+	* Capri BRT 3.7V 6700mAh Li-ion batteries measured @ 25C
+	* data provided by MAP hardware team
+	*/
+	{4166, 100},
+	{4138, 99},
+	{4119, 98},
+	{4106, 97},
+	{4095, 96},
+	{4085, 95},
+	{4074, 94},
+	{4065, 93},
+	{4055, 92},
+	{4046, 91},
+	{4038, 90},
+	{3990, 85},
+	{3948, 80},
+	{3911, 75},
+	{3877, 70},
+	{3847, 65},
+	{3821, 60},
+	{3799, 55},
+	{3781, 50},
+	{3765, 45},
+	{3752, 40},
+	{3739, 35},
+	{3725, 30},
+	{3707, 25},
+	{3684, 20},
+	{3662, 15},
+	{3599, 10},
+	{3583, 9},
+	{3561, 8},
+	{3528, 7},
+	{3479, 6},
+	{3412, 5},
+	{3313, 4},
+	{3131, 3},
+};
+#else
 static struct bcmpmu_voltcap_map batt_voltcap_map[] = {
 	/*
 	* volt capacity
@@ -196,11 +271,12 @@ static struct bcmpmu_voltcap_map batt_voltcap_map[] = {
 	{3497, 1},
 	{3394, 0},
 };
+#endif
 
 static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 /* This table is default data, the real data from board file or device tree*/
 	{.temp = -200,
-	 .reset = 0,.fct = 26,.guardband = 50,
+	 .reset = 1, .fct = 26, .guardband = 30,
 	 .esr_vl_lvl = 3788,.esr_vm_lvl = 3814,.esr_vh_lvl = 4088,
 	 .esr_vl_slope = -31479,.esr_vl_offset = 121154,
 	 .esr_vm_slope = -7916,.esr_vm_offset = 31900,
@@ -209,7 +285,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* -20 */
 	{.temp = -150,
-	 .reset = 0,.fct = 210,.guardband = 50,
+	 .reset = 0, .fct = 210, .guardband = 50,
 	 .esr_vl_lvl = 3788,.esr_vm_lvl = 3814,.esr_vh_lvl = 4088,
 	 .esr_vl_slope = -31479,.esr_vl_offset = 121154,
 	 .esr_vm_slope = -7916,.esr_vm_offset = 31900,
@@ -218,7 +294,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* -15 */
 	{.temp = -100,
-	 .reset = 0,.fct = 394,.guardband = 50,
+	 .reset = 1, .fct = 394, .guardband = 30,
 	 .esr_vl_lvl = 3742,.esr_vm_lvl = 3798,.esr_vh_lvl = 4088,
 	 .esr_vl_slope = -8481,.esr_vl_offset = 33090,
 	 .esr_vm_slope = -6677,.esr_vm_offset = 26338,
@@ -227,7 +303,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* -10 */
 	{.temp = -50,
-	 .reset = 0,.fct = 565,.guardband = 50,
+	 .reset = 0, .fct = 565, .guardband = 50,
 	 .esr_vl_lvl = 3742,.esr_vm_lvl = 3798,.esr_vh_lvl = 4088,
 	 .esr_vl_slope = -8481,.esr_vl_offset = 33090,
 	 .esr_vm_slope = -6677,.esr_vm_offset = 26338,
@@ -236,7 +312,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* -5 */
 	{.temp = 0,
-	 .reset = 0,.fct = 736,.guardband = 50,
+	 .reset = 1, .fct = 736, .guardband = 30,
 	 .esr_vl_lvl = 3679,.esr_vm_lvl = 3788,.esr_vh_lvl = 4088,
 	 .esr_vl_slope = -31497,.esr_vl_offset = 117159,
 	 .esr_vm_slope = -6612,.esr_vm_offset = 25599,
@@ -245,7 +321,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* 0 */
 	{.temp = 50,
-	 .reset = 0,.fct = 811,.guardband = 50,
+	 .reset = 0, .fct = 811, .guardband = 50,
 	 .esr_vl_lvl = 3663,.esr_vm_lvl = 3679,.esr_vh_lvl = 3798,
 	 .esr_vl_slope = -18140,.esr_vl_offset = 67518,
 	 .esr_vm_slope = -28827,.esr_vm_offset = 106665,
@@ -254,7 +330,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* 5 */
 	{.temp = 100,
-	 .reset = 0,.fct = 887,.guardband = 30,
+	 .reset = 1, .fct = 887, .guardband = 30,
 	 .esr_vl_lvl = 3663,.esr_vm_lvl = 3679,.esr_vh_lvl = 3798,
 	 .esr_vl_slope = -18140,.esr_vl_offset = 67518,
 	 .esr_vm_slope = -28827,.esr_vm_offset = 106665,
@@ -263,7 +339,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* 10 */
 	{.temp = 150,
-	 .reset = 0,.fct = 943,.guardband = 30,
+	 .reset = 1, .fct = 943, .guardband = 30,
 	 .esr_vl_lvl = 3668,.esr_vm_lvl = 3687,.esr_vh_lvl = 3896,
 	 .esr_vl_slope = -908,.esr_vl_offset = 3574,
 	 .esr_vm_slope = -1936,.esr_vm_offset = 7344,
@@ -272,7 +348,7 @@ static struct bcmpmu_fg_zone fg_zone[FG_TMP_ZONE_MAX + 1] = {
 	 .vcmap = &batt_voltcap_map[0],
 	 .maplen = ARRAY_SIZE(batt_voltcap_map)},	/* 15 */
 	{.temp = 200,
-	 .reset = 0,.fct = 1000,.guardband = 30,
+	 .reset = 1, .fct = 1000, .guardband = 30,
 	 .esr_vl_lvl = 3668,.esr_vm_lvl = 3687,.esr_vh_lvl = 3896,
 	 .esr_vl_slope = -908,.esr_vl_offset = 3574,
 	 .esr_vm_slope = -1936,.esr_vm_offset = 7344,
@@ -332,6 +408,8 @@ static struct bcmpmu_platform_data bcmpmu_plat_data = {
 	.fg_slp_rate = 32000,
 	.fg_slp_curr_ua = 1000,
 	.fg_factor = 976,
+	.max_batt_ov = 100,
+	.pre_eoc_min_curr = 300,
 	.fg_sns_res = 10,
 	.batt_voltcap_map = &batt_voltcap_map[0],
 	.batt_voltcap_map_len = ARRAY_SIZE(batt_voltcap_map),
@@ -342,12 +420,15 @@ static struct bcmpmu_platform_data bcmpmu_plat_data = {
 	.chrgr_curr_lmt = &chrgr_curr_lmt[0],
 	.chrg_zone_map = &chrg_zone[0],
 	.support_hw_eoc = 0,
-	.support_fg = 1,
 	.support_chrg_maint = 1,
 	.chrg_resume_lvl = 4100,
+#ifdef CONFIG_CHARGER_BCMPMU_EXT
+	.fg_support_tc = 0,
+#else
 	.fg_support_tc = 1,
+#endif
 	.fg_tc_dn_lvl = 50,	/* 5c */
-	.fg_tc_up_lvl = 200,	/* 20c */
+	.fg_tc_up_lvl = 200, /* 20c */
 	.fg_zone_settle_tm = 60,
 	.fg_zone_info = &fg_zone[0],
 	.fg_poll_hbat = 112000,

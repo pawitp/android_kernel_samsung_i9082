@@ -17,8 +17,11 @@
 
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DMSP -DFUSE_DUAL_PROCESSOR_ARCHITECTURE -DDEVELOPMENT_ONLY -D_RHEA_
 #the options below are used by capi headers
-#subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL -DCONFIG_ENABLE_VOIF -DENABLE_DIAMOND_SOLUTION -DVOICESOLUTION_DUMP
+ifdef CONFIG_MACH_CAPRI_SS_BAFFIN
+subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL -DCONFIG_ENABLE_VOIF -DENABLE_DIAMOND_SOLUTION 
+else
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DUNDER_LINUX -DUNDER_LINUX_MODEM -DLINUX_RPC_KERNEL
+endif
 #the options below are used by audio
 ifdef CONFIG_BCM_MODEM
 #this feature is required only for voice features which has dependency on CP and DSP. Enabled them only when MODEM is enabled
@@ -27,7 +30,6 @@ endif
 ifdef CONFIG_ARCH_CAPRI
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DENABLE_BT16
 subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DCAPH_48K_MONO_PASSTHRU
-#subdir-ccflags-$(CONFIG_BCM_ALSA_SOUND) += -DDYNAMIC_DMA_PLAYBACK
 endif
 
 #Linux header files

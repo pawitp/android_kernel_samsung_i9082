@@ -41,15 +41,19 @@
 #include "vchiq_kona_arm.h"
 #include "vchiq_bi.h"
 
+#include <linux/pm_qos_params.h>
+
 static int use_memcpy;
 module_param(use_memcpy, bool, S_IRUGO|S_IWUSR);
 MODULE_PARM_DESC(use_memcpy,
 	"Force use of memcpy rather than DMA for all transfers");
 
-
 static DMA_MMAP_CFG_T    gVchiqDmaMmap;
 static struct completion gDmaDone;
 static struct mutex      g_dma_mutex;
+static struct pm_qos_request_list g_dma_qos_request;
+
+#define DMA_QOS_VAL 100
 
 static int
 ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
@@ -153,6 +157,7 @@ VCHIQ_STATUS_T vchiq_platform_deferred_init(VCHIQ_STATE_T *state,
 	VCHIQ_SLOT_ZERO_T *slot_zero)
 {
 	VCHIQ_STATUS_T status;
+	int bulk_transfer_size_bytes;
 
 	/* Initialize the local state. Note that vc04 has already started by now
 	** so the slot memory is expected to be initialised. */
@@ -167,6 +172,12 @@ VCHIQ_STATUS_T vchiq_platform_deferred_init(VCHIQ_STATE_T *state,
 
 	/* initialize dma_mmap for use */
 	dma_mmap_init_map(&gVchiqDmaMmap);
+
+	/* Preallocate space to manage bulk transfers, if needed */
+	bulk_transfer_size_bytes = vc_dt_get_vchiq_bulk_xfer_size();
+	if (bulk_transfer_size_bytes > 0)
+		dma_mmap_preallocate(&gVchiqDmaMmap, 1,
+			bulk_transfer_size_bytes);
 
 failed_init_state:
 	return status;
@@ -521,6 +532,12 @@ ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
 	if (mutex_lock_interruptible(&g_dma_mutex) != 0)
 		return -1;
 
+	/* Setup qos request for the duration of the actual
+	 * transfer.
+	 */
+	pm_qos_add_request(&g_dma_qos_request,
+		PM_QOS_CPU_DMA_LATENCY, DMA_QOS_VAL);
+
 	vchiq_log_trace(vchiq_arm_log_level,
 		"(Bulk) dir=%s vcaddr=0x%x armaddr=0x%x len=%u",
 		(dir == DMA_TO_DEVICE) ? "Tx" : "Rx", (unsigned int)vcaddr,
@@ -685,6 +702,7 @@ failed_build_transfer_list:
 		(dir == DMA_FROM_DEVICE) ? DMA_MMAP_DIRTIED : DMA_MMAP_CLEAN);
 failed_dma_mmap_map:
 failed_dma_request_chan:
+	pm_qos_remove_request(&g_dma_qos_request);
 	mutex_unlock(&g_dma_mutex);
 
 failed_dma_mmap_dma_is_supported:
@@ -724,8 +742,8 @@ static void vchiq_dev_to_cpu(dma_addr_t vcPhysAddr, void *vcVirtAddr,
 		/* just about to memcpy from VC to the ARM */
 		outer_inv_range(vcPhysAddr, vcPhysAddr + len);
 		vchiq_log_trace(vchiq_arm_log_level,
-				"%s:invalidate: vc[0] = 0x%08x vcphys 0x%x len 0x%x\n",
-				__func__,
+				"%s:invalidate: vc[0] = 0x%08x vcphys 0x%x"
+				"len 0x%x\n", __func__,
 				((uint32_t *)vcVirtAddr)[0],
 				vcPhysAddr, len);
 	} else {
@@ -757,7 +775,7 @@ static void vchiq_cpu_to_dev(dma_addr_t vcPhysAddr, void *vcVirtAddr,
 static int
 ipc_copy_highmem(dma_addr_t vcPhysAddr, uint8_t *armaddr, int len,
 	DMA_MMAP_PAGELIST_T *pagelist,
-	enum dma_data_direction dir, struct page *vc_page)
+	enum dma_data_direction dir, struct page *vc_page, int pagelist_start)
 {
 	int rc;
 	DMA_MMAP_DIRTIED_T dirty = (dir == DMA_FROM_DEVICE) ?
@@ -771,7 +789,8 @@ ipc_copy_highmem(dma_addr_t vcPhysAddr, uint8_t *armaddr, int len,
 
 	if (pagelist) {
 		dma_mmap_set_pagelist(&gVchiqDmaMmap, pagelist);
-		rc = dma_mmap_set_pagelist_start(&gVchiqDmaMmap, 0);
+		rc = dma_mmap_set_pagelist_start(&gVchiqDmaMmap,
+			pagelist_start);
 		if (rc < 0)
 			return -1;
 	}
@@ -795,7 +814,13 @@ ipc_copy_highmem(dma_addr_t vcPhysAddr, uint8_t *armaddr, int len,
 
 	vchiq_dev_to_cpu(vcPhysAddr, vcVirtAddr, vcFirstPageSize, dir);
 
+	if (pagelist)
+		dma_mmap_set_pagelist_start(&gVchiqDmaMmap, pagelist_start);
+
 	dma_mmap_memcpy(&gVchiqDmaMmap, vcVirtAddr);
+
+	if (pagelist)
+		dma_mmap_set_pagelist_start(&gVchiqDmaMmap, 0);
 
 	vchiq_cpu_to_dev(vcPhysAddr, vcVirtAddr, vcFirstPageSize, dir);
 
@@ -812,15 +837,16 @@ ipc_copy_highmem(dma_addr_t vcPhysAddr, uint8_t *armaddr, int len,
 	while (len) {
 		int vcpfn = __phys_to_pfn(vcPhysAddr);
 		size_t bytesThisPage = len > PAGE_SIZE ? PAGE_SIZE : len;
+		int start = 0;
 		BUG_ON(vcPhysAddr & (PAGE_SIZE-1));
 		vc_page = pfn_to_page(vcpfn);
 		if (pagelist) {
-			int pagelist_start =
-				(armaddr - baseArmAddr) >> PAGE_SHIFT;
+			start = pagelist_start
+				+ ((armaddr - baseArmAddr) >> PAGE_SHIFT);
 
 			dma_mmap_set_pagelist(&gVchiqDmaMmap, pagelist);
 			rc = dma_mmap_set_pagelist_start(&gVchiqDmaMmap,
-							 pagelist_start);
+							 start);
 			if (rc < 0)
 				break;
 		}
@@ -833,7 +859,15 @@ ipc_copy_highmem(dma_addr_t vcPhysAddr, uint8_t *armaddr, int len,
 		vcVirtAddr = kmap_atomic(vc_page);
 
 		vchiq_dev_to_cpu(vcPhysAddr, vcVirtAddr, bytesThisPage, dir);
+
+		if (pagelist)
+			dma_mmap_set_pagelist_start(&gVchiqDmaMmap, start);
+
 		dma_mmap_memcpy(&gVchiqDmaMmap, vcVirtAddr);
+
+		if (pagelist)
+			dma_mmap_set_pagelist_start(&gVchiqDmaMmap, 0);
+
 		vchiq_cpu_to_dev(vcPhysAddr, vcVirtAddr, bytesThisPage, dir);
 
 		kunmap_atomic(vcVirtAddr);
@@ -847,28 +881,56 @@ fail:
 	return rc;
 }
 
-/****************************************************************************
-*
-*   ipc_dma
-*
-***************************************************************************/
+/*
+ * Verify that the full region of the required copy can be handled by using
+ * the existing kernel/vc memory mapping.
+ * */
+static bool
+check_vc_mapping(dma_addr_t vcPhysAddr, int len)
+{
+	bool valid = false;
+	int start_pfn = __phys_to_pfn(vcPhysAddr);
+	int end_pfn   = __phys_to_pfn(vcPhysAddr + len);
 
-static int
-ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
-	enum dma_data_direction dir)
+	if (unlikely(!pfn_valid(start_pfn)) || unlikely(!pfn_valid(end_pfn)))
+		goto out;
+
+#ifdef CONFIG_HIGHMEM
+	/* If we're using highmem, check if the start and end addresses straddle
+	 * high and lowmem.  If they do, don't trust that the whole region is
+	 * mapped */
+	if (unlikely(PageHighMem(pfn_to_page(end_pfn))) &&
+				likely(!PageHighMem(pfn_to_page(start_pfn)))) {
+		goto out;
+	}
+
+#endif
+
+	valid = true;
+out:
+	return valid;
+}
+
+/*
+ *  __dma_memcpy
+ *
+ *  NOTE: caller must grab g_dma_mutex lock!!!
+ */
+static inline int __dma_memcpy(void *vcaddr, void *armaddr, int len,
+		DMA_MMAP_PAGELIST_T *pagelist,
+		enum dma_data_direction dir,
+		int pagelist_start)
 {
 	int rc;
 	dma_addr_t vcAddrOffset;
 	dma_addr_t vcPhysAddr;
-	DMA_Device_t dmaDev;
-	SDMA_Handle_t dmaHndl;
-
-	if (mutex_lock_interruptible(&g_dma_mutex) != 0)
-		return -1;
+	int vcpfn;
+	struct resource *res = NULL;
+	uint8_t *vcVirtAddr = NULL;
 
 	vchiq_log_trace(vchiq_arm_log_level,
-		"(Bulk) dir=%s vcaddr=0x%x armaddr=0x%x len=%u",
-		(dir == DMA_TO_DEVICE) ? "Tx" : "Rx",
+		"%s: (Bulk) dir=%s vcaddr=0x%x armaddr=0x%x len=%u",
+		__func__, (dir == DMA_TO_DEVICE) ? "Tx" : "Rx",
 		(unsigned int)vcaddr,
 		(unsigned int)armaddr, len);
 
@@ -878,66 +940,6 @@ ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
 	/* Convert the videocore physical address into an ARM physical
 	** address */
 	vcPhysAddr = mm_vc_mem_phys_addr + vcAddrOffset;
-
-	if (!use_memcpy &&
-		(((unsigned long)vcaddr & 7uL) == 0) &&
-		 (((unsigned long)armaddr & 7uL) == 0) && ((len & 3) == 0)) {
-
-		init_completion(&gDmaDone);
-
-		dmaDev = DMA_DEVICE_MEM_TO_MEM;
-		if ((len & 7) != 0)
-			/* If the length isn't a multiple of 8, then we need
-			** to use 32-bit transactions */
-			dmaDev = DMA_DEVICE_MEM_TO_MEM_32;
-	} else {
-		static int warned_vcaddr;
-		static int warned_armaddr;
-		static int warned_len;
-
-		if (!use_memcpy) {
-			if (!warned_vcaddr && (((uintptr_t)vcaddr & 7uL) != 0))
-				vchiq_log_warning(vchiq_arm_log_level,
-					"%s: vcaddr 0x%p isn't a multiple of 8",
-					__func__,
-					(warned_vcaddr = 1, vcaddr));
-			if (!warned_armaddr &&
-				(((uintptr_t)armaddr & 7uL) != 0))
-				vchiq_log_warning(vchiq_arm_log_level,
-					"%s: armaddr 0x%p isn't a multiple of 8",
-					__func__,
-					(warned_armaddr = 1, armaddr));
-			if (!warned_len && ((len & 3) != 0))
-				vchiq_log_warning(vchiq_arm_log_level,
-					"%s: len %d isn't a multiple of 4",
-					__func__, (warned_len = 1, len));
-		}
-		dmaDev = DMA_DEVICE_NONE;
-	}
-
-	if (dmaDev == DMA_DEVICE_NONE)
-		dmaHndl = SDMA_INVALID_HANDLE;
-	else {
-		dmaHndl = sdma_request_channel(dmaDev);
-		if (dmaHndl < 0) {
-			vchiq_log_error(vchiq_arm_log_level,
-				"%s: sdma_request_channel failed",
-				__func__);
-			rc = -1;
-			goto failed_sdma_request_channel;
-		}
-
-		rc = sdma_set_device_handler(dmaDev, sdma_device_handler,
-			&gDmaDone);
-		if (rc < 0) {
-			vchiq_log_error(vchiq_arm_log_level,
-				"%s: sdma_set_device_handler failed",
-				__func__);
-			goto failed_sdma_set_device_handler;
-		}
-
-		INIT_COMPLETION(gDmaDone);   /* Mark as incomplete */
-	}
 
 	/* Double check the memory is supported by dma_mmap */
 	rc = dma_mmap_dma_is_supported(armaddr);
@@ -955,15 +957,19 @@ ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
 	/* How is the VC memory mapped? Might be mapped in already via CMA,
 	 * as either a normal page or a high memory page.
 	 */
-	if (dmaDev == DMA_DEVICE_NONE) {
-		int vcpfn = __phys_to_pfn(vcPhysAddr);
-		if (pfn_valid(vcpfn)) {
-			struct page *page = pfn_to_page(vcpfn);
-			if (PageHighMem(page)) {
-				rc = ipc_copy_highmem(vcPhysAddr, armaddr, len,
-						      pagelist, dir, page);
-				goto finish_highmem;
-			}
+	vcpfn = __phys_to_pfn(vcPhysAddr);
+	if (pfn_valid(vcpfn)) {
+		struct page *page = pfn_to_page(vcpfn);
+		if (PageHighMem(page)) {
+			rc = ipc_copy_highmem(vcPhysAddr, armaddr, len,
+					      pagelist, dir, page,
+					      pagelist_start);
+			if (rc != 0)
+				vchiq_log_error(vchiq_arm_log_level,
+					"%s: ipc_copy_highmem FAILED",
+					__func__);
+
+			goto finish_highmem;
 		}
 	}
 
@@ -977,85 +983,182 @@ ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
 		goto failed_dma_mmap_map;
 	}
 
-	if (dmaDev == DMA_DEVICE_NONE) {
-		struct resource *res = NULL;
-		uint8_t *vcVirtAddr = NULL;
-		int vcpfn = __phys_to_pfn(vcPhysAddr);
-		struct page *page = NULL;
+	if (check_vc_mapping(vcPhysAddr, len)) {
+		/* This memory is shared between Linux and VC */
+		vcVirtAddr = (void *)__phys_to_virt(vcPhysAddr);
 
-		if (pfn_valid(vcpfn)) {
-			page = pfn_to_page(vcpfn);
-			BUG_ON(PageHighMem(page)); /* checked earlier */
-
-			/* This memory is shared between Linux and VC */
-			vcVirtAddr = (void *)__phys_to_virt(vcPhysAddr);
-
-			/* N.B. If this logic seems backwards compared to what
-			** you are used to, that's because it is. Here the
-			** "device" memory is also host memory, hence the need
-			** for host cache maintenance. */
-			vchiq_dev_to_cpu(vcPhysAddr, vcVirtAddr, len, dir);
+		/* N.B. If this logic seems backwards compared to what you are
+		 * used to, that's because it is. Here the "device" memory is
+		 * also host memory, hence the need for host cache maintenance.
+		 */
+		vchiq_dev_to_cpu(vcPhysAddr, vcVirtAddr, len, dir);
+	} else {
+		/* Request an I/O memory region for remapping */
+		res = request_mem_region(vcPhysAddr, len, "vchiq");
+		if (res == NULL) {
+			vchiq_log_error(vchiq_arm_log_level,
+				"%s: failed to request I/O memory region 0x%x, "
+				"len %d", __func__, vcPhysAddr, len);
+			rc = -1;
+			goto failed_request_mem_region;
 		} else {
-			/* Request an I/O memory region for remapping */
-			res = request_mem_region(vcPhysAddr, len, "vchiq");
-			if (res == NULL) {
-				vchiq_log_error(vchiq_arm_log_level,
-					"%s: failed to request I/O memory region",
-					__func__);
-				goto failed_request_mem_region;
-			}
-
 			/* I/O remap the videocore memory */
 			vcVirtAddr = ioremap_nocache(vcPhysAddr, len);
 			if (vcVirtAddr == NULL) {
 				vchiq_log_error(vchiq_arm_log_level,
-					"%s: failed to I/O remap videocore "
-					"bulk buffer",
-					__func__);
+					"%s: failed to I/O remap "
+					"videocore bulk buffer", __func__);
+				release_mem_region(res->start,
+					resource_size(res));
+				rc = -1;
 				goto failed_ioremap;
 			}
 		}
-
-		dma_mmap_memcpy(&gVchiqDmaMmap, vcVirtAddr);
-
-		if (res) {
-			iounmap(vcVirtAddr);
-			release_mem_region(res->start, resource_size(res));
-		} else {
-			vchiq_cpu_to_dev(vcPhysAddr, vcVirtAddr, len, dir);
-		}
-	} else {
-		rc = sdma_map_create_descriptor_ring(dmaHndl, &gVchiqDmaMmap,
-			vcPhysAddr, DMA_UPDATE_MODE_INC);
-		if (rc < 0) {
-			vchiq_log_error(vchiq_arm_log_level,
-				"%s: sdma_map_create_descriptor_ring FAILED "
-				"rc=%u",
-				__func__, rc);
-			vchiq_log_error(vchiq_arm_log_level,
-				"%s: vcaddr=0x%p armaddr=0x%p len=%d dir=%s",
-				__func__, vcaddr, armaddr, len,
-				dma_data_direction_as_str(dir));
-			goto failed_sdma_map_create_descriptor_ring;
-		}
-
-		rc = sdma_start_transfer(dmaHndl);
-		if (rc != 0) {
-			vchiq_log_error(vchiq_arm_log_level,
-				"%s: DMA failed %d",
-				__func__, rc);
-			goto failed_sdma_start_transfer;
-		}
-
-		wait_for_completion(&gDmaDone);
 	}
 
+	/* need to point to the correct page before memory transfer */
+	if (pagelist)
+		dma_mmap_set_pagelist_start(&gVchiqDmaMmap, pagelist_start);
+
+	dma_mmap_memcpy(&gVchiqDmaMmap, vcVirtAddr);
+
+	/* reset back to the first page so it can be unmapped properly */
+	if (pagelist)
+		dma_mmap_set_pagelist_start(&gVchiqDmaMmap, 0);
+
+	if (res) {
+		iounmap(vcVirtAddr);
+		release_mem_region(res->start, resource_size(res));
+	} else
+		vchiq_cpu_to_dev(vcPhysAddr, vcVirtAddr, len, dir);
 	rc = 0;
+
+failed_request_mem_region:
+failed_ioremap:
+	dma_mmap_unmap(&gVchiqDmaMmap, (dir == DMA_FROM_DEVICE) ?
+		DMA_MMAP_DIRTIED : DMA_MMAP_CLEAN);
+failed_dma_mmap_map:
+failed_dma_mmap_dma_is_supported:
+finish_highmem:
+
+	return rc;
+}
+
+/****************************************************************************
+*
+*   ipc_dma_memcpy
+*
+***************************************************************************/
+static int
+ipc_dma_memcpy(void *vcaddr, void *armaddr, int len,
+	DMA_MMAP_PAGELIST_T *pagelist, enum dma_data_direction dir)
+{
+	int rc;
+
+	if (mutex_lock_interruptible(&g_dma_mutex) != 0)
+		return -1;
+
+	/* Setup qos request for the duration of the actual
+	 * transfer.
+	 */
+	pm_qos_add_request(&g_dma_qos_request,
+		PM_QOS_CPU_DMA_LATENCY, DMA_QOS_VAL);
+
+	vchiq_log_trace(vchiq_arm_log_level,
+		"%s: (Bulk) dir=%s vcaddr=0x%x armaddr=0x%x len=%u",
+		__func__, (dir == DMA_TO_DEVICE) ? "Tx" : "Rx",
+		(unsigned int)vcaddr,
+		(unsigned int)armaddr, len);
+
+	rc = __dma_memcpy(vcaddr, armaddr, len, pagelist, dir, 0);
+	if (rc < 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: __dma_memcpy failed rc=%d", __func__, rc);
+	}
+
+	pm_qos_remove_request(&g_dma_qos_request);
+	mutex_unlock(&g_dma_mutex);
+
+	return rc;
+}
+
+/****************************************************************************
+*
+*   do_dma
+*
+***************************************************************************/
+static int do_dma(DMA_Device_t dmaDev, void *armaddr, dma_addr_t vcPhysAddr,
+	unsigned long len, DMA_MMAP_PAGELIST_T *pagelist,
+	enum dma_data_direction dir)
+{
+	SDMA_Handle_t dmaHndl = SDMA_INVALID_HANDLE;
+	int rc;
+
+	dmaHndl = sdma_request_channel(dmaDev);
+
+	if (dmaHndl < 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: sdma_request_channel failed", __func__);
+		rc = -1;
+		goto failed_sdma_request_channel;
+	}
+
+	rc = sdma_set_device_handler(dmaDev, sdma_device_handler, &gDmaDone);
+	if (rc < 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: sdma_set_device_handler failed", __func__);
+		goto failed_sdma_set_device_handler;
+	}
+
+	INIT_COMPLETION(gDmaDone);   /* Mark as incomplete */
+
+	/* Double check the memory is supported by dma_mmap */
+	rc = dma_mmap_dma_is_supported(armaddr);
+	if (!rc) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: Buffer not supported buf=0x%lx",
+			__func__, (unsigned long)armaddr);
+		goto failed_dma_mmap_dma_is_supported;
+	}
+
+	/* Set the pagelist (for user buffers) */
+	if (pagelist)
+		dma_mmap_set_pagelist(&gVchiqDmaMmap, pagelist);
+
+	/* Map memory */
+	rc = dma_mmap_map(&gVchiqDmaMmap, armaddr, len, dir);
+	if (rc < 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: dma_mmap_map FAILED buf=0x%lx len=0x%lx",
+				__func__, (unsigned long)armaddr, len);
+		goto failed_dma_mmap_map;
+	}
+
+	rc = sdma_map_create_descriptor_ring(dmaHndl, &gVchiqDmaMmap,
+		vcPhysAddr, DMA_UPDATE_MODE_INC);
+	if (rc < 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: sdma_map_create_descriptor_ring FAILED rc=%u",
+			__func__, rc);
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: vcaddr=0x%x armaddr=0x%p len=%ld dir=%s",
+			__func__, vcPhysAddr, armaddr, len,
+			dma_data_direction_as_str(dir));
+		goto failed_sdma_map_create_descriptor_ring;
+	}
+
+	rc = sdma_start_transfer(dmaHndl);
+	if (rc != 0) {
+		vchiq_log_error(vchiq_arm_log_level,
+			"%s: DMA failed %d", __func__, rc);
+		goto failed_sdma_start_transfer;
+	}
+
+	wait_for_completion(&gDmaDone);
+
 
 failed_sdma_start_transfer:
 failed_sdma_map_create_descriptor_ring:
-failed_request_mem_region:
-failed_ioremap:
 	dma_mmap_unmap(&gVchiqDmaMmap, (dir == DMA_FROM_DEVICE) ?
 		DMA_MMAP_DIRTIED : DMA_MMAP_CLEAN);
 failed_dma_mmap_map:
@@ -1064,7 +1167,107 @@ failed_sdma_set_device_handler:
 	if (dmaHndl != SDMA_INVALID_HANDLE)
 		sdma_free_channel(dmaHndl);
 failed_sdma_request_channel:
-finish_highmem:
+	return rc;
+}
+
+#define DUAL_TXFER_THRESH 0x800
+/****************************************************************************
+*
+*   ipc_dma
+*
+***************************************************************************/
+static int
+ipc_dma(void *vcaddr, void *armaddr, int len, DMA_MMAP_PAGELIST_T *pagelist,
+	enum dma_data_direction dir)
+{
+	int rc;
+	dma_addr_t vcAddrOffset;
+	dma_addr_t vcPhysAddr;
+	DMA_Device_t dmaDev;
+	int pagelist_start;
+	uint8_t *baseArmAddr = (uint8_t *)((uintptr_t)armaddr &
+			~(PAGE_SIZE-1));
+	unsigned long aligned_len = len;
+	unsigned long vcaddr_val = (unsigned long)vcaddr;
+	unsigned long armaddr_val = (unsigned long)armaddr;
+	unsigned long alck;
+	int i;
+	static const DMA_Device_t dmaDevList[] = {
+		DMA_DEVICE_MEM_TO_MEM,
+		DMA_DEVICE_MEM_TO_MEM_32,
+		DMA_DEVICE_MEM_TO_MEM_16BIT,
+		DMA_DEVICE_MEM_TO_MEM_BYTE
+	};
+
+	if (use_memcpy)
+		return ipc_dma_memcpy(vcaddr, armaddr, len, pagelist, dir);
+
+	if (mutex_lock_interruptible(&g_dma_mutex) != 0)
+		return -1;
+
+	/* Setup qos request for the duration of the actual
+	 * transfer.
+	 */
+	pm_qos_add_request(&g_dma_qos_request,
+		PM_QOS_CPU_DMA_LATENCY, DMA_QOS_VAL);
+
+	vchiq_log_trace(vchiq_arm_log_level,
+		"%s: (Bulk) dir=%s vcaddr=0x%x armaddr=0x%x len=%u",
+		__func__, (dir == DMA_TO_DEVICE) ? "Tx" : "Rx",
+		(unsigned int)vcaddr,
+		(unsigned int)armaddr, len);
+
+	/* Convert the videocore pointer to a videocore address offset */
+	vcAddrOffset = (dma_addr_t)(((unsigned long)vcaddr) & 0x3FFFFFFFuL);
+
+	/* Convert the videocore physical address into an ARM physical
+	** address */
+	vcPhysAddr = mm_vc_mem_phys_addr + vcAddrOffset;
+
+	init_completion(&gDmaDone);
+
+	dmaDev = DMA_DEVICE_MEM_TO_MEM_BYTE;
+	/* Use the largest transfer size we can.  We check the src/dest
+	 * alignment and that the size is a multiple of the transfer size.
+	 * For large transfers with the correct alignment but bad size, do most
+	 * of the transfer using a large transfer size, and fixup the last few
+	 * bytes using a smaller transfer. */
+	for (alck = 0x7, i = 0; alck; alck >>= 1, i++) {
+		if (((vcaddr_val & alck) == 0) && ((armaddr_val & alck) == 0) &&
+			(((aligned_len & alck) == 0) ||
+				(aligned_len > DUAL_TXFER_THRESH))) {
+			dmaDev = dmaDevList[i];
+			aligned_len &= ~alck;
+			break;
+		}
+	}
+
+	rc = do_dma(dmaDev, armaddr, vcPhysAddr, aligned_len, pagelist, dir);
+
+	if (rc != 0)
+		goto out;
+
+	len -= aligned_len;
+	if (len == 0)
+		goto out;
+
+	armaddr = (char *)armaddr + aligned_len;
+	vcaddr += aligned_len;
+
+	/*
+	 * Copy trailing unaligned bytes. Don't need to DMA here since the
+	 * trailing bytes aren't that many. The overhead of descriptor setup
+	 * will be too much!
+	 *
+	 * Memory copy is good enough.
+	 */
+	dmaDev = DMA_DEVICE_NONE;
+	/* figure out which page to use */
+	pagelist_start = ((uint8_t *)armaddr - baseArmAddr) >> PAGE_SHIFT;
+	rc = __dma_memcpy(vcaddr, armaddr, len, pagelist, dir, pagelist_start);
+
+out:
+	pm_qos_remove_request(&g_dma_qos_request);
 	mutex_unlock(&g_dma_mutex);
 
 	return rc;

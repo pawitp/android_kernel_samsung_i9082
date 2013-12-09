@@ -434,6 +434,7 @@ struct usb_gadget_ops {
 #ifdef CONFIG_USB_PCD_SETTINGS
 	int	(*pcd_start_clean) (struct usb_gadget *, int is_start);
 #endif
+	bool (*is_rid_c)(struct usb_gadget *);
 };
 
 /**
@@ -573,6 +574,17 @@ static inline int gadget_is_otg2(struct usb_gadget *g)
 #else
 	return 0;
 #endif
+}
+
+/**
+ * gadget_is_rid_c - return true if BC1.2 detects RID C condition
+ */
+static inline int gadget_is_rid_c(struct usb_gadget *g)
+{
+	if (g->ops->is_rid_c)
+		return g->ops->is_rid_c(g);
+	else
+		return 0;
 }
 
 /**
@@ -846,7 +858,6 @@ struct usb_gadget_driver {
 	void			(*disconnect)(struct usb_gadget *);
 	void			(*suspend)(struct usb_gadget *);
 	void			(*resume)(struct usb_gadget *);
-
 	/* FIXME support safe rmmod */
 	struct device_driver	driver;
 };

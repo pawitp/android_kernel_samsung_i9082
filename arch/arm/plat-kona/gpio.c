@@ -109,19 +109,30 @@ int __init early_init_dt_scan_gpio(unsigned long node, const char *uname,
 
 	p = (uint32_t *)prop;
 	i = be32_to_cpu(p[1]);
-	printk(KERN_INFO "reg: 0x%x, 0x%x\n", be32_to_cpu(p[0]), be32_to_cpu(p[1]));
+	printk(KERN_INFO "%s: reg: 0x%x, 0x%x\n", __func__,
+		be32_to_cpu(p[0]), be32_to_cpu(p[1]));
 
 	/* check the base address passed */
 	if (be32_to_cpu(p[0]) != GPIO2_BASE_ADDR){
-		printk(KERN_ERR "Wrong base address!\n");
-		return 1;
+		printk(KERN_ERR "%s: Wrong base address! 0x%x instead of 0x%x\n",
+			__func__, be32_to_cpu(p[0]), GPIO2_BASE_ADDR);
+		return 1; /*function return value is not checked for error by
+				the parent fn- only cares if value is 0 or not*/
 	}
 
 	prop = of_get_flat_dt_prop(node, "data", &size);
-	printk("data(0x%x): size=%ld\n", (unsigned int)prop, size);
+	if (prop == NULL) {
+		printk(KERN_ERR "%s :of_get_flat_dt_prop() returned NULL :Invalid data\n",
+			__func__); /*function return value is interpreted
+					as boolean by the parent function*/
+		return 1;
+	}
+	printk(KERN_INFO "%s: data(0x%x): size=%ld\n", __func__, (
+		unsigned int)prop, size);
 
 	if (i != size/8) {
-		printk(KERN_ERR "Mismatch size! %ld & %ld\n", i, size/8);
+		printk(KERN_ERR "%s: Mismatch size! %ld & %ld\n",
+			__func__, i, size/8);
 	}
 	else {
 		p = (uint32_t *)prop;
@@ -274,7 +285,8 @@ static int kona_gpio_set_debounce(struct gpio_chip *chip, unsigned gpio, unsigne
 	(void) chip; /* unused input parameter */
 	
 	if ( ( debounce > 0 && debounce < 1000 ) || debounce > 128000 ){
-		   printk(KERN_ERR "Debounce value %d not in range\n", debounce);
+		printk(KERN_ERR "%s: Debounce value %d not in range\n",
+			__func__, debounce);
 		   return -EINVAL;
    	}
 
@@ -411,7 +423,8 @@ static int kona_gpio_irq_set_type(struct irq_data *d, unsigned int type)
 		/* KONA GPIO doesn't support level triggering.
 		 */
 	default:
-		printk(KERN_ERR "Invalid KONA GPIO irq type 0x%x\n", type);
+		printk(KERN_ERR "%s: Invalid KONA GPIO irq type 0x%x\n",
+			__func__, type);
 		return -EINVAL;
 	}
 
@@ -564,18 +577,20 @@ int __init kona_gpio_init(int num_bank)
 					mask &= ~(1<<GPIO_BIT(gpio));
 				}
 				else{
-					printk(KERN_ERR "Mismatch GPIO%d. The board may not boot!\n", gpio);
+					printk(KERN_ERR "%s: Mismatch GPIO%d. The board may not boot!\n",
+						__func__, gpio);
 				}
 			}
 			gpio++;
 		}
 		if (mask) {
-			printk(KERN_ERR "Missing initial cfg for GPIO bank%d (mask=0x%x)\n", i, mask);
+			printk(KERN_ERR "%s: Missing initial cfg for GPIO bank%d (mask=0x%x)\n",
+				__func__, i, mask);
 		}
 #endif
 	}
 
-	printk(KERN_INFO "kona gpio initialised.\n");
+	printk(KERN_INFO "%s: kona gpio initialised.\n", __func__);
 	return 0;
 }
 

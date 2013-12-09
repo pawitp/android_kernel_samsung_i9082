@@ -254,14 +254,18 @@ static int _clock_on(void)
 	BUG_ON(vce_state.dfs_node == NULL);
 
 	vce_clk = clk_get(NULL, "vce_axi_clk");
-	if (!vce_clk) {
+	if (IS_ERR(vce_clk)) {
+		int err = PTR_ERR(vce_clk);
+
 		err_print("%s: error get clock\n", __func__);
-		return -EIO;
+		vce_clk = NULL;
+		return err;
 	}
 
 	s = clk_enable(vce_clk);
 	if (s != 0) {
 		err_print("%s: error enabling clock\n", __func__);
+		clk_put(vce_clk);
 		vce_clk = NULL;
 		return -EIO;
 	}

@@ -17,6 +17,7 @@
 
 int vc_dt_get_mem_config(uint32_t *base, uint32_t *load, uint32_t *size);
 const char *vc_dt_get_pmu_config(void);
+int vc_dt_get_fb_config(uint32_t *width, uint32_t *height, uint32_t *frame);
 int vc_dt_get_vchiq_bulk_xfer_size(void);
 
 #endif /* VC_DT_H */

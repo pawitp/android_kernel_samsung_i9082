@@ -4292,8 +4292,8 @@ need_resched:
 		rq->curr = next;
 		++*switch_count;
 
-void dpm_log_sched(struct task_struct *next);
-dpm_log_sched(next);
+		void dpm_log_sched(struct task_struct *next);
+		dpm_log_sched(next);
 
 		context_switch(rq, prev, next); /* unlocks the rq */
 		/*

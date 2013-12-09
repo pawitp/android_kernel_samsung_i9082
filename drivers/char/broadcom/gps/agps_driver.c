@@ -92,8 +92,8 @@ static int GPS_KERNEL_Open(struct inode *inode, struct file *filp)
 	if (gGpsCntinClk == NULL) {
 		gGpsCntinClk = clk_get(NULL, "dig_ch0_clk");
 		if (IS_ERR(gGpsCntinClk)) {
+			ret = PTR_ERR(gGpsCntinClk);
 			gGpsCntinClk = NULL;
-			ret = -EFAULT;
 		}
 	}
 	GPS_TRACE((GPS_LOG_LEVEL "GPS_KERNEL_Open gGpsCntinClk=0x%x ret=%d\n",

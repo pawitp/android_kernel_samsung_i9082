@@ -75,9 +75,11 @@
 #define SD_DETECT_GPIO_DEBOUNCE_128MS	128
 
 #define KONA_SDMMC_DISABLE_DELAY	(100)
-#define KONA_SDMMC_OFF_TIMEOUT		(180000)
+#define KONA_SDMMC_OFF_TIMEOUT		(180000) /* (8000) */
+unsigned int sdmmc_off_timeout=KONA_SDMMC_OFF_TIMEOUT;  /* CSP 619069 patch */
 
-#define STABLE_TIME_AFTER_POWER_ONOFF_US 1000
+#define STABLE_TIME_AFTER_POWER_ON_US 1000
+#define STABLE_TIME_AFTER_POWER_OFF_MS 50
 #define STABLE_TIME_BEFORE_SUSPEND_MS 50
 #define STABLE_TIME_BEFORE_SHUTDOWN_MS 50
 
@@ -144,6 +146,7 @@ static int sdhci_pltfm_set_signalling(struct sdhci_host *host, int sig_vol);
 static int sdhci_pltfm_set_3v3_signalling(struct sdhci_host *host);
 static int sdhci_pltfm_set_1v8_signalling(struct sdhci_host *host);
 static int sdhci_pltfm_set(struct sdhci_host *host, int enable, int lazy);
+static int sdhci_pltfm_set_regulator_power(struct sdhci_host *host, int power_state);
 static int sdhci_pltfm_enable(struct sdhci_host *host);
 static int sdhci_pltfm_disable(struct sdhci_host *host, int lazy);
 
@@ -216,12 +219,57 @@ static unsigned int sdhci_get_timeout_clock(struct sdhci_host *host)
 	return sdhci_get_max_clk(host);
 }
 
+int	sdhci_pltfm_set_timeout(struct sdhci_host *host, unsigned int timeout)
+{
+	struct sdio_dev *dev = sdhci_priv(host);
+
+
+	if(dev->devtype ==SDIO_DEV_TYPE_SDMMC ){
+		sdmmc_off_timeout = timeout;
+		return 0;
+	}
+	else{
+		printk("%s - No SD Card Type, Can Not Set Timeout\n",__func__);
+		return -EPERM;
+	}
+
+}
+int	sdhci_pltfm_get_timeout(struct sdhci_host *host,bool def_val,unsigned int *timeout)
+{
+	struct sdio_dev *dev = sdhci_priv(host);
+
+	if(dev->devtype ==SDIO_DEV_TYPE_SDMMC ){
+		if(def_val)
+			*timeout = KONA_SDMMC_OFF_TIMEOUT;
+		else
+			*timeout = sdmmc_off_timeout;
+		return 0;
+	}
+	else{
+		printk("%s - No SD Card Type, Can Not Set Timeout\n",__func__);
+		return -EPERM;
+	}
+}
+
+
+static void sdhci_pltfm_init_74_clocks(struct sdhci_host *host, u8 power_mode)
+{
+	if (power_mode == MMC_POWER_OFF)
+		return;
+	else
+		mdelay(10);
+}
+
 static struct sdhci_ops sdhci_pltfm_ops = {
 	.get_max_clk = sdhci_get_max_clk,
 	.get_timeout_clock = sdhci_get_timeout_clock,
 	.clk_enable = sdhci_pltfm_clk_enable,
 	.set_signalling = sdhci_pltfm_set_signalling,
 	.platform_set = sdhci_pltfm_set,
+	.set_regulator = sdhci_pltfm_set_regulator_power,
+	.platform_send_init_74_clocks = sdhci_pltfm_init_74_clocks,
+	.platform_set_timeout = sdhci_pltfm_set_timeout,
+	.platform_get_timeout = sdhci_pltfm_get_timeout,
 };
 static int bcm_kona_sd_reset(struct sdio_dev *dev)
 {
@@ -1076,9 +1124,10 @@ static void sdhci_pltfm_shutdown(struct platform_device *pdev)
 	}
 
 	proc_term(pdev);
-	if (dev->devtype == SDIO_DEV_TYPE_SDMMC)
-		mdelay(STABLE_TIME_BEFORE_SUSPEND_MS);
-
+	if(dev->devtype == SDIO_DEV_TYPE_SDMMC)
+	{
+		mdelay(STABLE_TIME_BEFORE_SHUTDOWN_MS);
+	}
 
 #ifndef CONFIG_MACH_BCM2850_FPGA
 	clk_disable(dev->sleep_clk);
@@ -1112,6 +1161,12 @@ static int sdhci_pltfm_suspend(struct platform_device *pdev, pm_message_t state)
 	struct sdio_dev *dev = platform_get_drvdata(pdev);
 	struct sdhci_host *host = dev->host;
 
+	if (dev->devtype == SDIO_DEV_TYPE_WIFI) {
+		host->mmc->pm_flags |= host->mmc->pm_caps;
+		printk(KERN_DEBUG "%s: pm_flags=0x%08x\n",
+			__FUNCTION__, host->mmc->pm_flags);
+		sdhci_suspend_host(host, state);
+	}
 #if 0
 	if (dev->devtype == SDIO_DEV_TYPE_SDMMC && dev->cd_gpio >= 0)
 		free_irq(gpio_to_irq(dev->cd_gpio), dev);
@@ -1156,9 +1211,10 @@ static int sdhci_pltfm_suspend(struct platform_device *pdev, pm_message_t state)
 	flush_delayed_work_sync(&host->mmc->disable);
 
 	dev->suspended = 1;
-
-	if (dev->devtype == SDIO_DEV_TYPE_SDMMC)
+	if(dev->devtype == SDIO_DEV_TYPE_SDMMC)
+	{
 		mdelay(STABLE_TIME_BEFORE_SUSPEND_MS);
+	}
 
 	return 0;
 }
@@ -1206,6 +1262,11 @@ static int sdhci_pltfm_resume(struct platform_device *pdev)
 	}
 #endif
 	dev->suspended = 0;
+
+	if (dev->devtype == SDIO_DEV_TYPE_WIFI) {
+		printk(KERN_DEBUG "%s: WiFi resume\n", __FUNCTION__);
+		sdhci_resume_host(host);
+	}
 	return 0;
 }
 #else
@@ -1251,7 +1312,6 @@ static void __exit sdhci_drv_exit(void)
 	platform_driver_unregister(&sdhci_pltfm_driver);
 }
 
-//fs_initcall(sdhci_drv_init);
 module_init(sdhci_drv_init);
 module_exit(sdhci_drv_exit);
 
@@ -1441,7 +1501,7 @@ static int sdhci_pltfm_regulator_init(struct platform_device *pdev,
 
 	/* set to 3.3V by default */
 	if (dev->vdd_sdxc_regulator)
-		ret = regulator_set_voltage(dev->vdd_sdxc_regulator, 3300000, 3300000);
+		ret = regulator_set_voltage(dev->vdd_sdxc_regulator, 3000000, 3000000);
 	if (ret < 0) {
 		printk(KERN_ERR "Unable to set vddo regulator to 3.3V\n");
 		goto err_disable_vddo_reg;
@@ -1449,7 +1509,7 @@ static int sdhci_pltfm_regulator_init(struct platform_device *pdev,
 
 	printk(KERN_INFO "Found and enabled vddo regulator for %s\n", devname);
 
-	udelay(STABLE_TIME_AFTER_POWER_ONOFF_US);
+	udelay(STABLE_TIME_AFTER_POWER_ON_US);
 
 	return 0;
 
@@ -1512,7 +1572,7 @@ static int sdhci_pltfm_set_3v3_signalling(struct sdhci_host *host)
 		if (ret < 0)
 			dev_err(dev->dev, "cant set vddo regulator to 3.0V!\n");
 		else
-			dev_dbg(dev->dev, "vddo regulator is set to 3.0V\n");
+			dev_err(dev->dev, "vddo regulator is set to 3.0V\n");
 	}
 	return ret;
 }
@@ -1529,7 +1589,7 @@ static int sdhci_pltfm_set_1v8_signalling(struct sdhci_host *host)
 		if (ret < 0)
 			dev_err(dev->dev, "Cant set vddo regulator to 1.8V!\n");
 		else
-			dev_dbg(dev->dev, "vddo regulator is set to 1.8V\n");
+			dev_err(dev->dev, "vddo regulator is set to 1.8V\n");
 	}
 	return ret;
 }
@@ -1551,42 +1611,74 @@ int sdhci_kona_sdio_regulator_power(struct sdio_dev *dev, int power_state)
 	 * regulator need not be switched OFF then from the board file do not
 	 * populate the regulator names.
 	 */
-	if (dev->vdd_sdxc_regulator) {
-		if (power_state) {
-			dev_dbg(dev->dev, "Turning ON sdxc sd \r\n");
-			ret = regulator_enable(dev->vdd_sdxc_regulator);
-		} else {
-			dev_dbg(dev->dev, "Turning OFF sdxc sd \r\n");
-			ret = regulator_disable(dev->vdd_sdxc_regulator);
-		}
-	 }
+	if( hw_cfg->devtype==SDIO_DEV_TYPE_SDMMC ) {
+		if (dev->vdd_sdxc_regulator) {
+			if (power_state) {
+				dev_err(dev->dev, "Turning ON sdxc sd \r\n");
+				if(!regulator_is_enabled(dev->vdd_sdxc_regulator)) {
+					ret = regulator_enable(dev->vdd_sdxc_regulator);
+				}
+			} else {
+				dev_err(dev->dev, "Turning OFF sdxc sd \r\n");
+				ret = regulator_disable(dev->vdd_sdxc_regulator);
+			}
+		 }
 
-	 if (dev->vddo_sd_regulator) {
+		 if (dev->vddo_sd_regulator) {
+			if (power_state) {
+				dev_err(dev->dev, "Turning ON vddo sd \r\n");
+				if(!regulator_is_enabled(dev->vddo_sd_regulator)) {
+					ret = regulator_enable(dev->vddo_sd_regulator);
+				}
+			} else{
+				dev_err(dev->dev, "Turning OFF vddo sd \r\n");
+				ret = regulator_disable(dev->vddo_sd_regulator);
+			}
+		 }
+
 		if (power_state) {
-			dev_dbg(dev->dev, "Turning ON vddo sd \r\n");
-			ret = regulator_enable(dev->vddo_sd_regulator);
+			if( hw_cfg->configure_sdio_pullup ) {
+			    dev_err(dev->dev, "Pull-Up CMD/DAT Line  \r\n");
+				mdelay(1);
+				hw_cfg->configure_sdio_pullup(1);
+				mdelay(1);
+			}
 		} else{
-			dev_dbg(dev->dev, "Turning OFF vddo sd \r\n");
-			ret = regulator_disable(dev->vddo_sd_regulator);
-		}
-	 }
+			if( hw_cfg->configure_sdio_pullup ) {
+				dev_err(dev->dev, "Pull Down CMD/DAT Line\r\n");
+				hw_cfg->configure_sdio_pullup(0);
+				mdelay(1);
+			}
+		 }
 
-	if (power_state) {
-		if((hw_cfg->devtype==SDIO_DEV_TYPE_SDMMC) && (hw_cfg->configure_sdio_pullup)) {
-		    dev_err(dev->dev, "Pull-Up CMD/DAT Line  \r\n");
-			mdelay(1);
-			hw_cfg->configure_sdio_pullup(1);
-			mdelay(1);
-		}
-	} else{
-		if((hw_cfg->devtype==SDIO_DEV_TYPE_SDMMC) && (hw_cfg->configure_sdio_pullup)) {
-			dev_err(dev->dev, "Pull Down CMD/DAT Line\r\n");
-			hw_cfg->configure_sdio_pullup(0);
-			mdelay(1);
-		}
-	 }
+		if (power_state)
+			udelay(STABLE_TIME_AFTER_POWER_ON_US);
+		else
+			mdelay(STABLE_TIME_AFTER_POWER_OFF_MS);
+	}
 
-	udelay(STABLE_TIME_AFTER_POWER_ONOFF_US);
+
+	return ret;
+}
+
+static int sdhci_pltfm_set_regulator_power(struct sdhci_host *host, int power_state)
+{
+	struct sdio_dev *dev = sdhci_priv(host);
+	int ret = 0;
+
+
+	ret	= sdhci_kona_sdio_regulator_power(dev, power_state);
+	if( !ret ) {
+		if( power_state ) {
+			dev->dpm_state	= ENABLED;
+			pr_info("Enabled by sdhci_pltfm_set_regulator_power\r\n");
+		} else {
+			dev->dpm_state	= OFF;
+			pr_info("OFF by sdhci_pltfm_set_regulator_power\r\n");
+		}
+	}
+
+
 	return ret;
 }
 
@@ -1680,7 +1772,7 @@ static int sdhci_kona_enabled_to_disabled(struct sdio_dev *dev)
 		return 0;
 #endif
 
-	return KONA_SDMMC_OFF_TIMEOUT;
+	return sdmmc_off_timeout;
 
 }
 

@@ -379,10 +379,14 @@ void extern_hs_on(void)
 ****************************************************************************/
 void extern_hs_off(void)
 {
+	/*add ramping down for HS gain level 0~63.*/
+	aTrace(LOG_AUDIO_CNTLR, "%s: ihf_IsOn %d, hs_IsOn %d\n", __func__,
+			ihf_IsOn, hs_IsOn);
 	/*BCM59056 PMU HW ramps down HS gain when powers off HS amp.
-	no need for software to ramp down HS gain.
+	no need for software to ramp down HS gain.*/
 	AUDIO_PMU_HS_SET_GAIN(PMU_AUDIO_HS_BOTH,
-				  PMU_HSGAIN_MUTE);*/
+				  PMU_HSGAIN_MUTE);
+
 	AUDIO_PMU_HS_POWER(0);
 
 	hs_IsOn = 0;
@@ -662,6 +666,21 @@ void extern_dock_audio_route(int gpio_val)
 		audio_gpio_output("AUDIO_DOCK_ROUTE",
 			ext_aud_plat_cfg.dock_aud_route_gpio, gpio_val);
 }
+
+/********************************************************************
+*  @brief  Set the GPIO pin value to route the audio to the mic sel
+*
+*  @param  Toggle value of the GPIO pin.  1 - High, 0 - Low
+*  @return  none
+*
+****************************************************************************/
+void extern_mic_sel_audio_route(int gpio_val)
+{
+	if (ext_aud_plat_cfg.mic_sel_aud_route_gpio > 0)
+		audio_gpio_output("MIC_SEL_ROUTE",
+			ext_aud_plat_cfg.mic_sel_aud_route_gpio, gpio_val);
+}
+
 #if defined(CONFIG_MACH_CAPRI_SS_BAFFIN_CMCC)		
 /********************************************************************
 *  @brief  Set the GPIO pin value to route the audio to the mode sel
@@ -675,19 +694,6 @@ void extern_mode_sel_audio_route(int gpio_val)
 	if (ext_aud_plat_cfg.mode_sel_aud_route_gpio > 0)
 		audio_gpio_output("MODE_SEL_ROUTE",
 			ext_aud_plat_cfg.mode_sel_aud_route_gpio, gpio_val);
-}
-/********************************************************************
-*  @brief  Set the GPIO pin value to route the audio to the mic sel
-*
-*  @param  Toggle value of the GPIO pin.  1 - High, 0 - Low
-*  @return  none
-*
-****************************************************************************/
-void extern_mic_sel_audio_route(int gpio_val)
-{
-	if (ext_aud_plat_cfg.mic_sel_aud_route_gpio > 0)
-		audio_gpio_output("MIC_SEL_ROUTE",
-			ext_aud_plat_cfg.mic_sel_aud_route_gpio, gpio_val);
 }
 /********************************************************************
 *  @brief  Set the GPIO pin value to route the audio to the bt sel

@@ -657,10 +657,11 @@ static int spum_aes_probe(struct platform_device *pdev)
 
 	/* Initializing the clock. */
 	dd->spum_open_clk = clk_get(NULL, "spum_open");
-	if (!dd->spum_open_clk) {
+	if (IS_ERR(dd->spum_open_clk)) {
 		pr_err("%s: Clock intialization failed.\n",__func__);
+		ret = PTR_ERR(dd->spum_open_clk);
 		kfree(dd);
-		return -ENOMEM;
+		return ret;
 	}
 
 	ret = clk_set_rate(dd->spum_open_clk, FREQ_MHZ(208));

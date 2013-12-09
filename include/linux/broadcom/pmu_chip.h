@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/pmu_chip.h
+*	@file	include/linux/broadcom/pmu_chip.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -27,7 +27,7 @@
 *
 *****************************************************************************/
 
-#if !defined( BCM_PMU_CHIP_H )
+#if !defined(BCM_PMU_CHIP_H)
 #define BCM_PMU_CHIP_H
 
 /* ---- Include Files ---------------------------------------------------- */
@@ -59,23 +59,42 @@
 
 #define BCM_PMU_CMD_LAST                0x8e
 
-#define BCM_PMU_IOCTL_ENABLE_INTS       _IO(  BCM_PMU_MAGIC, BCM_PMU_CMD_ENABLE_INTS )	// arg is unused
-#define BCM_PMU_IOCTL_DISABLE_INTS      _IO(  BCM_PMU_MAGIC, BCM_PMU_CMD_DISABLE_INTS )	// arg is unused
-#define BCM_PMU_IOCTL_READ_REG          _IOWR(BCM_PMU_MAGIC, BCM_PMU_CMD_READ_REG, BCM_PMU_Reg_t )
-#define BCM_PMU_IOCTL_WRITE_REG         _IOW( BCM_PMU_MAGIC, BCM_PMU_CMD_WRITE_REG, BCM_PMU_Reg_t )
-#define BCM_PMU_IOCTL_ACTIVATESIM       _IOW( BCM_PMU_MAGIC, BCM_PMU_CMD_ACTIVATESIM, PM_SimVoltage_t )
-#define BCM_PMU_IOCTL_DEACTIVATESIM 	_IO( BCM_PMU_MAGIC, BCM_PMU_CMD_DEACTIVATESIM )	// arg is unused
-#define BCM_PMU_IOCTL_GET_REGULATOR_STATE _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_GET_REGULATOR_STATE, BCM_PMU_Regulator_t)
-#define BCM_PMU_IOCTL_SET_REGULATOR_STATE _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_REGULATOR_STATE, BCM_PMU_Regulator_t)
-#define BCM_PMU_IOCTL_GET_VOLTAGE	 _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_GET_VOLTAGE, BCM_PMU_Regulator_Volt_t)
-#define BCM_PMU_IOCTL_SET_VOLTAGE	 _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_VOLTAGE, BCM_PMU_Regulator_Volt_t)
-#define BCM_PMU_IOCTL_SET_PWM_LED_CTRL    _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_LED_CTRL, BCM_PMU_PWM_ctrl_t)
-#define BCM_PMU_IOCTL_POWERONOFF    	  _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_POWERONOFF, BCM_PMU_Reg_t)
-#define BCM_PMU_IOCTL_SET_PWM_HI_PER      _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_HI_PER, BCM_PMU_PWM_hi_per_t)
-#define BCM_PMU_IOCTL_SET_PWM_LO_PER      _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_LO_PER, BCM_PMU_PWM_lo_per_t)
-#define BCM_PMU_IOCTL_SET_PWM_PWR_CTRL    _IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_PWR_CTRL, BCM_PMU_PWM_pwr_ctrl_t)
+#define BCM_PMU_IOCTL_ENABLE_INTS\
+	_IO(BCM_PMU_MAGIC, BCM_PMU_CMD_ENABLE_INTS)	/* arg is unused*/
+#define BCM_PMU_IOCTL_DISABLE_INTS\
+	_IO(BCM_PMU_MAGIC, BCM_PMU_CMD_DISABLE_INTS)	/* arg is unused*/
+#define BCM_PMU_IOCTL_READ_REG\
+	_IOWR(BCM_PMU_MAGIC, BCM_PMU_CMD_READ_REG, BCM_PMU_Reg_t)
+#define BCM_PMU_IOCTL_WRITE_REG\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_WRITE_REG, BCM_PMU_Reg_t)
+#define BCM_PMU_IOCTL_ACTIVATESIM\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_ACTIVATESIM, PM_SimVoltage_t)
+#define BCM_PMU_IOCTL_DEACTIVATESIM\
+	_IO(BCM_PMU_MAGIC, BCM_PMU_CMD_DEACTIVATESIM)	/* arg is unused*/
+#define BCM_PMU_IOCTL_GET_REGULATOR_STATE\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_GET_REGULATOR_STATE, BCM_PMU_Regulator_t)
+#define BCM_PMU_IOCTL_SET_REGULATOR_STATE\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_REGULATOR_STATE, BCM_PMU_Regulator_t)
+#define BCM_PMU_IOCTL_GET_VOLTAGE\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_GET_VOLTAGE, BCM_PMU_Regulator_Volt_t)
+#define BCM_PMU_IOCTL_SET_VOLTAGE\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_VOLTAGE, BCM_PMU_Regulator_Volt_t)
+#define BCM_PMU_IOCTL_SET_PWM_LED_CTRL\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_LED_CTRL, BCM_PMU_PWM_ctrl_t)
+#define BCM_PMU_IOCTL_POWERONOFF\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_POWERONOFF, BCM_PMU_Reg_t)
+#define BCM_PMU_IOCTL_SET_PWM_HI_PER\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_HI_PER, BCM_PMU_PWM_hi_per_t)
+#define BCM_PMU_IOCTL_SET_PWM_LO_PER\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_LO_PER, BCM_PMU_PWM_lo_per_t)
+#define BCM_PMU_IOCTL_SET_PWM_PWR_CTRL\
+	_IOW(BCM_PMU_MAGIC, BCM_PMU_CMD_SET_PWM_PWR_CTRL, BCM_PMU_PWM_pwr_ctrl_t)
 
-//per lori: at_pmu.c requires an updated kernel/common/include/linux/broadcom/pmu_chip.h version.  For now, I just added the required defines to pmu_chip.h, and not the corresponding implementation. So, AT*MPMUTST commands won.t work properly.
+/*per lori: at_pmu.c requires an updated
+ kernel/common/include/linux/broadcom/pmu_chip.h version.
+ For now, I just added the required defines to pmu_chip.h,
+ and not the corresponding implementation.
+ So, AT*MPMUTST commands won.t work properly.*/
 typedef struct {
 	unsigned long reg;
 	unsigned short val;
@@ -125,7 +144,7 @@ typedef struct {
 typedef struct {
 	unsigned int regoffset;
 	unsigned int pwmled_ctrl;
-	unsigned int pwmdiv;	// divider value. fsys/x value.    
+	unsigned int pwmdiv;	/* divider value. fsys/x value.*/
 } BCM_PMU_PWM_ctrl_t;
 
 typedef struct {
@@ -141,12 +160,12 @@ typedef struct {
 } BCM_PMU_PWM_pwr_ctrl_t;
 
 typedef enum {
-	PMU_Power_On_By_On_Button,	// on button
-	PMU_Power_On_By_Charger,	// charger insertion and no on button
-	PMU_Power_On_By_Restart	// re-started while power on
+	PMU_Power_On_By_On_Button,/* on button */
+	PMU_Power_On_By_Charger,  /* charger insertion and no on button*/
+	PMU_Power_On_By_Restart	  /* re-started while power on*/
 } BCM_PMU_Power_On_State_t;
 
-typedef enum			// If you change this, please update PM_EventTable as well
+typedef enum /* If you change this, please update PM_EventTable as well */
 {
 	PMU_EVENT_ATTACHED = 0,
 

@@ -279,15 +279,13 @@ int bcm_bzhw_assert_bt_wake(int bt_wake_gpio, struct pi_mgr_qos_node *lqos_node,
 	port = state->uart_port;
 	gpio_set_value(bt_wake_gpio, BZHW_BT_WAKE_ASSERT);
 	pr_debug("%s BLUETOOTH:ASSERT BT_WAKE\n", __func__);
-
+	rc = pi_mgr_qos_request_update(lqos_node, 0);
 #ifdef CONFIG_HAS_WAKELOCK
 	if (priv_g != NULL) {
 		if (!wake_lock_active(&priv_g->bzhw_data.bt_wake_lock))
 			wake_lock(&priv_g->bzhw_data.bt_wake_lock);
 	}
 #endif
-	rc = pi_mgr_qos_request_update(lqos_node, 0);
-
 	return 0;
 }
 
@@ -379,18 +377,12 @@ static irqreturn_t bcm_bzhw_host_wake_isr(int irq, void *dev)
 		spin_unlock_irqrestore(&priv->bzhw_lock, flags);
 	} else {
 		pr_debug("%s BLUETOOTH: hostwake ISR DeAssert\n", __func__);
-		host_wake = gpio_get_value(priv->bzhw_data.gpio_host_wake);
-		if (BZHW_HOST_WAKE_DEASSERT == host_wake) {
 		if (priv->bzhw_state == BZHW_ASLEEP) {
 			spin_unlock_irqrestore(&priv->bzhw_lock, flags);
 		} else {
 			priv->bzhw_state = BZHW_AWAKE_TO_ASLEEP;
 			mod_timer(&priv->sleep_timer_hw,
 				jiffies + TIMER_PERIOD*HZ);
-		spin_unlock_irqrestore(&priv->bzhw_lock, flags);
-		}
-		}else {
-		pr_debug("%s BLUETOOTH: hostwake ISR DeAssert: host wake state changed\n", __func__);
 		spin_unlock_irqrestore(&priv->bzhw_lock, flags);
 		}
 	}

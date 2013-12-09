@@ -258,3 +258,33 @@ Result_t Handle_CAPI2_SYS_SoftResetSystem(RPC_Msg_t *pReqMsg, UInt32 param)
 
 	return result;
 }
+
+Result_t Handle_SYS_SimApi_ColdResetEvt(RPC_Msg_t *pReqMsg,
+	UInt8 simId, Boolean isMasterMode, UInt32 event)
+{
+	Result_t result = RESULT_OK;
+	SYS_ReqRep_t data;
+
+	memset(&data, 0, sizeof(SYS_ReqRep_t));
+
+	data.result = result;
+	Send_SYS_RspForRequest(pReqMsg, MSG_SYS_SIM_COLD_RESET_EVT_RSP, &data);
+
+	switch (event) {
+	case 0:		/* SIM_ISO_COLD_RESET_BEGIN */
+		printk(KERN_INFO "SIM Cold Reset Start\n");
+/*TBD		nfc_sim_ctrl(0); */
+		break;
+
+	case 1:		/* SIM_ISO_COLD_RESET_SUCCEED */
+		printk(KERN_INFO "SIM Cold Reset Done\n");
+/*TBD		nfc_sim_ctrl(1); */
+		break;
+
+	default:
+		printk(KERN_INFO "SIM Cold Reset unhandled event %d\n", event);
+		break;
+	}
+
+	return result;
+}

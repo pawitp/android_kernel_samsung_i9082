@@ -699,6 +699,8 @@ typedef struct work_container
 #endif
 
 	struct delayed_work work;
+	dwc_list_link_t lh;
+	int is_list;
 } work_container_t;
 
 #ifdef DEBUG
@@ -717,6 +719,76 @@ struct dwc_workq
 #endif
 };
 
+static dwc_list_link_t dwc_work_container_lh;
+
+void DWC_CONTAINER_LIST_INIT(int size)
+{
+	int i;
+	work_container_t *container;
+	dwc_list_link_t *lh = &dwc_work_container_lh;
+
+	if (!size) {
+		DWC_PRINTF("skip createing container list\n");
+		return;
+	}
+
+	container = (work_container_t *)dwc_alloc(
+		sizeof(work_container_t) * size);
+	if (!container) {
+		DWC_ERROR("Failed to alloc container list\n");
+		return;
+	}
+	memset(container, 0, sizeof(work_container_t) * size);
+
+	DWC_LIST_INIT(lh);
+	for (i = 0; i < size; i++) {
+		container[i].is_list = 1;
+		DWC_LIST_INIT(&container[i].lh);
+		DWC_LIST_INSERT_TAIL(lh, &container[i].lh);
+	}
+}
+EXPORT_SYMBOL(DWC_CONTAINER_LIST_INIT);
+
+void DWC_CONTAINER_LIST_FREE(void)
+{
+	if (DWC_LIST_FIRST(&dwc_work_container_lh))
+		dwc_free(DWC_LIST_FIRST(&dwc_work_container_lh));
+}
+EXPORT_SYMBOL(DWC_CONTAINER_LIST_FREE);
+
+static int container_list_return_entry(dwc_list_link_t *lh,
+	work_container_t *work)
+{
+	dwc_list_link_t *tmp;
+	work_container_t *entry;
+
+	DWC_LIST_FOREACH(tmp, lh) {
+		entry = DWC_LIST_ENTRY(tmp, work_container_t, lh);
+		if (work == entry) {
+			DWC_PRINTF("found entry to remove:%p\n", entry);
+			entry->wq = NULL;
+			entry->cb = NULL;
+			entry->data = NULL;
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static work_container_t *container_list_get_free_entry(dwc_list_link_t *lh)
+{
+	dwc_list_link_t *tmp;
+	work_container_t *entry;
+
+	DWC_LIST_FOREACH(tmp, lh) {
+		entry = DWC_LIST_ENTRY(tmp, work_container_t, lh);
+		if (entry->wq == NULL)
+			return entry;
+	}
+	return NULL;
+}
+
+
 static void do_work(struct work_struct *work)
 {
 	int64_t flags;
@@ -734,7 +806,16 @@ static void do_work(struct work_struct *work)
 	if (container->name) {
 		DWC_FREE(container->name);
 	}
-	DWC_FREE(container);
+	if (container->is_list) {
+		if (!container_list_return_entry(
+			&dwc_work_container_lh, container)) {
+			DWC_ERROR(
+				"Failed to return container to list:%p\n",
+				container);
+		}
+	} else {
+		DWC_FREE(container);
+	}
 
 	DWC_SPINLOCK_IRQSAVE(wq->lock, &flags);
 	wq->pending --;
@@ -786,6 +867,7 @@ void DWC_WORKQ_FREE(dwc_workq_t *wq)
 }
 EXPORT_SYMBOL(DWC_WORKQ_FREE);
 
+
 void DWC_WORKQ_SCHEDULE(dwc_workq_t *wq, dwc_work_callback_t work_cb, void *data, char *format, ...)
 {
 	int64_t flags;
@@ -803,7 +885,15 @@ void DWC_WORKQ_SCHEDULE(dwc_workq_t *wq, dwc_work_callback_t work_cb, void *data
 	DWC_WAITQ_TRIGGER(wq->waitq);
 
 	container = DWC_ALLOC_ATOMIC(sizeof(*container));
-
+	if (!container) {
+		DWC_ERROR("Failed to alloc work container\n");
+		container = container_list_get_free_entry(
+			&dwc_work_container_lh);
+		if (!container) {
+			DWC_ERROR("Failed to get free entry from list\n");
+			return;
+		}
+	}
 	container->data = data;
 	container->cb = work_cb;
 	container->wq = wq;
@@ -837,6 +927,15 @@ void DWC_WORKQ_SCHEDULE_DELAYED(dwc_workq_t *wq, dwc_work_callback_t work_cb, vo
 	DWC_WAITQ_TRIGGER(wq->waitq);
 
 	container = DWC_ALLOC_ATOMIC(sizeof(*container));
+	if (!container) {
+		DWC_ERROR("Failed to alloc work container\n");
+		container = container_list_get_free_entry(
+			&dwc_work_container_lh);
+		if (!container) {
+			DWC_ERROR("Failed to get free entry from list\n");
+			return;
+		}
+	}
 
 	container->data = data;
 	container->cb = work_cb;

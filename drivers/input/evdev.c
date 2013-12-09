@@ -61,6 +61,9 @@ static void evdev_pass_event(struct evdev_client *client,
 			     struct input_event *event)
 {
 	/* Interrupts are disabled, just acquire the lock. */
+	if( event->code == 116)
+		pr_info("%s  onkey event %d\n",__func__,event->code);
+	
 	spin_lock(&client->buffer_lock);
 
 	client->buffer[client->head++] = *event;
@@ -77,6 +80,8 @@ static void evdev_pass_event(struct evdev_client *client,
 		client->buffer[client->tail].type = EV_SYN;
 		client->buffer[client->tail].code = SYN_DROPPED;
 		client->buffer[client->tail].value = 0;
+
+		pr_info("%s  onkey event %d\n",__func__,client->buffer[client->tail].code);
 
 		client->packet_head = client->tail;
 		if (client->use_wake_lock)
@@ -370,6 +375,10 @@ static ssize_t evdev_write(struct file *file, const char __user *buffer,
 
 		input_inject_event(&evdev->handle,
 				   event.type, event.code, event.value);
+
+		if( event.code == 116)
+			pr_info("%s  onkey event %d\n",__func__,event.code);
+		
 	} while (retval + input_event_size() <= count);
 
  out:
@@ -426,6 +435,9 @@ static ssize_t evdev_read(struct file *file, char __user *buffer,
 			return -EFAULT;
 
 		retval += input_event_size();
+
+		if( event.code == 116)
+			pr_info("%s  onkey event %d\n",__func__,event.code);
 	}
 
 	if (retval == 0 && file->f_flags & O_NONBLOCK)

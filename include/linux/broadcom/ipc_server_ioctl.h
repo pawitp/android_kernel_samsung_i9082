@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/ipc_server_ioctl.h
+*	@file	include/linux/broadcom/ipc_server_ioctl.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -16,7 +16,8 @@
 #ifndef _IPC_SERVER_IOCTL_H
 #define _IPC_SERVER_IOCTL_H
 
-#define IPC_SERVER_IOC_MAGIC   0xF1	/* an 8-bit integer selected to be specific to this driver */
+#define IPC_SERVER_IOC_MAGIC   0xF1
+	/* an 8-bit integer selected to be specific to this driver */
 
 #ifdef CONFIG_BRCM_FUSE_IPC_CIB
 #include <linux/broadcom/csl_types.h>
@@ -246,32 +247,52 @@ typedef struct {
 } bcm_ipcs_cb_info_t;
 
 /* IPC Management APIs */
-#define ipc_endpoint_register_ioc						_IOWR(IPC_SERVER_IOC_MAGIC, 1, bcm_ipc_endpoint_reg_t)
+#define ipc_endpoint_register_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 1, bcm_ipc_endpoint_reg_t)
 
 /* Pool Level APIs */
-#define ipc_create_buffer_pool_ioc	            		_IOWR(IPC_SERVER_IOC_MAGIC, 2, bcm_ipc_creat_buff_pool_t)
-#define ipc_pool_user_param_set_ioc          			_IOWR(IPC_SERVER_IOC_MAGIC, 3, bcm_ipc_pool_param_t)
-#define ipc_pool_user_param_get_ioc           			_IOWR(IPC_SERVER_IOC_MAGIC, 4, bcm_ipc_pool_param_t)
-#define ipc_pool_src_endpoint_id_ioc	        		_IOWR(IPC_SERVER_IOC_MAGIC, 5, bcm_ipc_pool_endpoint_t)
-#define ipc_pool_dest_endpoint_id_ioc	    			_IOWR(IPC_SERVER_IOC_MAGIC, 6, bcm_ipc_pool_endpoint_t)
-#define ipc_pool_set_free_callback_ioc            		_IOWR(IPC_SERVER_IOC_MAGIC, 7, bcm_ipc_set_free_pool_cb_t)
+#define ipc_create_buffer_pool_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 2, bcm_ipc_creat_buff_pool_t)
+#define ipc_pool_user_param_set_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 3, bcm_ipc_pool_param_t)
+#define ipc_pool_user_param_get_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 4, bcm_ipc_pool_param_t)
+#define ipc_pool_src_endpoint_id_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 5, bcm_ipc_pool_endpoint_t)
+#define ipc_pool_dest_endpoint_id_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 6, bcm_ipc_pool_endpoint_t)
+#define ipc_pool_set_free_callback_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 7, bcm_ipc_set_free_pool_cb_t)
 
 /* Buffer Level APIs */
-#define ipc_alloc_buffer_ioc            				_IOWR(IPC_SERVER_IOC_MAGIC, 8,  bcm_ipc_alloc_buffer_t)
-#define ipc_send_buffer_ioc								_IOWR(IPC_SERVER_IOC_MAGIC, 9, bcm_ipc_send_buffer_t)
-#define ipc_free_buffer_ioc								_IOWR(IPC_SERVER_IOC_MAGIC, 10, bcm_ipc_buffer_t)
+#define ipc_alloc_buffer_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 8,  bcm_ipc_alloc_buffer_t)
+#define ipc_send_buffer_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 9, bcm_ipc_send_buffer_t)
+#define ipc_free_buffer_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 10, bcm_ipc_buffer_t)
 
 /* Buffer Access APIs */
-#define ipc_buffer_recv_ioc								_IOWR(IPC_SERVER_IOC_MAGIC, 11, bcm_ipc_receive_buffer_t)
-#define ipc_buffer_data_size_ioc						_IOWR(IPC_SERVER_IOC_MAGIC, 12, bcm_ipc_buffer_data_sz_t)
-#define ipc_buffer_get_header_size_ioc	 				_IOWR(IPC_SERVER_IOC_MAGIC, 13, bcm_ipc_buffer_hdr_op_t)
-#define ipc_buffer_set_data_size_ioc	 				_IOWR(IPC_SERVER_IOC_MAGIC, 14, bcm_ipc_buffer_data_sz_t)
-#define ipc_buffer_set_header_size_ioc	 				_IOWR(IPC_SERVER_IOC_MAGIC, 15, bcm_ipc_buffer_hdr_op_t)
-#define ipc_buffer_source_endpoint_ioc					_IOWR(IPC_SERVER_IOC_MAGIC, 16, bcm_ipc_buffer_endpoint_t)
-#define ipc_buffer_destination_endpoint_ioc				_IOWR(IPC_SERVER_IOC_MAGIC, 17, bcm_ipc_buffer_endpoint_t)
-#define ipc_bufpool_user_parameter_ioc   				_IOWR(IPC_SERVER_IOC_MAGIC, 18, bcm_ipc_buffer_param_t)
-#define ipc_buffer_user_parameter_get_ioc				_IOWR(IPC_SERVER_IOC_MAGIC, 19, bcm_ipc_buffer_param_t)
-#define ipc_buffer_user_parameter_set_ioc				_IOWR(IPC_SERVER_IOC_MAGIC, 20, bcm_ipc_buffer_param_t)
+#define ipc_buffer_recv_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 11, bcm_ipc_receive_buffer_t)
+#define ipc_buffer_data_size_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 12, bcm_ipc_buffer_data_sz_t)
+#define ipc_buffer_get_header_size_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 13, bcm_ipc_buffer_hdr_op_t)
+#define ipc_buffer_set_data_size_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 14, bcm_ipc_buffer_data_sz_t)
+#define ipc_buffer_set_header_size_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 15, bcm_ipc_buffer_hdr_op_t)
+#define ipc_buffer_source_endpoint_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 16, bcm_ipc_buffer_endpoint_t)
+#define ipc_buffer_destination_endpoint_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 17, bcm_ipc_buffer_endpoint_t)
+#define ipc_bufpool_user_parameter_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 18, bcm_ipc_buffer_param_t)
+#define ipc_buffer_user_parameter_get_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 19, bcm_ipc_buffer_param_t)
+#define ipc_buffer_user_parameter_set_ioc\
+	 _IOWR(IPC_SERVER_IOC_MAGIC, 20, bcm_ipc_buffer_param_t)
 
 #define IPC_SERVER_IOC_MAXNR	20
 

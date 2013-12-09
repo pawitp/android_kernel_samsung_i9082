@@ -133,5 +133,8 @@ rndis_bind_config(struct usb_configuration *c, u8 ethaddr[ETH_ALEN],
 extern void brcm_current_netcon_status(unsigned char status);
 extern unsigned char brcm_get_netcon_status(void);
 #endif
+#ifdef CONFIG_USB_ETH_SKB_ALLOC_OPTIMIZATION
+extern void ncm_ntb_out_size(u32 ntb_out_size);
+#endif
 
 #endif /* __U_ETHER_H */

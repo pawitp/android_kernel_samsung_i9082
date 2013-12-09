@@ -363,6 +363,8 @@ static const struct bcmpmu_reg_map bcm59056_reg_map[PMU_REG_MAX] = {
 					.mask = 0xFF, .ro = 0, .shift = 0},
 	[PMU_REG_FG_CIC] =		{.map = 0x01, .addr = 0xA3,
 					.mask = 0xFF, .ro = 0, .shift = 0},
+	[PMU_REG_FG_ST] =		{.map = 0x01, .addr = 0xB8,
+					 .mask = 0xFF, .ro = 0, .shift = 0},
 	/* usb control */
 	[PMU_REG_OTG_VBUS_PULSE] =	{.map = 1, .addr = 0x40,
 					.mask = 0x01, .ro = 0, .shift = 0},
@@ -441,8 +443,16 @@ static const struct bcmpmu_reg_map bcm59056_reg_map[PMU_REG_MAX] = {
 					.mask = 0xFF, .ro = 0},
 	[PMU_REG_HOSTCTRL1] =		{.map = 0x00, .addr = 0x01,
 					.mask = 0xFF, .ro = 0},
+/* TODO: use a better config here. */
+#ifndef CONFIG_MACH_CAPRI_TABLET
 	[PMU_REG_HDMICTRL1] =		{.map = 0x00, .addr = 0x7F,
 					.mask = 0x40, .ro = 0},
+#else
+	[PMU_REG_HDMICTRL1] =		{.map = 0x01, .addr = 0x5A,
+					.mask = 0x01, .ro = 0},
+	[PMU_REG_VIOPON1] =		{.map = 0x00, .addr = 0x7F,
+					.mask = 0x40, .ro = 0, .shift = 6},
+#endif
 	[PMU_REG_MBCCTRL5_USB_DET_LDO_EN] = {
 		.map = 0x00, .addr = 0x44,
 		.mask = 0x04, .ro = 0, .shift = 2},
@@ -875,6 +885,8 @@ static const struct bcmpmu_reg_map bcm59056b0_reg_map[PMU_REG_MAX] = {
 					.mask = 0xFF, .ro = 0, .shift = 0},
 	[PMU_REG_FG_CIC] =		{.map = 0x01, .addr = 0xA3,
 					.mask = 0xFF, .ro = 0, .shift = 0},
+	[PMU_REG_FG_ST] =		{.map = 0x01, .addr = 0xB8,
+					 .mask = 0xFF, .ro = 0, .shift = 0},
 	/* usb control */
 	[PMU_REG_OTG_VBUS_PULSE] =	{.map = 1, .addr = 0x40,
 					.mask = 0x01, .ro = 0, .shift = 0},
@@ -953,8 +965,14 @@ static const struct bcmpmu_reg_map bcm59056b0_reg_map[PMU_REG_MAX] = {
 					.mask = 0xFF, .ro = 0},
 	[PMU_REG_HOSTCTRL1] =		{.map = 0x00, .addr = 0x01,
 					.mask = 0xFF, .ro = 0},
+/* TODO: use a better config here. */
+#ifndef CONFIG_MACH_CAPRI_TABLET
 	[PMU_REG_HDMICTRL1] =		{.map = 0x00, .addr = 0x7F,
 					.mask = 0x40, .ro = 0, .shift = 6},
+#else
+	[PMU_REG_VIOPON1] =		{.map = 0x00, .addr = 0x7F,
+					.mask = 0x40, .ro = 0, .shift = 6},
+#endif
 	[PMU_REG_MBCCTRL5_USB_DET_LDO_EN] = {
 		.map = 0x00, .addr = 0x44,
 		.mask = 0x04, .ro = 0, .shift = 2},

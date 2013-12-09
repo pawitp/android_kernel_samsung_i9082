@@ -1,7 +1,7 @@
 /*******************************************************************************
 * Copyright 2010 Broadcom Corporation.  All rights reserved.
 *
-* 	@file	include/linux/broadcom/camera.h
+*	@file	include/linux/broadcom/camera.h
 *
 * Unless you and Broadcom execute a separate written software license agreement
 * governing use of this software, this software is licensed to you under the
@@ -67,18 +67,29 @@ typedef struct {
 	unsigned int len;
 } CAM_Frame_t;
 sads
-#define CAM_IOCTL_ENABLE        _IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE)	/* arg is int */
-#define CAM_IOCTL_ENABLE_INTS   _IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE_INTS)	/* arg is int */
-#define CAM_IOCTL_READ_REG      _IOWR(BCM_CAM_MAGIC, CAM_CMD_READ_REG, CAM_Reg_t)	/* arg is CAM_Reg_t * */
-#define CAM_IOCTL_WRITE_REG     _IOW(BCM_CAM_MAGIC, CAM_CMD_WRITE_REG, CAM_Reg_t)	/* arg is CAM_Reg_t * */
-#define CAM_IOCTL_SET_FPS       _IO(BCM_CAM_MAGIC, CAM_CMD_SET_FPS)	/* arg is CAM_fps_t */
-#define CAM_IOCTL_ENABLE_LCD    _IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE_LCD)	/* arg is int */
-#define CAM_IOCTL_GET_FRAME     _IOWR(BCM_CAM_MAGIC, CAM_CMD_GET_FRAME, CAM_Frame_t)	/* arg is CAM_Frame_t * */
+#define CAM_IOCTL_ENABLE\
+	_IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE)	/* arg is int */
+#define CAM_IOCTL_ENABLE_INTS\
+	_IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE_INTS)	/* arg is int */
+#define CAM_IOCTL_READ_REG\
+	_IOWR(BCM_CAM_MAGIC, CAM_CMD_READ_REG, CAM_Reg_t)
+	/* arg is CAM_Reg_t * */
+#define CAM_IOCTL_WRITE_REG\
+	_IOW(BCM_CAM_MAGIC, CAM_CMD_WRITE_REG, CAM_Reg_t)
+	/* arg is CAM_Reg_t * */
+#define CAM_IOCTL_SET_FPS\
+	_IO(BCM_CAM_MAGIC, CAM_CMD_SET_FPS)	/* arg is CAM_fps_t */
+#define CAM_IOCTL_ENABLE_LCD\
+	_IO(BCM_CAM_MAGIC, CAM_CMD_ENABLE_LCD)	/* arg is int */
+#define CAM_IOCTL_GET_FRAME\
+	_IOWR(BCM_CAM_MAGIC, CAM_CMD_GET_FRAME, CAM_Frame_t)
+	/* arg is CAM_Frame_t * */
 /* ---- Variable Externs ------------------------------------------------- */
 /* ---- Function Prototypes ---------------------------------------------- */
 #ifdef __KERNEL__
 /* ---- Constants and Types ---------------------------------------------- */
-typedef void (*CAM_fncptr) (void *, void *);	/* callback function pointer type */
+typedef void (*CAM_fncptr) (void *, void *);
+	/* callback function pointer type */
 
 typedef enum {
 	CAM_RGB565,		/* 16 bits per pixel RGB 5:6:5 */

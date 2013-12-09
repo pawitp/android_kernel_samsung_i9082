@@ -26,6 +26,7 @@
 #include <linux/platform_device.h>
 #include <linux/uaccess.h>
 #include <asm/cacheflush.h>
+#include <linux/highmem.h>
 
 #include "vc_cma.h"
 
@@ -43,7 +44,11 @@
 	printk(KERN_ERR fmt "\n", ##__VA_ARGS__)
 
 #define VC_CMA_FOURCC VCHIQ_MAKE_FOURCC('C', 'M', 'A', ' ')
-#define VC_CMA_VERSION 2
+#define VC_CMA_VERSION 3
+#define VC_CMA_VERSION_MIN 2
+
+/* VC_CMA_MSG_ALLOCATED omits requested chunk count if version < 3 */
+#define VC_CMA_VERSION_HAS_ALLOCATED_REQCOUNT 3
 
 #define VC_CMA_CHUNK_ORDER 6	/* 256K */
 #define VC_CMA_CHUNK_SIZE (4096 << VC_CMA_CHUNK_ORDER)
@@ -64,7 +69,7 @@ enum {
 	VC_CMA_MSG_TICK,
 	VC_CMA_MSG_ALLOC,	/* chunk count */
 	VC_CMA_MSG_FREE,	/* chunk, chunk, ... */
-	VC_CMA_MSG_ALLOCATED,	/* chunk, chunk, ... */
+	VC_CMA_MSG_ALLOCATED,	/* requested chunk count, chunk, chunk, ... */
 	VC_CMA_MSG_REQUEST_ALLOC,	/* chunk count */
 	VC_CMA_MSG_REQUEST_FREE,	/* chunk count */
 	VC_CMA_MSG_RESERVE,	/* bytes lo, bytes hi */
@@ -88,6 +93,7 @@ static struct class *vc_cma_class;
 static struct cdev vc_cma_cdev;
 static int vc_cma_inited;
 static int vc_cma_debug;
+static int vc_cma_injected_fail;
 
 /* Proc entry */
 static struct proc_dir_entry *vc_cma_proc_entry;
@@ -329,6 +335,7 @@ static int vc_cma_proc_write(struct file *file,
 #define FREE_STR "free"
 #define DEBUG_STR "debug"
 #define RESERVE_STR "reserve"
+#define FAIL_STR "fail"
 	if (strncmp(input_str, ALLOC_STR, strlen(ALLOC_STR)) == 0) {
 		int size;
 		char *p = input_str + strlen(ALLOC_STR);
@@ -377,6 +384,15 @@ static int vc_cma_proc_write(struct file *file,
 
 		reserved = vc_cma_set_reserve(size, current->tgid);
 		rc = (reserved >= 0) ? size : reserved;
+	} else if (strncmp(input_str, FAIL_STR, strlen(FAIL_STR)) == 0) {
+		int size;
+		char *p = input_str + strlen(FAIL_STR);
+		while (*p == ' ')
+			p++;
+		size = memparse(p, NULL);
+		LOG_ERR("/proc/vc-cma: fail %d", size);
+		vc_cma_injected_fail = size;
+		rc = size;
 	}
 
 out:
@@ -501,11 +517,23 @@ static bool send_worker_msg(VCHIQ_HEADER_T * msg)
 static int vc_cma_alloc_chunks(int num_chunks, struct cma_msg *reply)
 {
 	int i;
+	short peer_version = 0;
+
+	vchiq_use_service(cma_service);
+	vchiq_get_peer_version(cma_service, &peer_version);
+	vchiq_release_service(cma_service);
+
 	for (i = 0; i < num_chunks; i++) {
 		struct page *chunk;
 		unsigned int chunk_num;
 		uint8_t *chunk_addr;
 		size_t chunk_size = PAGES_PER_CHUNK << PAGE_SHIFT;
+
+		if (vc_cma_injected_fail) {
+			vc_cma_injected_fail--;
+			if (vc_cma_injected_fail == 0)
+				break;
+		}
 
 		chunk = dma_alloc_from_contiguous(&vc_cma_device.dev,
 						  PAGES_PER_CHUNK,
@@ -513,10 +541,24 @@ static int vc_cma_alloc_chunks(int num_chunks, struct cma_msg *reply)
 		if (!chunk)
 			break;
 
-		chunk_addr = page_address(chunk);
-		dmac_flush_range(chunk_addr, chunk_addr + chunk_size);
-		outer_inv_range(__pa(chunk_addr), __pa(chunk_addr) +
-			chunk_size);
+		if (PageHighMem(chunk)) {
+			struct page *page = chunk;
+			phys_addr_t base = __pfn_to_phys(page_to_pfn(page));
+			phys_addr_t end = base + chunk_size;
+			while (chunk_size > 0) {
+				void *ptr = kmap_atomic(page);
+				dmac_flush_range(ptr, ptr + PAGE_SIZE);
+				kunmap_atomic(ptr);
+				page++;
+				chunk_size -= PAGE_SIZE;
+			}
+			outer_inv_range(base, end);
+		} else {
+			chunk_addr = page_address(chunk);
+			dmac_flush_range(chunk_addr, chunk_addr + chunk_size);
+			outer_inv_range(__pa(chunk_addr), __pa(chunk_addr) +
+				chunk_size);
+		}
 
 		chunk_num =
 		    (page_to_phys(chunk) - vc_cma_base) / VC_CMA_CHUNK_SIZE;
@@ -535,7 +577,10 @@ static int vc_cma_alloc_chunks(int num_chunks, struct cma_msg *reply)
 				__func__);
 			break;
 		}
-		reply->params[i] = chunk_num;
+		if (peer_version >= VC_CMA_VERSION_HAS_ALLOCATED_REQCOUNT)
+			reply->params[i+1] = chunk_num;
+		else
+			reply->params[i] = chunk_num;
 		vc_cma_chunks_used++;
 	}
 
@@ -555,9 +600,11 @@ static int vc_cma_alloc_chunks(int num_chunks, struct cma_msg *reply)
 		VCHIQ_ELEMENT_T elem = {
 			reply,
 			offsetof(struct cma_msg, params[0]) +
-			    num_chunks * sizeof(reply->params[0])
+			    (num_chunks + 1) * sizeof(reply->params[0])
 		};
 		VCHIQ_STATUS_T ret;
+		if (peer_version < VC_CMA_VERSION_HAS_ALLOCATED_REQCOUNT)
+			elem.size -= sizeof(reply->params[0]);
 		vchiq_use_service(cma_service);
 		ret = vchiq_queue_message(cma_service, &elem, 1);
 		vchiq_release_service(cma_service);
@@ -603,16 +650,19 @@ static int cma_worker_proc(void *param)
 		case VC_CMA_MSG_ALLOC:{
 				int num_chunks, free_chunks;
 				num_chunks = cma_msg->params[0];
+				reply.params[0] = num_chunks;
 				free_chunks =
 				    vc_cma_chunks - vc_cma_chunks_used;
 				LOG_DBG("CMA_MSG_ALLOC(%d chunks)", num_chunks);
-				if (num_chunks > VC_CMA_MAX_PARAMS_PER_MSG) {
+				if (num_chunks >
+				    VC_CMA_MAX_PARAMS_PER_MSG - 1) {
 					LOG_ERR
 					    ("CMA_MSG_ALLOC - chunk count (%d) "
-					     "exceeds VC_CMA_MAX_PARAMS_PER_MSG (%d)",
+					     "exceeds VC_CMA_MAX_PARAMS_PER_MSG-1 (%d)",
 					     num_chunks,
-					     VC_CMA_MAX_PARAMS_PER_MSG);
-					num_chunks = VC_CMA_MAX_PARAMS_PER_MSG;
+					     VC_CMA_MAX_PARAMS_PER_MSG - 1);
+					num_chunks =
+					    VC_CMA_MAX_PARAMS_PER_MSG - 1;
 				}
 
 				if (num_chunks > free_chunks) {
@@ -675,6 +725,9 @@ static int cma_worker_proc(void *param)
 				      1)
 				     / VC_CMA_CHUNK_SIZE) -
 				    vc_cma_chunks_reserved;
+
+				/* Set unknown requested chunk count */
+				reply.params[0] = -1;
 
 				LOG_DBG
 				    ("CMA_MSG_UPDATE_RESERVE(%d chunks needed)",
@@ -739,7 +792,7 @@ static void vc_cma_connected_init(void)
 	service_params.callback = cma_service_callback;
 	service_params.userdata = NULL;
 	service_params.version = VC_CMA_VERSION;
-	service_params.version_min = VC_CMA_VERSION;
+	service_params.version_min = VC_CMA_VERSION_MIN;
 
 	if (vchiq_open_service(cma_instance, &service_params,
 			       &cma_service) != VCHIQ_SUCCESS) {

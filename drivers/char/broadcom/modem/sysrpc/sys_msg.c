@@ -125,6 +125,12 @@ static RPC_XdrInfo_t SYS_Prim_dscrm[] = {
 	{MSG_SYS_SOFT_RESET_SYSTEM_RSP, _T("MSG_SYS_SOFT_RESET_SYSTEM_RSP"),
 	 (xdrproc_t)xdr_default_proc, 0, 0},
 
+	{MSG_SYS_SIM_COLD_RESET_EVT_REQ, _T("MSG_SYS_SIM_COLD_RESET_EVT_REQ"),
+	 (xdrproc_t)xdr_SYS_SimApi_ColdResetEvt_Req_t, 0, 0},
+
+	{MSG_SYS_SIM_COLD_RESET_EVT_RSP, _T("MSG_SYS_SIM_COLD_RESET_EVT_RSP"),
+	 (xdrproc_t)xdr_default_proc, 0, 0},
+
 	{(MsgType_t)__dontcare__, "", NULL_xdrproc_t, 0, 0}
 };
 

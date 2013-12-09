@@ -24,7 +24,8 @@
 
 enum {
 	FSA9485_DETACHED,
-	FSA9485_ATTACHED
+	FSA9485_ATTACHED,
+	FSA9485_ACCESSORY,
 };
 
 enum {
@@ -44,7 +45,7 @@ struct fsa9485_platform_data {
 	void (*ovp_cb) (bool attached);
 	void (*usb_cb) (bool attached);
 	void (*uart_cb) (bool attached);
-	void (*charger_cb) (bool attached);
+	void (*charger_cb) (unsigned int attached);
 	void (*jig_cb) (bool attached);
 	void (*mhl_cb) (bool attached);
 	void (*reset_cb) (void);
@@ -54,9 +55,8 @@ struct fsa9485_platform_data {
 	int	(*ex_init) (void);
 	void (*usb_cdp_cb) (bool attached);
 	void (*smartdock_cb) (bool attached);
-	void (*audiodock_cb) (bool attached);
 #if defined(CONFIG_USB_OTG_AUDIODOCK)
-	void (*audiodock_cb) (bool attached);
+	void (*audiodock_cb) (int attached);
 #endif
 };
 

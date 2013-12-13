@@ -291,9 +291,8 @@ static void cyttsp4_get_mt_touches(struct cyttsp4_mt_data *md, int num_cur_tch)
 		mt_sync_count++;
 
 cyttsp4_get_mt_touches_pr_tch:
-//print the touch event in logs
 		if (si->si_ofs.tch_rec_size > CY_TMA1036_TCH_REC_SIZE)
-			dev_err(dev,
+			dev_dbg(dev,
 				"%s: t=%d x=%d y=%d z=%d M=%d m=%d o=%d e=%d\n",
 				__func__, t,
 				tch.abs[CY_TCH_X],
@@ -304,7 +303,7 @@ cyttsp4_get_mt_touches_pr_tch:
 				tch.abs[CY_TCH_OR],
 				tch.abs[CY_TCH_E]);
 		else
-			dev_err(dev,
+			dev_dbg(dev,
 				"%s: t=%d x=%d y=%d z=%d e=%d\n", __func__,
 				t,
 				tch.abs[CY_TCH_X],

@@ -1,6 +1,6 @@
 #
 # Automatically generated make config: don't edit
-# Linux/arm 3.0.31 Kernel Configuration
+# Linux/arm 3.0.101 Kernel Configuration
 #
 CONFIG_ARM=y
 CONFIG_HAVE_PWM=y
@@ -2430,7 +2430,6 @@ CONFIG_STAGING=y
 #
 CONFIG_ANDROID=y
 CONFIG_ANDROID_BINDER_IPC=y
-# CONFIG_ANDROID_LOGGER is not set
 CONFIG_ANDROID_RAM_CONSOLE=y
 CONFIG_ANDROID_RAM_CONSOLE_ENABLE_VERBOSE=y
 CONFIG_ANDROID_RAM_CONSOLE_ERROR_CORRECTION=y

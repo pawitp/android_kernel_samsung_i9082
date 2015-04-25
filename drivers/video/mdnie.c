@@ -223,6 +223,20 @@ void set_mdnie_value(struct mdnie_info *mdnie, u8 force)
      printk("%s mdnie->mode = %d  mdnie->scenario = %d, mdnie->negative = %d \n",__func__, mdnie->mode ,mdnie->scenario, mdnie->negative);
      mutex_lock(&mdnie->lock);
 
+	if (mdnie->tune_red != 255 || mdnie->tune_green != 255 || mdnie->tune_blue != 255) {
+		int i;
+
+		printk("%s mdnie override\n", __func__);
+
+		color_tuning[22] = color_tuning[27] = color_tuning[34] = color_tuning[40] = mdnie->tune_blue;
+		color_tuning[24] = color_tuning[30] = color_tuning[35] = color_tuning[42] = mdnie->tune_green;
+		color_tuning[26] = color_tuning[32] = color_tuning[38] = color_tuning[43] = mdnie->tune_red;
+
+		mdnie_send_sequence(mdnie, color_tuning);
+		mutex_unlock(&mdnie->lock);
+		return;
+	}
+
       if(NEGATIVE_ON == mdnie->negative){
 
 #ifdef LCD_DUALIZATION
@@ -825,6 +839,43 @@ static ssize_t tunning_store(struct device *dev,
  
  	return count;
 }
+
+static ssize_t rgb_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+	return sprintf(buf, "%d %d %d\n", mdnie->tune_red, mdnie->tune_green, mdnie->tune_blue);
+}
+
+static ssize_t rgb_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	int r, g, b;
+	struct mdnie_info *mdnie = dev_get_drvdata(dev);
+
+	int ret = sscanf(buf, "%d %d %d", &r, &g, &b);
+	if (ret != 3) {
+		dev_err(dev, "%s: failed to read color tuning\n", __func__);
+		return -EINVAL;
+	}
+
+	dev_info(dev, "%s: r=%d g=%d b=%d\n", __func__, r, g, b);
+
+	if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) {
+		dev_err(dev, "%s: color tuning out of range\n", __func__);
+		return -EINVAL;
+	}
+
+	mutex_lock(&mdnie->lock);
+	mdnie->tune_red = r;
+	mdnie->tune_green = g;
+	mdnie->tune_blue = b;
+	mutex_unlock(&mdnie->lock);
+
+	set_mdnie_value(mdnie, 0);
+
+	return count;
+}
  
 static ssize_t negative_show(struct device *dev,
  		struct device_attribute *attr, char *buf)
@@ -904,6 +955,7 @@ static struct device_attribute mdnie_attributes[] = {
  	__ATTR(cabc, 0664, cabc_show, cabc_store),
  	__ATTR(tunning, 0664, tunning_show, tunning_store),
  	__ATTR(negative, 0664, negative_show, negative_store),
+	__ATTR(rgb, 0664, rgb_show, rgb_store),
  	__ATTR_NULL,
 };
  
@@ -1084,6 +1136,9 @@ static int mdnie_probe(struct platform_device *pdev)
  	mdnie->mode = STANDARD;
  	mdnie->tone = TONE_NORMAL;
  	mdnie->outdoor = OUTDOOR_OFF;
+ 	mdnie->tune_red = 255;
+ 	mdnie->tune_green = 255;
+ 	mdnie->tune_blue = 255;
 #if defined(CONFIG_FB_MDNIE_PWM)
  	mdnie->cabc = CABC_ON;
  	mdnie->power_lut_idx = LUT_LEVEL_MANUAL_AND_INDOOR;

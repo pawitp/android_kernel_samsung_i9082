@@ -110,6 +110,9 @@
  	enum CABC cabc;
  	unsigned int tunning;
  	unsigned int negative;
+	unsigned char tune_red;
+	unsigned char tune_green;
+	unsigned char tune_blue;
  #ifdef CONFIG_HAS_EARLYSUSPEND
  	struct early_suspend    early_suspend;
  #endif

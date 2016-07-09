@@ -286,18 +286,17 @@ static DEFINE_SPINLOCK(all_mddevs_lock);
  * call has finished, the bio has been linked into some internal structure
  * and so is visible to ->quiesce(), so we don't need the refcount any more.
  */
-static int md_make_request(struct request_queue *q, struct bio *bio)
+static void md_make_request(struct request_queue *q, struct bio *bio)
 {
 	const int rw = bio_data_dir(bio);
 	mddev_t *mddev = q->queuedata;
-	int rv;
 	int cpu;
 	unsigned int sectors;
 
 	if (mddev == NULL || mddev->pers == NULL
 	    || !mddev->ready) {
 		bio_io_error(bio);
-		return 0;
+		return;
 	}
 	if (mddev->ro == 1 && unlikely(rw == WRITE)) {
 		bio_endio(bio, bio_sectors(bio) == 0 ? 0 : -EROFS);
@@ -326,7 +325,7 @@ static int md_make_request(struct request_queue *q, struct bio *bio)
 	 * go away inside make_request
 	 */
 	sectors = bio_sectors(bio);
-	rv = mddev->pers->make_request(mddev, bio);
+	mddev->pers->make_request(mddev, bio);
 
 	cpu = part_stat_lock();
 	part_stat_inc(cpu, &mddev->gendisk->part0, ios[rw]);
@@ -335,8 +334,6 @@ static int md_make_request(struct request_queue *q, struct bio *bio)
 
 	if (atomic_dec_and_test(&mddev->active_io) && mddev->suspended)
 		wake_up(&mddev->sb_wait);
-
-	return rv;
 }
 
 /* mddev_suspend makes sure no new requests are submitted
@@ -437,8 +434,7 @@ static void md_submit_flush_data(struct work_struct *ws)
 		bio_endio(bio, 0);
 	else {
 		bio->bi_rw &= ~REQ_FLUSH;
-		if (mddev->pers->make_request(mddev, bio))
-			generic_make_request(bio);
+		mddev->pers->make_request(mddev, bio);
 	}
 
 	mddev->flush_bio = NULL;
@@ -4370,6 +4366,7 @@ static int md_alloc(dev_t dev, char *name)
 	mddev->queue->queuedata = mddev;
 
 	blk_queue_make_request(mddev->queue, md_make_request);
+	blk_set_stacking_limits(&mddev->queue->limits);
 
 	disk = alloc_disk(1 << shift);
 	if (!disk) {
@@ -5117,9 +5114,9 @@ static int get_bitmap_file(mddev_t * mddev, void __user * arg)
 	int err = -ENOMEM;
 
 	if (md_allow_write(mddev))
-		file = kmalloc(sizeof(*file), GFP_NOIO);
+		file = kzalloc(sizeof(*file), GFP_NOIO);
 	else
-		file = kmalloc(sizeof(*file), GFP_KERNEL);
+		file = kzalloc(sizeof(*file), GFP_KERNEL);
 
 	if (!file)
 		goto out;

@@ -42,6 +42,9 @@ static unsigned int __blk_recalc_rq_segments(struct request_queue *q,
 					goto new_segment;
 				if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bv))
 					goto new_segment;
+				if ((bvprv->bv_page != bv->bv_page) &&
+				    (bvprv->bv_page + 1) != bv->bv_page)
+					goto new_segment;
 
 				seg_size += bv->bv_len;
 				bvprv = bv;
@@ -140,6 +143,9 @@ int blk_rq_map_sg(struct request_queue *q, struct request *rq,
 			if (!BIOVEC_PHYS_MERGEABLE(bvprv, bvec))
 				goto new_segment;
 			if (!BIOVEC_SEG_BOUNDARY(q, bvprv, bvec))
+				goto new_segment;
+			if ((bvprv->bv_page != bvec->bv_page) &&
+			    ((bvprv->bv_page + 1) != bvec->bv_page))
 				goto new_segment;
 
 			sg->length += nbytes;
@@ -470,4 +476,41 @@ int blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 			  struct request *next)
 {
 	return attempt_merge(q, rq, next);
+}
+
+bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
+{
+	if (!rq_mergeable(rq))
+		return false;
+
+	/* don't merge file system requests and discard requests */
+	if ((bio->bi_rw & REQ_DISCARD) != (rq->bio->bi_rw & REQ_DISCARD))
+		return false;
+
+	/* don't merge discard requests and secure discard requests */
+	if ((bio->bi_rw & REQ_SECURE) != (rq->bio->bi_rw & REQ_SECURE))
+		return false;
+
+	/* different data direction or already started, don't merge */
+	if (bio_data_dir(bio) != rq_data_dir(rq))
+		return false;
+
+	/* must be same device and not a special request */
+	if (rq->rq_disk != bio->bi_bdev->bd_disk || rq->special)
+		return false;
+
+	/* only merge integrity protected bio into ditto rq */
+	if (bio_integrity(bio) != blk_integrity_rq(rq))
+		return false;
+
+	return true;
+}
+
+int blk_try_merge(struct request *rq, struct bio *bio)
+{
+	if (blk_rq_pos(rq) + blk_rq_sectors(rq) == bio->bi_sector)
+		return ELEVATOR_BACK_MERGE;
+	else if (blk_rq_pos(rq) - bio_sectors(bio) == bio->bi_sector)
+		return ELEVATOR_FRONT_MERGE;
+	return ELEVATOR_NO_MERGE;
 }

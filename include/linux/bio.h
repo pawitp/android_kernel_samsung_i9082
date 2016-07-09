@@ -143,6 +143,15 @@ static inline int bio_has_allocated_vec(struct bio *bio)
 	     i < (bio)->bi_vcnt;					\
 	     bvl++, i++)
 
+/*
+ * drivers should _never_ use the all version - the bio may have been split
+ * before it got to the driver and the driver won't own all of it
+ */
+#define bio_for_each_segment_all(bvl, bio, i)				\
+	for (i = 0;							\
+	     bvl = bio_iovec_idx((bio), (i)), i < (bio)->bi_vcnt;	\
+	     i++)
+
 #define bio_for_each_segment(bvl, bio, i)				\
 	__bio_for_each_segment(bvl, bio, i, (bio)->bi_idx)
 
@@ -267,14 +276,6 @@ void zero_fill_bio(struct bio *bio);
 extern struct bio_vec *bvec_alloc_bs(gfp_t, int, unsigned long *, struct bio_set *);
 extern void bvec_free_bs(struct bio_set *, struct bio_vec *, unsigned int);
 extern unsigned int bvec_nr_vecs(unsigned short idx);
-
-/*
- * Allow queuer to specify a completion CPU for this bio
- */
-static inline void bio_set_completion_cpu(struct bio *bio, unsigned int cpu)
-{
-	bio->bi_comp_cpu = cpu;
-}
 
 /*
  * bio_set is used to allow other portions of the IO system to

@@ -1074,7 +1074,7 @@ static int drbd_fail_request_early(struct drbd_conf *mdev, int is_write)
 	return 0;
 }
 
-int drbd_make_request(struct request_queue *q, struct bio *bio)
+void drbd_make_request(struct request_queue *q, struct bio *bio)
 {
 	unsigned int s_enr, e_enr;
 	struct drbd_conf *mdev = (struct drbd_conf *) q->queuedata;
@@ -1082,7 +1082,7 @@ int drbd_make_request(struct request_queue *q, struct bio *bio)
 
 	if (drbd_fail_request_early(mdev, bio_data_dir(bio) & WRITE)) {
 		bio_endio(bio, -EPERM);
-		return 0;
+		return;
 	}
 
 	start_time = jiffies;
@@ -1101,7 +1101,8 @@ int drbd_make_request(struct request_queue *q, struct bio *bio)
 
 	if (likely(s_enr == e_enr)) {
 		inc_ap_bio(mdev, 1);
-		return drbd_make_request_common(mdev, bio, start_time);
+		drbd_make_request_common(mdev, bio, start_time);
+		return;
 	}
 
 	/* can this bio be split generically?
@@ -1149,7 +1150,6 @@ int drbd_make_request(struct request_queue *q, struct bio *bio)
 
 		bio_pair_release(bp);
 	}
-	return 0;
 }
 
 /* This is called by bio_add_page().  With this function we reduce

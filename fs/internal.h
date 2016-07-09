@@ -72,12 +72,9 @@ extern void umount_tree(struct vfsmount *, int, struct list_head *);
 extern struct vfsmount *copy_tree(struct vfsmount *, struct dentry *, int);
 extern int finish_automount(struct vfsmount *, struct path *);
 
-extern void mnt_make_longterm(struct vfsmount *);
-extern void mnt_make_shortterm(struct vfsmount *);
-
 extern void __init mnt_init(void);
 
-DECLARE_BRLOCK(vfsmount_lock);
+extern struct lglock vfsmount_lock;
 
 
 /*

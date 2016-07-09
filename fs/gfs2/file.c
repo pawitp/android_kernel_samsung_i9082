@@ -18,7 +18,6 @@
 #include <linux/mount.h>
 #include <linux/fs.h>
 #include <linux/gfs2_ondisk.h>
-#include <linux/ext2_fs.h>
 #include <linux/falloc.h>
 #include <linux/swap.h>
 #include <linux/crc32.h>
@@ -212,7 +211,7 @@ static int do_gfs2_set_flags(struct file *filp, u32 reqflags, u32 mask)
 	int error;
 	u32 new_flags, flags;
 
-	error = mnt_want_write(filp->f_path.mnt);
+	error = mnt_want_write_file(filp);
 	if (error)
 		return error;
 
@@ -274,7 +273,7 @@ out_trans_end:
 out:
 	gfs2_glock_dq_uninit(&gh);
 out_drop_write:
-	mnt_drop_write(filp->f_path.mnt);
+	mnt_drop_write_file(filp);
 	return error;
 }
 
@@ -544,7 +543,9 @@ static int gfs2_close(struct inode *inode, struct file *file)
 
 /**
  * gfs2_fsync - sync the dirty data for a file (across the cluster)
- * @file: the file that points to the dentry (we ignore this)
+ * @file: the file that points to the dentry
+ * @start: the start position in the file to sync
+ * @end: the end position in the file to sync
  * @datasync: set if we can ignore timestamp changes
  *
  * The VFS will flush data for us. We only need to worry
@@ -553,23 +554,32 @@ static int gfs2_close(struct inode *inode, struct file *file)
  * Returns: errno
  */
 
-static int gfs2_fsync(struct file *file, int datasync)
+static int gfs2_fsync(struct file *file, loff_t start, loff_t end,
+		      int datasync)
 {
 	struct inode *inode = file->f_mapping->host;
 	int sync_state = inode->i_state & (I_DIRTY_SYNC|I_DIRTY_DATASYNC);
 	struct gfs2_inode *ip = GFS2_I(inode);
 	int ret;
 
+	ret = filemap_write_and_wait_range(inode->i_mapping, start, end);
+	if (ret)
+		return ret;
+	mutex_lock(&inode->i_mutex);
+
 	if (datasync)
 		sync_state &= ~I_DIRTY_SYNC;
 
 	if (sync_state) {
 		ret = sync_inode_metadata(inode, 1);
-		if (ret)
+		if (ret) {
+			mutex_unlock(&inode->i_mutex);
 			return ret;
+		}
 		gfs2_ail_flush(ip->i_gl);
 	}
 
+	mutex_unlock(&inode->i_mutex);
 	return 0;
 }
 
